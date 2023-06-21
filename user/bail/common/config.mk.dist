@@ -1,0 +1,9 @@
+# config.mk.dist template usage:
+# 1) cp config.mk.dist config.mk 
+# 2) edit config.mk
+
+# PRTOS_PATH: path to PRTOS install
+PRTOS_PATH=
+
+# BAIL_PATH: path to BAIL install
+BAIL_PATH=

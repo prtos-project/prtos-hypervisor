@@ -1,0 +1,151 @@
+/*
+ * FILE: prtos.lds
+ *
+ * ld script to build the x86 version
+ *
+ * www.prtos.org
+ */
+
+#include <config.h>
+
+OUTPUT_FORMAT("elf32-i386", "elf32-i386", "elf32-i386")
+OUTPUT_ARCH("i386")
+ENTRY(_start)
+
+PHYSOFFSET = - CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR;
+
+SECTIONS
+{
+    . = CONFIG_PRTOS_LOAD_ADDR;
+    _sprtos = .;
+    .spbl ALIGN(256*1024) : {
+        _spbl = .;
+        *(.pbl)
+        _epbl = .;
+    }
+    .prtos_hdr ALIGN(0x1000) : {
+        *(.prtos_hdr)
+    }
+    _sboot = .;
+    .boot_text ALIGN(0x1000) : {
+        *(.boot.text)
+    }
+    .boot_data : {
+        *(.boot.data)
+    }
+    _eboot = .;
+    
+    .prtos_hdr ALIGN(0x8) : {
+        *(.prtos_hdr)
+    }
+
+    . = . + CONFIG_PRTOS_OFFSET - CONFIG_PRTOS_LOAD_ADDR;
+    .vboot ALIGN(0x1000) : AT (ADDR (.vboot) + PHYSOFFSET) {
+        _svboot = .;
+        *(.vboot.text)
+        *(.vboot.data)
+        _evboot = .;
+    }
+
+    .text ALIGN(0x1000) : AT (ADDR (.text) + PHYSOFFSET) {
+        *(.text)
+    }
+
+    .rsv_hwirqs ALIGN(8) : {
+        rsv_hw_irqs = .;
+        *(.rsv_hwirqs)
+        end_rsv_hw_irqs = .;
+    }
+
+    .rsv_ioports ALIGN(8) : {
+        rsv_io_ports = .;
+        *(.rsv_ioports)
+        end_rsv_io_ports = .;
+    }
+
+    .rsv_physpages ALIGN(8) : {
+        rsv_phys_pages = .;
+        *(.rsv_physpages)
+        end_rsv_phys_pages = .;
+    }
+
+    .rodata ALIGN(0x1000) : AT (ADDR (.rodata) + PHYSOFFSET) {
+        hypercalls_table = .;
+        *(.hypercallstab)
+        hypercall_flags_table = .;
+        *(.hypercallflagstab)
+
+        . = ALIGN(8);
+        exception_table = .;
+        *(.exptable)
+        LONG(0);
+        LONG(0);
+
+        . = ALIGN(8);
+        __gp_ex_table = .;
+        *(.gp_ex_tab)
+        LONG(0);
+        
+        . = ALIGN(8);
+        kdev_table = .;
+        *(.kdevtab)
+        LONG(0);
+        . = ALIGN(8);
+
+        kdev_setup = .;
+        *(.kdevsetup)
+        LONG(0);
+        
+        . = ALIGN(8);
+        object_setup_table = .;
+        *(.objsetuptab)
+        LONG(0);
+        
+        . = ALIGN(8);
+        *(.rodata)
+        *(.rodata.*)
+    }
+    
+    .build_info ALIGN(8) :  AT (ADDR (.build_info) + PHYSOFFSET) {
+        build_info = .;
+        *(.kbuild_info)
+        *(.build_info)
+        BYTE(0);
+    }
+
+    .data ALIGN(8) :  AT (ADDR (.data) + PHYSOFFSET) {
+            _sdata = .;
+        *(.vboot.data)
+        *(.data)
+        _edata = .;
+        sys_reset_counter = .;
+        LONG(0);
+        reset_status_init = .;
+        LONG(0);
+        _cpdata = .;
+        LONG(0);
+    }
+
+    .bss ALIGN(8) :  AT (ADDR (.bss) + PHYSOFFSET) {
+        _sbss = .;
+        *(COMMON)
+        *(.bss)
+        _ebss = .; 
+        . = ALIGN(8);
+        _scdata = .;
+        . = . + SIZEOF(.data);
+        _ecdata = .;
+        *(.bss.noinit)
+    }
+
+    . = ALIGN(4K);
+    prtos_conf_table = .;
+    phys_prtos_conf_table = . + PHYSOFFSET;
+    _eprtos = . + PHYSOFFSET;
+
+    /DISCARD/ : {
+        *(.note)
+        *(.comment*)
+    }
+
+}

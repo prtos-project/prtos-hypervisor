@@ -1,0 +1,14 @@
+source "../../core/Kconfig.ver"
+
+config DEBUG
+       bool "Debug"
+       default n
+
+menu "Kernel options"
+config STACK_KB
+       int "Stack size (KB)"
+       default "8"
+config SIZE_PAGE_TABLE
+       int "Size of page tables (4KB*N)"
+       default "16"
+endmenu

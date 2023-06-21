@@ -1,0 +1,51 @@
+#!/bin/bash
+# usage: usage: grub_iso <file.iso> <kernels ...>
+# descr: generate a bootable iso with grub + kernel files
+
+function warn() { echo -e $* 1>&2; }
+function usage(){ echo "usage: $(basename $0) <file.iso> <kernels ...>"; }
+
+if test -z "$*"; then
+	warn `usage`
+	exit
+fi
+
+# user configurable variables 
+isodir=`mktemp -d /tmp/iso.XXX`
+isofile=file.iso
+default=0
+timeout=1
+
+while getopts t:d:i: c
+do
+    case $c in
+    t)  timeout="$OPTARG";;
+    d)  default="$OPTARG";;
+    i)  initrd="$OPTARG";;
+    ?)  usage; exit 2;;
+    esac
+done
+shift $(($OPTIND - 1))
+
+mkdir -p $isodir/boot/grub
+if test $# -gt 1; then
+	isofile=$1; shift
+fi
+
+# generate a proper menu.lst
+(
+	echo    set default=$default
+	echo    set timeout=$timeout
+	for f in $*; do
+		if test -f $f; then
+			cp $f $isodir/boot/grub/
+            echo    menuentry `basename $f` {
+			echo    multiboot /boot/grub/`basename $f`
+            echo    }
+		fi
+	done
+) > $isodir/boot/grub/grub.cfg
+
+grub-mkrescue --output=$isofile $isodir
+
+rm -r $isodir
