@@ -1,0 +1,61 @@
+#!/bin/bash
+# prtosdistro: create a prtos-distro
+
+function echo () { `which echo` $*; }
+
+targetdir=$1; shift
+distrotar=$1; shift
+
+if test -z "$targetdir"; then
+	echo -e "Set the environment variable \"TARGET_DIR\" to the instalation directory."
+	echo -e "Example:"
+	echo -e "sudo make install TARGET_DIR=/opt/prtos_myversion"
+	exit -1
+fi
+
+if test -z "$distrotar"; then
+	echo -e "No name provided for the distribution tar"
+	exit -1
+fi
+
+/bin/echo -e ""
+
+/bin/echo -e "> Installing PRTOS in \"$targetdir/prtos\""
+user/bin/prtosinstall -i -t $targetdir/prtos
+
+/bin/echo -e "   - Generating PRTOS sha1sums"
+user/bin/prtosinstall -g -t $targetdir/prtos
+
+/bin/echo -e "   - Installing BAIL"
+user/bail/bin/bailinstall -i -t $targetdir/bail
+
+mv $targetdir/bail/examples $targetdir/bail-examples
+user/bail/bin/bailinstall -g -t $targetdir/bail-examples
+
+/bin/echo -e "   - Generating BAIL sha1sums"
+user/bail/bin/bailinstall -g -t $targetdir/bail
+
+cp user/bin/prtos-installer $targetdir 
+
+/bin/echo -e "   - Setting read-only (og-w) permission."
+find $targetdir -type d  -exec chmod og-w {} \;
+
+/bin/echo -e "   - Deleting empty files/directories."
+find $targetdir -empty -exec rm -rf '{}' \+
+
+/bin/echo -e "> Done"
+
+/bin/echo -e ""
+
+/bin/echo -e "> Generating PRTOS distribution \"$distrotar\""
+
+pwd=`pwd`
+(
+	cd $(dirname $targetdir)
+	tar cjf $pwd/$distrotar $(basename $targetdir)
+)
+
+find $(dirname $targetdir) -type d  -exec chmod +w {} \;
+rm -rf $(dirname $targetdir)
+
+/bin/echo -e "> Done\n"

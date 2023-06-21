@@ -1,0 +1,56 @@
+<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="multiplan">
+
+    <HwDescription>
+        <MemoryLayout>
+            <Region type="ram" start="0x0" size="512MB" />
+        </MemoryLayout>
+        <ProcessorTable>
+            <Processor id="0">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="2000ms">
+                        <Slot id="0" start="0ms" duration="400ms" partitionId="2" />
+                        <Slot id="1" start="400ms" duration="400ms" partitionId="0" />
+                        <Slot id="2" start="800ms" duration="400ms" partitionId="1" />
+                        <Slot id="3" start="1200ms" duration="400ms" partitionId="0" />
+                        <Slot id="4" start="1600ms" duration="400ms" partitionId="1" />
+                    </Plan>
+                    <Plan id="1" majorFrame="1200ms">
+                        <Slot id="0" start="0ms" duration="400ms" partitionId="2" />
+                        <Slot id="1" start="400ms" duration="400ms" partitionId="0" />
+                        <Slot id="2" start="800ms" duration="400ms" partitionId="1" />
+                    </Plan>
+                    <Plan id="2" majorFrame="800ms">
+                        <Slot id="0" start="0ms" duration="400ms" partitionId="2" />
+                        <Slot id="1" start="400ms" duration="400ms" partitionId="1" />
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+        </ProcessorTable>
+        <Devices>
+            <Uart id="0" baudRate="115200" name="Uart" />
+            <Vga name="Vga" />
+        </Devices>
+    </HwDescription>
+
+    <PRTOSHypervisor console="Uart">
+        <PhysicalMemoryArea size="4MB" />
+    </PRTOSHypervisor>
+
+    <PartitionTable>
+        <Partition id="0" name="Partition0" flags="" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x6000000" size="1MB" />
+            </PhysicalMemoryAreas>
+        </Partition>
+        <Partition id="1" name="Partition1" flags="" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x6100000" size="1MB" />
+            </PhysicalMemoryAreas>
+        </Partition>
+        <Partition id="2" name="Partition2" flags="system" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x6200000" size="1MB" />
+            </PhysicalMemoryAreas>
+        </Partition>
+    </PartitionTable>
+</SystemDescription>

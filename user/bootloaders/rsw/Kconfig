@@ -1,0 +1,9 @@
+config STACK_SIZE
+       int "Stack size (KB)"
+       default "8"
+
+config CONTAINER_AT_FIXED_ADDR
+       bool "Load container at a fixed address"
+       default y
+
+source "../../../core/Kconfig.ver"
