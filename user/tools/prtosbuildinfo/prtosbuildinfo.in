@@ -1,0 +1,23 @@
+#!/bin/bash
+
+dirname=$(dirname $0)
+progname=$(basename $0)
+
+function warn(){ echo -e $* 1>&2; }
+function usage(){ echo "usage: prtosbuildinfo <prtos_core>"; }
+
+
+if test $# -ne 1; then
+        warn `usage`
+        exit 1;
+fi
+
+if ! test -e $1; then
+        warn `usage`
+        warn $progname: "error: file prtos_core not found"
+        exit 1
+fi
+
+$TARGET_OBJCOPY -O binary -j .build_info $1 _file.tmp
+strings _file.tmp
+rm -f _file.tmp

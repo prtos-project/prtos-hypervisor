@@ -1,0 +1,28 @@
+menu "Objects"
+
+config OBJ_HM_VERBOSE
+       bool "Verbose HM events"
+       default y
+       depends on DEBUG
+
+config OBJ_COMM_PORTS
+       bool "Sampling and queuing communication ports support" 
+       default y
+
+config OBJ_RAW_MEM
+       bool "Raw memory (read/write) support"
+       default y
+
+config OBJ_STATUS
+       bool "System status support"
+       default y
+
+config OBJ_STATUS_ACC
+       bool "Enable PRTOS/partition status accounting"
+       default n
+
+#config CONSOLE_SCAPE_SYMB
+#       bool "Enable partition id symbol on console write"
+#       default n
+
+endmenu

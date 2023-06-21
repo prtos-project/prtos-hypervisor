@@ -1,0 +1,685 @@
+<?xml version="1.0"?>
+<xs:schema targetNamespace="http://www.prtos.org/prtos-1.x"
+           xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="http://www.prtos.org/prtos-1.x"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+  <!-- Basic types definition -->
+  <xs:simpleType name="id_t">
+    <xs:annotation id="docid_t">
+      <xs:documentation>It is an integer value used to identify objects in the hypervisor. Each type of object has a separate space of identifiers. These id's are used internally as indexes to the corresponding data structures. The fist “id” of each object group shall start in zero and the next id's shall be consecutive. It is mandatory to follow this ordering in the PRTOS_CF file.
+</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="idString_t">
+    <xs:annotation id="docidString_t">
+      <xs:documentation>It is a string value used to identify objects in the hypervisor in a human readable way. </xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="hwIrqId_t">
+    <xs:annotation id="dochwirqid_t">
+      <xs:documentation>It is an integer value corresponding to an interrupt number. The range of this value is 0..MAXINTERRUPTS.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+      <xs:maxExclusive value="
+                              CONFIG_NO_HWIRQS 
+                              "/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="hwIrqIdList_t">
+    <xs:annotation id="dochwIrqIdList_t">
+      <xs:documentation>It is a list of interrupts.</xs:documentation>
+    </xs:annotation>
+    <xs:list itemType="hwIrqId_t"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="idList_t">
+    <xs:annotation id="docidList_t">
+      <xs:documentation>It is a list of hypervisor object identifiers.</xs:documentation>
+    </xs:annotation>
+    <xs:list itemType="id_t"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="hex_t">
+    <xs:annotation id="dochex_t">
+      <xs:documentation>it is an hexadecimal value.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:pattern value="0x[0-9a-fA-F]+"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="version_t">
+    <xs:annotation id="docversion_t">
+      <xs:documentation>Version number xx.xx.xx.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9]+.[0-9]+.[0-9]+"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="freqUnit_t">
+    <xs:annotation id="docfreqUnit_t">
+      <xs:documentation>It is a frequency value.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9]+(.[0-9]+)?([MK][Hh]z)"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="processorFeatures_t">
+    <xs:annotation id="docprocessorFeatures_t">
+      <xs:documentation>This type enumerates the supported special processor features.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="none"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="processorFeaturesList_t">
+    <xs:annotation id="docprocessorFeaturesList_t">
+      <xs:documentation>It is a list of special features of a physical processor.</xs:documentation>
+    </xs:annotation>
+    <xs:list itemType="processorFeatures_t"/>
+  </xs:simpleType>
+  
+  <xs:simpleType name="partitionFlags_t">
+    <xs:annotation id="docpartitionFlags_t">
+      <xs:documentation>This is a flag enabling a partition's role in the system with associated access rights: If "fp" is set, the partition is allowed to use floating point operations. By default not set. If "system" is set, the partition has system privileges. By default not set.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="system"/>
+      <xs:enumeration value="fp"/>
+      <xs:enumeration value="none"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="partitionFlagsList_t">
+    <xs:annotation id="docpartitionFlagsList_t">
+      <xs:documentation>List of partition flags which define the role of the partition in the system.</xs:documentation>
+    </xs:annotation>
+    <xs:list itemType="partitionFlags_t"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="sizeUnit_t">
+    <xs:annotation id="docsizeUnit_t">
+      <xs:documentation>It is a memory size value.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9]+(.[0-9]+)?([MK]?B)"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="timeUnit_t">
+    <xs:annotation id="doctimeUnit_t">
+      <xs:documentation>It is a time duration value.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9]+(.[0-9]+)?([mu]?[sS])"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="traceHyp_t">
+    <xs:annotation id="doctraceHyp_t">
+      <xs:documentation>It specifies one supported event type.</xs:documentation>
+    </xs:annotation>
+     <xs:restriction base="xs:string">
+       <xs:enumeration value="HYP_IRQS"/>
+       <xs:enumeration value="HYP_HCALLS"/>
+       <xs:enumeration value="HYP_SCHED"/>
+       <xs:enumeration value="HYP_HM"/>
+     </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="traceHypList_t">
+    <xs:annotation id="doctraceHypList_t">
+      <xs:documentation>This is a list of the event types that will be traced.</xs:documentation>
+    </xs:annotation>
+    <xs:list itemType="traceHyp_t"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="hmString_t">
+    <xs:annotation id="dochmString_t">
+      <xs:documentation>This type enumerates the health monitoring events supported by the x86 processor.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="PRTOS_HM_EV_INTERNAL_ERROR"/>
+      <xs:enumeration value="PRTOS_HM_EV_SYSTEM_ERROR"/>
+      <xs:enumeration value="PRTOS_HM_EV_PARTITION_ERROR"/>
+      <xs:enumeration value="PRTOS_HM_EV_WATCHDOG_TIMER"/>
+      <xs:enumeration value="PRTOS_HM_EV_FP_ERROR"/>
+      <xs:enumeration value="PRTOS_HM_EV_MEM_PROTECTION"/>
+      <xs:enumeration value="PRTOS_HM_EV_UNEXPECTED_TRAP"/>
+#ifdef CONFIG_x86
+      <xs:enumeration value="PRTOS_HM_EV_X86_DIVIDE_ERROR"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_DEBUG"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_NMI_INTERRUPT"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_BREAKPOINT"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_OVERFLOW"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_BOUND_RANGE_EXCEEDED"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_INVALID_OPCODE"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_DEVICE_NOT_AVAILABLE"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_DOUBLE_FAULT"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_COPROCESSOR_SEGMENT_OVERRUN"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_INVALID_TSS"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_SEGMENT_NOT_PRESENT"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_STACK_FAULT"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_GENERAL_PROTECTION"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_PAGE_FAULT"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_X87_FPU_ERROR"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_ALIGNMENT_CHECK"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_MACHINE_CHECK"/>
+      <xs:enumeration value="PRTOS_HM_EV_X86_SIMD_FLOATING_POINT"/>
+#endif
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="hmAction_t">
+    <xs:annotation id="dochmAction_t">
+      <xs:documentation>This type enumerates the health monitoring actions supported by the hypervisor.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="PRTOS_HM_AC_IGNORE"/>
+      <xs:enumeration value="PRTOS_HM_AC_SHUTDOWN"/>
+      <xs:enumeration value="PRTOS_HM_AC_PARTITION_COLD_RESET"/>
+      <xs:enumeration value="PRTOS_HM_AC_PARTITION_WARM_RESET"/>
+      <xs:enumeration value="PRTOS_HM_AC_HYPERVISOR_COLD_RESET"/>
+      <xs:enumeration value="PRTOS_HM_AC_HYPERVISOR_WARM_RESET"/>
+      <xs:enumeration value="PRTOS_HM_AC_SUSPEND"/>
+      <xs:enumeration value="PRTOS_HM_AC_PARTITION_HALT"/>
+      <xs:enumeration value="PRTOS_HM_AC_HYPERVISOR_HALT"/>
+      <xs:enumeration value="PRTOS_HM_AC_PROPAGATE"/>
+      <xs:enumeration value="PRTOS_HM_AC_SWITCH_TO_MAINTENANCE" />
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="memAreaFlags_t">
+    <xs:annotation id="docmemAreaFlags_t">
+      <xs:documentation>It is a flag that states a property of a memory chunk. It can be declared as unmapped, shared, read-only, unreachable or rom. User specific flags are also supported.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="unmapped"/>
+      <xs:enumeration value="shared"/>
+      <xs:enumeration value="read-only"/>
+      <xs:enumeration value="uncacheable"/>
+      <xs:enumeration value="rom"/>
+      <xs:enumeration value="flag0"/>
+      <xs:enumeration value="flag1"/>
+      <xs:enumeration value="flag2"/>
+      <xs:enumeration value="flag3"/>
+      <xs:enumeration value="iommu" />
+      <xs:enumeration value="none"/>
+    </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="memAreaFlagsList_t">
+    <xs:annotation id="docmemAreaFlagsList_t">
+      <xs:documentation>This is a list of flags that defines the access properties of a memory chunk.</xs:documentation>
+    </xs:annotation>
+    <xs:list itemType="memAreaFlags_t"/>
+  </xs:simpleType>
+#ifdef CONFIG_x86
+  <xs:simpleType name="memRegion_t">
+    <xs:annotation id="docmemRegion_t">
+      <xs:documentation>It declares the access type of the memory. It can be ram or rom.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="ram"/>
+      <xs:enumeration value="rom"/>
+    </xs:restriction>
+  </xs:simpleType>
+#endif
+  <xs:simpleType name="portType_t">
+    <xs:annotation id="docportType_t">
+      <xs:documentation>It defines the type of a communication's port: sampling, queuing.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="queuing"/>
+      <xs:enumeration value="sampling"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="direction_t">
+    <xs:annotation id="docdirection_t">
+      <xs:documentation>It defines the direction of a communication port.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="source"/>
+      <xs:enumeration value="destination"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="yntf_t">
+    <xs:annotation id="docyntf_t">
+      <xs:documentation>It is a boolean value (yes, no, true, false).</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="yes"/>
+      <xs:enumeration value="no"/>
+      <xs:enumeration value="true"/>
+      <xs:enumeration value="false"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <!-- End Types -->
+
+  <!-- Elements -->
+  <!-- Hypervisor -->
+  <xs:complexType name="hypervisor_e">
+    <xs:annotation id="dochypervisor_e">
+      <xs:documentation>The hypervisor configuration contains: the description of the physical memory where it resides, the health monitoring configuration (including processor-specific events management), and the device used to dump events trace.</xs:documentation>
+    </xs:annotation>
+    <xs:all>
+      <xs:element name="PhysicalMemoryArea" type="hypMemoryArea_e"/>
+      <xs:element name="HealthMonitor" type="healthMonitor_e" minOccurs="0" />
+      <xs:element name="Trace" type="traceHyp_e" minOccurs="0" />
+    </xs:all>
+    <xs:attribute name="console" type="idString_t" use="optional" />
+    <xs:attribute name="healthMonitorDevice" type="idString_t" use="optional" />
+  </xs:complexType>  
+
+  <!-- Rsw -->
+  <xs:complexType name="rsw_e">
+    <xs:annotation id="docrsw_e">
+      <xs:documentation>The resident software configuration is a list of physical memory areas where rsw is located. This information is included in the configuration file for completeness (all the memory areas of the board shall be described in the configuration file) and used only to check memory overlaps errors.</xs:documentation>
+    </xs:annotation>
+    <xs:all>
+      <xs:element name="PhysicalMemoryAreas" type="memoryArea_e"/>
+    </xs:all>
+  </xs:complexType>
+
+  <!-- Partition -->
+  <xs:complexType name="partition_e">
+    <xs:annotation id="docpartition_e">
+      <xs:documentation>This type defines a partition in the system. It includes the assigned memory, the health monitoring events management, the hardware resources asigned to the partition and the visible communications ports. Everything related to the partition but the scheduling information is declared here. The attribute console is the console device where the output of the hypercall prtos_write_console() is copied to.</xs:documentation>
+    </xs:annotation>
+    <xs:all>
+      <xs:element name="PhysicalMemoryAreas" type="memoryArea_e"/>
+      <xs:element name="TemporalRequirements" minOccurs="0">
+        <xs:complexType>
+          <xs:attribute name="period" type="timeUnit_t" use="required"/>
+          <xs:attribute name="duration" type="timeUnit_t" use="required"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="HealthMonitor" type="healthMonitor_e" minOccurs="0" />
+      <xs:element name="HwResources" type="hwResources_e" minOccurs="0" />
+      <xs:element name="PortTable" type="partitionPorts_e" minOccurs="0" />
+      <xs:element name="Trace" type="trace_e" minOccurs="0" />
+    </xs:all>
+    <xs:attribute name="id" type="id_t" use="required"/>
+    <xs:attribute name="name" type="idString_t" use="optional" />
+    <xs:attribute name="console" type="idString_t" use="optional" />
+    <xs:attribute name="flags" type="partitionFlagsList_t" use="optional" default="none" />
+    <xs:attribute name="num_of_vcpus" type="xs:positiveInteger" use="optional" default="1" />
+  </xs:complexType>
+
+  <!-- Trace -->
+  <xs:complexType name="trace_e">
+    <xs:annotation id="doctrace_e">
+      <xs:documentation>This structure specifies witch event types will be traced at partition level.</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="device" type="idString_t" use="required"/>
+    <xs:attribute name="bitmask" type="hex_t" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="traceHyp_e">
+    <xs:annotation id="doctraceHyp_e">
+      <xs:documentation>This structure specifies witch event types will be traced at hypervisor level.</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="device" type="idString_t" use="required"/>
+    <xs:attribute name="bitmask" type="traceHypList_t" use="required"/>
+  </xs:complexType>
+
+  <!-- Communication Ports -->
+  <xs:complexType name="partitionPorts_e">
+    <xs:annotation id="docpartitionPorts_e">
+      <xs:documentation>It is a list of communication ports that a partition can access. The name of a port in this list must match to a ipcPort_e name defined in channels section.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="Port">
+        <xs:annotation id="docport">
+          <xs:documentation>This is a port identified by its name. The port properties must match to a ipcPort_e name defined in channels section.</xs:documentation>
+        </xs:annotation>
+        <xs:complexType>
+          <xs:attribute name="name" type="idString_t" use="required"/>
+          <xs:attribute name="direction" type="direction_t" use="required"/>
+          <xs:attribute name="type" type="portType_t" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Channels -->
+  <xs:complexType name="channels_e">
+    <xs:annotation id="docchannels_e">
+      <xs:documentation>It is a list of inter partition communication resources. this list can contain interpartition virtual interrupts, sampling channels and queuing channels.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence minOccurs="0" maxOccurs="unbounded">
+      <xs:choice>
+        <xs:element name="Ipvi">
+          <xs:annotation id="docipvi">
+            <xs:documentation>This is the declaration of Interpartition Virtual Interrupts in th system. The sourceId attribute is the identifier of the partition that can raise the virtual interrupt. The destinationId is a list of identifierts of partitions that will receive the virtual interrupt.</xs:documentation>
+          </xs:annotation>
+          <xs:complexType>
+            <xs:attribute name="id" type="id_t" use="required"/>
+            <xs:attribute name="sourceId" type="id_t" use="required"/>
+            <xs:attribute name="destinationId" type="idList_t" use="required"/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="SamplingChannel">
+          <xs:annotation id="docSamplingChannel">
+            <xs:documentation>It is the declaration of a Sampling Channel (one source, many destinations). The attribute validPeriod is the duration of validity of a written message. When a message is read after this period, the validity flag will be false. The attribute MaxMessageLength is the maximum message size that can be stored on this channel. The argument max_msg_size of the hypercall prtos_create_sampling_port() shall match the value of the attribute.</xs:documentation>
+          </xs:annotation>
+          <xs:complexType>
+            <xs:sequence minOccurs="1">
+              <xs:choice>
+                <xs:element name="Source" type="ipcPort_e" />
+              </xs:choice>
+              <xs:sequence minOccurs="1" maxOccurs="unbounded">
+                <xs:choice>
+                  <xs:element name="Destination" type="ipcPort_e"/>
+                </xs:choice>
+              </xs:sequence>
+            </xs:sequence>
+            <xs:attribute name="maxMessageLength" type="sizeUnit_t" use="required"/>
+            <xs:attribute name="validPeriod" type="timeUnit_t" use="optional" default="0s"/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="QueuingChannel">
+          <xs:annotation id="docQueuingChannel">
+            <xs:documentation>It is the declaration of a Queuing Channel (one source, one destinations). The attribute MaxMessageLength is the maximum message size that can be stored on this channel. The attribute maxNoMessages is the maximum number of messages that will be stored in the channel. The arguments max_num_of_msgs and max_msg_size of the hypercall prtos_create_queuing_port() shall match the values of the attributes.</xs:documentation>
+          </xs:annotation>
+          <xs:complexType>
+            <xs:all minOccurs="1">
+              <xs:element name="Source" type="ipcPort_e" />
+              <xs:element name="Destination" type="ipcPort_e"/>
+            </xs:all>
+            <xs:attribute name="maxMessageLength" type="sizeUnit_t" use="required"/>
+            <xs:attribute name="maxNoMessages" type="xs:positiveInteger" use="required"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Devices -->
+  <xs:complexType name="devices_e">
+    <xs:annotation id="docdevices_e">
+      <xs:documentation>It is a list of real devices available in the platform.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence minOccurs="0" maxOccurs="unbounded">
+      <xs:choice>
+#if defined(CONFIG_DEV_MEMBLOCK)||defined(CONFIG_DEV_MEMBLOCK_MODULE)
+        <xs:element name="memory_block"  minOccurs="0">
+          <xs:annotation id="docmemory_block">
+            <xs:documentation>It is a block of memory mapped by a device. This memory area must overlap with a real physical memory region declared in SystemDescription/HwDescription/MemoryLayout section.</xs:documentation>
+          </xs:annotation>
+          <xs:complexType>
+            <xs:attribute name="name" type="idString_t" use="required"/>
+            <xs:attribute name="start" type="hex_t" use="required"/>
+            <xs:attribute name="size" type="sizeUnit_t" use="required"/>
+          </xs:complexType>
+        </xs:element>
+#endif
+#if defined(CONFIG_DEV_UART)||defined(CONFIG_DEV_UART_MODULE)
+        <xs:element name="Uart" minOccurs="0">
+          <xs:annotation id="docUart">
+            <xs:documentation>It is a serial device.</xs:documentation>
+          </xs:annotation>
+          <xs:complexType>
+            <xs:attribute name="name" type="idString_t" use="required"/>
+            <xs:attribute name="id" type="idString_t" use="required"/>
+            <xs:attribute name="baudRate" type="xs:positiveInteger" use="required"/>
+          </xs:complexType>
+        </xs:element>
+#endif
+#if defined(CONFIG_x86)
+        <xs:element name="Vga" minOccurs="0" maxOccurs="1">
+          <xs:annotation id="docVGA">
+            <xs:documentation>It is a VGA device.</xs:documentation>
+          </xs:annotation>
+          <xs:complexType>
+            <xs:attribute name="name" type="idString_t" use="required"/>
+          </xs:complexType>
+        </xs:element>
+#endif
+        <xs:element name="Null" minOccurs="0">
+          <xs:annotation id="docNull">
+            <xs:documentation>It is a null device.</xs:documentation>
+          </xs:annotation>
+          <xs:complexType>
+            <xs:attribute name="name" type="idString_t" use="optional" />
+          </xs:complexType>
+        </xs:element>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  
+  <!-- IPC Port -->
+  <xs:complexType name="ipcPort_e">
+    <xs:annotation id="docipcPort_e">
+      <xs:documentation>It is an end point of a interpartition communication channel. It has a name and is visible only from a single partition (attribute partitionId).</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="partitionId" type="id_t" use="required"/>
+    <xs:attribute name="partitionName" type="idString_t" use="optional" />
+    <xs:attribute name="portName" type="idString_t" use="required"/>
+  </xs:complexType>
+
+  <!-- Hw Description -->
+  <xs:complexType name="hwDescription_e">
+    <xs:annotation id="dochwDescription_e">
+      <xs:documentation>The hardware description of the system includes the available physical resources in the platform. In this structure, the physical processor time is assigned to virtual processors of partitions.
+</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="MemoryLayout" type="memoryLayout_e"/>
+      <xs:element name="ProcessorTable">
+        <xs:annotation id="docProcessorTable">
+          <xs:documentation>It is a list of available physical processors or cores as well as a description of its use by partitions.</xs:documentation>
+        </xs:annotation>
+        <xs:complexType>
+          <xs:sequence minOccurs="1" maxOccurs="256">
+            <xs:element name="Processor" type="processor_e" />
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Devices" type="devices_e"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Processor -->
+  <xs:complexType name="processor_e">
+<!--    <xs:all>
+      <xs:element name="CyclicPlanTable" type="cyclicPlan_e"/>
+    </xs:all> -->
+    <xs:annotation id="docprocessor_e">
+      <xs:documentation>It is a description of the use of a physical processor or core. The scheduling of a processor can be cyclic or fixed priority-based.</xs:documentation>
+    </xs:annotation>
+    <xs:choice>
+      <xs:element name="CyclicPlanTable" type="cyclicPlan_e"/>
+    </xs:choice>
+    <xs:attribute name="id" type="id_t" use="required"/>
+    <xs:attribute name="frequency" type="freqUnit_t" use="optional" />
+    <xs:attribute name="features" type="processorFeaturesList_t" use="optional" default="none"/>
+  </xs:complexType>
+
+  <!-- HwResource -->
+  <xs:complexType name="hwResources_e">
+    <xs:annotation id="dochwResources_e">
+      <xs:documentation>This type contains the hardware ports visible from a partition as well as the interrupts that will be propagated to the partition.</xs:documentation>
+    </xs:annotation>
+    <xs:all>
+      <xs:element name="IoPorts" type="ioPorts_e" minOccurs="0" />
+      <xs:element name="Interrupts" minOccurs="0">
+        <xs:complexType>
+          <xs:attribute name="lines" type="hwIrqIdList_t" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:all>
+  </xs:complexType>
+
+  <!-- Io Ports -->
+  <xs:complexType name="ioPorts_e">
+    <xs:annotation id="docioPorts_e">
+      <xs:documentation>It is a list of hardware IO ports. It can be specified as a number of ports (the size of each port is 4 bytes) from a base address or as a set of mask-restricted bits of an address.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence minOccurs="0" maxOccurs="unbounded">
+      <xs:choice>
+        <xs:element name="Range">
+          <xs:annotation id="docRange">
+            <xs:documentation>A number of ports (the size of each port is 4 bytes) from a base address.</xs:documentation>
+          </xs:annotation>
+          <xs:complexType>
+            <xs:attribute name="base" type="hex_t" use="required"/>
+            <xs:attribute name="noPorts" type="xs:positiveInteger" use="required"/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="Restricted">
+          <xs:annotation id="docRestricted">
+            <xs:documentation>An I/O port which is partially controlled by the partition. The bits set in the mask attribute (the size of the mask is 4 bytes) can be read and written by the partition. Those bits not allocated to this partition (i.e. the bit not set in the bitmask) can be allocated to other partitions.</xs:documentation>
+          </xs:annotation>
+          <xs:complexType>
+            <xs:attribute name="address" type="hex_t" use="required"/>
+            <xs:attribute name="mask" type="hex_t" use="optional" default="0x0"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- CyclicPlan -->
+  <xs:complexType name="cyclicPlan_e">
+    <xs:annotation id="doccyclicPlan_e">
+      <xs:documentation>This object represents a set of statically described cyclic plans. Each processor can support many execution modes. One execution mode is identidied as a plan. prtos or system partitions (via hypecalls) can change in run-time the active mode.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+      <xs:element name="Plan" type="plan_e" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Plan -->
+  <xs:complexType name="plan_e">
+    <xs:annotation id="docplan_e">
+      <xs:documentation>Each plan is a cyclic sequence of time slots. One slot is assigned to one partition and to a particular virtual processor of this partition.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="Slot">
+        <xs:annotation id="docSlot">
+          <xs:documentation>It is a continous time interval assigned to a partition and to a virtual processor of this partition.</xs:documentation>
+        </xs:annotation>
+        <xs:complexType>
+          <xs:attribute name="id" type="id_t" use="required"/>
+          <xs:attribute name="start" type="timeUnit_t" use="required"/>
+          <xs:attribute name="duration" type="timeUnit_t" use="required"/>
+          <xs:attribute name="partitionId" type="id_t" use="required"/>
+          <xs:attribute name="vCpuId" type="id_t" use="optional" default="0"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="name" type="idString_t" use="optional"/>
+    <xs:attribute name="id" type="id_t" use="required"/>
+    <xs:attribute name="majorFrame" type="timeUnit_t" use="optional" default="0s"/>
+#ifdef CONFIG_PLAN_EXTSYNC
+    <xs:attribute name="ext_sync" type="hwIrqId_t" use="optional"/>
+#endif
+  </xs:complexType>
+
+  <!-- Health Monitor -->
+  <xs:complexType name="healthMonitor_e">
+    <xs:annotation id="dochealthMonitor_e">
+      <xs:documentation>This structure configures the health monitoring of the hypervisor. It is a list of events that must be managed by the health monitor at hypervisor level. Events are architecture-specific. Automatic actions can be defined for each managed event as well as a boolean value indicating if the event must be logged into the log device of the hypervisor.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+      <xs:element name="Event">
+        <xs:annotation id="docEvent">
+          <xs:documentation>Each Event element defines a relationship beetwen a health monitoring event and the actions that must be performed when it is raised.</xs:documentation>
+        </xs:annotation>
+        <xs:complexType>
+          <xs:attribute name="name" type="hmString_t" use="required"/>
+          <xs:attribute name="action" type="hmAction_t" use="required"/>
+          <xs:attribute name="log" type="yntf_t" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Memory Layout -->
+  <xs:complexType name="memoryLayout_e">
+    <xs:annotation id="docmemoryLayout_e">
+      <xs:documentation>Describes the physical memory layout of the platform as a sequence of memory regions that can be read-only or read-write.
+</xs:documentation>
+    </xs:annotation>
+    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+      <xs:element name="Region">
+        <xs:annotation id="docRegion">
+          <xs:documentation>It is a chunk of continous physical memory</xs:documentation>
+        </xs:annotation>
+        <xs:complexType>
+          <xs:attribute name="type" type="memRegion_t" use="required"/>
+          <xs:attribute name="start" type="hex_t" use="required"/>
+          <xs:attribute name="size" type="sizeUnit_t" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Hypervisor Memory Area -->
+  <xs:complexType name="hypMemoryArea_e">
+    <xs:annotation id="dochypMemoryArea_e">
+      <xs:documentation>This structure describes the continous memory area that the hypervisor requires to be loaded. Size and access flags are defined but the load memory address is not yet defined at this level. The load address is part of the source code configuration and therefore hardcoded. The default value is 0x40000000.</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="size" type="sizeUnit_t" use="required"/>
+    <xs:attribute name="flags" type="memAreaFlagsList_t" use="optional"/>
+  </xs:complexType>
+
+  <!-- Memory Area -->
+  <xs:complexType name="memoryArea_e">
+    <xs:annotation id="docmemoryArea_e">
+      <xs:documentation>It is a list of physical memory areas that can be accessed from a partition. The area's flags define the access properties and restrictions.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+      <xs:element name="Area">
+        <xs:complexType>
+          <xs:attribute name="name" type="idString_t" use="optional" />
+          <xs:attribute name="start" type="hex_t" use="required"/>
+          <xs:attribute name="size" type="sizeUnit_t" use="required"/>
+          <xs:attribute name="flags" type="memAreaFlagsList_t" use="optional" default="none"/>
+          <xs:attribute name="mapped_at" type="hex_t" use="optional"/> <!-- default="" -->
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Root Element -->
+  <xs:element name="SystemDescription">
+    <xs:annotation id="docSystemDescription">
+      <xs:documentation>This is the root element of the configuaration of a system running on prtos hypervisor. </xs:documentation>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:all>
+        <xs:element name="HwDescription" type="hwDescription_e" />
+        <xs:element name="PRTOSHypervisor" type="hypervisor_e"/>
+        <xs:element name="ResidentSw" type="rsw_e" minOccurs="0"/>
+        <xs:element name="PartitionTable">
+          <xs:complexType>
+            <xs:sequence maxOccurs="unbounded">
+              <xs:element name="Partition" type="partition_e" />
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="Channels" type="channels_e" minOccurs="0" />
+      </xs:all>
+      <xs:attribute name="version" type="version_t" use="required"/>
+      <xs:attribute name="name" type="idString_t" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <!-- End Root Element -->
+  <!-- Elements -->
+</xs:schema>

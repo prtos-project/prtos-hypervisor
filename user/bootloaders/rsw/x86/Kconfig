@@ -1,0 +1,20 @@
+mainmenu "RSW Configuration"
+
+source "Kconfig"
+
+menu "RSW memory layout"
+
+config LOAD_ADDR
+       hex "Load address"
+       default "0x100000"
+
+config CONTAINER_ADDR
+       hex "Container physical location address"
+       default "0x180000"
+       depends on CONTAINER_AT_FIXED_ADDR
+
+endmenu
+
+config OUTPUT_ENABLED
+       bool "Enable RSW output"
+       default n

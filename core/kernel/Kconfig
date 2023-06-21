@@ -1,0 +1,89 @@
+config EXPERIMENTAL
+       bool "Enable experimental features"
+       default n
+
+menuconfig DEBUG
+	   bool "Debug and profiling support"
+	   default y
+	   
+if DEBUG
+config VERBOSE_TRAP
+       bool "Dump CPU state when a trap is raised"
+       default y
+endif
+
+config NO_GCC_OPT
+       bool
+       default n
+
+config ID_STRING_LENGTH
+       int "Max. identifier length (B)"
+       default "16"
+
+menu "Hypervisor"
+
+config VOLUNTARY_PREEMPTION
+       bool "Enable voluntary preemption support"
+       default "n"
+       depends on EXPERIMENTAL
+
+config PRTOS_MAX_IPVI
+	int 
+	default "8"
+
+config KSTACK_KB
+       int "Kernel stack size (KB)"
+       default "8"
+
+config MAX_NO_VCPUS
+       int "Max. number of virtual CPUS per partition"
+       default NO_CPUS
+
+#menu "Scheduling policies"
+#       config CYCLIC_SCHED
+#	      bool "Cyclic scheduler"
+#  	      default y
+
+#       config FP_SCHED
+#              bool "Fixed priority scheduler"
+#              default y
+#endmenu
+
+config AUDIT_EVENTS
+       bool "Enable kernel audit events"
+       default y
+
+config PLAN_EXTSYNC
+       bool "Enable external synchronisation"
+       default "n"
+
+config MASKING_VT_HW_IRQS
+       bool "Enable masking virtual hardware interrupts after raised"
+       depends on SPARCv8
+       default n
+
+endmenu
+
+config NO_CPUS
+       int
+       default "1"
+       depends on !SMP
+
+source "Kconfig.ver"
+
+if MMU
+source "kernel/mmu/Kconfig"
+endif
+
+source "klibc/Kconfig"
+
+menu "PRTOS executable format (XEF)"
+
+config XEF_COMPRESSION
+       bool "Enable XEF compression"
+       default "y"
+
+endmenu
+
+source "drivers/Kconfig"
+source "objects/Kconfig"

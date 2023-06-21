@@ -1,0 +1,27 @@
+#!/bin/bash
+# Note: xpathstart is a replacement
+# for the Makefile function in sources/user/examples/rules.mk
+
+if ! test $# -eq 2; then
+	echo usage: xpathstart partitionid xmlfile
+	exit -1
+fi
+id=$1; shift
+file=$1; shift
+
+
+if ! test -r $file; then
+	echo $(basename $0): invalid file: $file
+	exit -1
+fi
+
+function xpathf() { $(dirname $0)/xpath -f $file $*; }
+npart=$(xpathf 'count(/prtos:SystemDescription/prtos:PartitionTable/prtos:Partition)' | awk '/Object is a number/ {print $NF}')
+
+if test $id -lt 0 || test $id -ge $npart; then
+	echo $(basename $0): invalid partition id: $id
+	exit -1
+fi
+
+query='/prtos:SystemDescription/prtos:PartitionTable/prtos:Partition[@id='$id']/prtos:PhysicalMemoryAreas/prtos:Area[1]/@start'
+xpathf -c "$query"

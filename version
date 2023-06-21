@@ -1,0 +1,22 @@
+# Version.Subersion.Revision (8bits.8bits.8bits) #
+##################################################
+#
+#   * An ODD subversion indicates a development serie (ABI or API 
+#     incompatibility between revisions of the same serie). A new
+#     revision could implement new functionalities.
+#
+#   * An EVEN subversion shows a production serie (compatibility at 
+#     ABI and API level among revisions of the same serie). A new
+#     revision only reflect bug fixing.
+#
+##################################################
+
+PRTOS_VERSION=1
+PRTOS_SUBVERSION=0
+PRTOS_REVISION=0
+PRTOS_EXTRAVERSION=
+
+PRTOSVERSION=${PRTOS_VERSION}.${PRTOS_SUBVERSION}.${PRTOS_REVISION}${PRTOS_EXTRAVERSION}
+
+export PRTOSVERSION
+export PRTOS_VERSION PRTOS_SUBVERSION PRTOS_REVISION PRTOS_EXTRAVERSION

@@ -1,0 +1,77 @@
+#!/bin/bash
+
+dirname=$(dirname $0)
+progname=$(basename $0)
+
+function warn { echo -e $* 1>&2; }
+
+if ! test -f $PRTOS_PATH/prtos_config; then
+    warn "\$PRTOS_PATH variable undefined"
+    exit 1;
+fi
+
+. $PRTOS_PATH/prtos_config
+. $PRTOS_PATH/version
+
+function changed { stat $1 | sed -n '$s|Change: ||p'; }
+function digest {  sha1sum < $1 | sed 's|[ ]*-[ ]*||'; }
+function usage { echo "usage: rswbuild <container> <output_file>"; }
+function buildsummary {
+    echo
+    echo "Created by \"$USER\" on \"$HOSTNAME\" at \"`date`\""
+    
+    # check system integrity
+    #prtosinstall -c -t $PRTOS_PATH
+    
+    echo "PRTOS path: \"$PRTOS_PATH\""
+    
+    echo
+    echo -e "prtos Core:"
+    echo -e "   Version: \"$PRTOSVERSION\""
+    echo -e "   Arch:    \"$ARCH\""
+    echo -e "   File:    \"$PRTOS_PATH/core/prtos_core.xef\""
+    echo -e "   Sha1:    \"`digest $PRTOS_PATH/core/prtos_core.xef`\""
+    echo -e "   Changed: \"`changed $PRTOS_PATH/core/prtos_core.xef`\""
+    
+    echo
+    echo -e "prtos Library:"
+    echo -e "   Version: \"$PRTOS_VERSION.$PRTOS_SUBVERSION.$PRTOS_REVISION\""
+    echo -e "   File:    \"$PRTOS_PATH/user/libprtos/libprtos.a\""
+    echo -e "   Sha1:    \"`digest $PRTOS_PATH/user/libprtos/libprtos.a`\""
+    echo -e "   Changed: \"`changed $PRTOS_PATH/user/libprtos/libprtos.a`\""
+
+    echo
+    echo -e "prtos Tools:"
+    echo -e "   File:    \"$PRTOS_PATH/user/bin/prtoscparser\""
+    echo -e "   Sha1:    \"`digest $PRTOS_PATH/user/bin/prtoscparser`\""
+#       echo -e "       xmlns:   \"`sed -n 's|[ ]*xmlns="\(.*\)"|\1|p' $PRTOS_PATH/user/tools/prtoscparser/prtos_conf.xsd`\""
+}
+
+if test $# -ne 2; then
+    warn `usage`
+    exit 1;
+fi
+
+if ! test -e $1; then
+    warn `usage`
+    warn $progname: "error: file $CONTAINER not found"
+    exit 1
+fi
+
+CONTAINER=$1
+OFILE=$2
+
+# report prtos build summary
+buildsummary
+
+set -o errexit
+echo | $TARGET_CC -x c $TARGET_CFLAGS_ARCH -c - -o tmp.o
+$TARGET_OBJCOPY --add-section=.container=$CONTAINER --set-section-flags=.container=load,alloc tmp.o
+
+RSW_PATH=$PRTOS_PATH/user/bootloaders/rsw
+LIBGCC=`$TARGET_CC -print-libgcc-file-name $TARGET_CFLAGS_ARCH `
+TARGET_LDFLAGS="-T$RSW_PATH/$ARCH/rsw.lds $TARGET_LDFLAGS_ARCH $LIBGCC"
+$TARGET_LD -n -S -o $OFILE $RSW_PATH/rsw_objs.o $TARGET_LDFLAGS tmp.o
+
+chmod -x $OFILE
+rm -f tmp.o

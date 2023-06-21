@@ -1,0 +1,180 @@
+#!/bin/bash
+
+XAL=\
+(
+	# user/xal
+	user/xal/bin
+	user/xal/bin/xpath
+	user/xal/bin/xpathstart
+	user/xal/bin/xalinstall
+
+	user/xal/include
+	user/xal/include/*.h
+	user/xal/include/arch
+	user/xal/include/arch/*.h
+
+	user/xal/lib/
+	user/xal/lib/loader.lds
+	user/xal/lib/libxal.a
+
+	user/xal/common
+	user/xal/common/rules.mk
+	user/xal/common/config.mk.dist
+
+	user/xal/examples
+	user/xal/examples/Makefile
+	user/xal/examples/run.mk
+
+	user/xal/examples/helloworld
+	user/xal/examples/helloworld/*
+
+	user/xal/examples/helloworld_smp
+	user/xal/examples/helloworld_smp/*
+
+	user/xal/examples/example.001
+	user/xal/examples/example.001/*
+
+	user/xal/examples/example.002
+	user/xal/examples/example.002/*
+
+	user/xal/examples/example.003
+	user/xal/examples/example.003/*
+
+	user/xal/examples/example.004
+	user/xal/examples/example.004/*
+
+	user/xal/examples/example.005
+	user/xal/examples/example.005/*
+
+	user/xal/examples/example.006
+	user/xal/examples/example.006/*
+
+	user/xal/examples/example.007
+	user/xal/examples/example.007/*
+
+	user/xal/examples/example.008
+	user/xal/examples/example.008/*
+
+	# examples
+	`case "$ARCH" in 
+	x86)
+cat <<EOF
+EOF
+	;;
+	esac`
+)
+
+progname=$(basename $0)
+function warn() { echo -e $* 1>&2; }
+function eprint() { warn $progname: $*; exit 1; }
+function usage(){ eprint "usage: $progname [-dc] -t <target_dir>"; }
+
+function install(){
+	if $drflag; then
+		for i in $*; do test -f "$i" && echo $i; done
+	else
+		$(which install) $* # -v
+	fi
+}
+
+# parse options
+args=`getopt -n $prog -o igchdt: -- "$@"`
+if test $? != 0; then
+		usage
+		exit 1
+fi
+
+opmode=install	# operation: install, sha1sum, sha1check
+drflag=false	# dry run
+sha1file=sha1sum.txt
+targetdir=
+
+set -- $(eval echo "$args")
+for i in $*
+do
+	case "$i" in
+	-i)	shift; opmode=install;;
+	-g)	shift; opmode=sha1sum;;
+	-c)	shift; opmode=sha1check;;
+
+	-h)	shift; usage; exit;;
+	-d)	shift; drflag=true;;
+	-t)
+		shift
+		targetdir="$1"; shift
+		;;
+	--)	shift;;
+	esac
+done
+
+if test -z "$targetdir"; then
+	warn option -t targetdir required
+	usage
+fi
+
+case "$opmode" in
+install)
+	# fall through
+	;;
+
+sha1sum)
+	(
+	cd $targetdir;
+	rm -f $sha1file && sha1sum -b `find -type f` > $sha1file;
+	chmod 400 $sha1file
+	)
+	exit
+	;;
+
+sha1check)
+	if ! test -r $targetdir/$sha1file; then
+		echo "prtos integrity NOT verified: \"$targetdir/$sha1file\" not found"
+		exit
+	else
+		if (cd $targetdir; sha1sum -c $sha1file >/dev/null); then
+			echo "prtos integrity verified using \"$targetdir/$sha1file\""
+			exit
+		else
+			echo prtos integrity corrupted: sha1sum missmatch:
+			(cd $targetdir; sha1sum -c $sha1file) | grep -v OK
+			exit -1
+		fi
+	fi
+	;;
+
+*)
+	usage
+	exit -1
+	;;	
+esac
+
+# installation
+
+if test -z "$ARCH"; then
+	eprint '$ARCH variable does not exist'
+fi
+
+if test -e $targetdir; then
+	eprint error: target dir $targetdir already exists
+fi
+
+# installation
+
+install -m 755 -d $targetdir/user/xal
+for e in ${XAL[@]}; do
+	if test -d $e; then
+		install -m 755 -d $targetdir/$e
+	elif test -x $e; then
+		install -m 755 $e $targetdir/$e
+	else
+		install -m 644 $e $targetdir/$e
+	fi
+done
+
+# rearrangement
+
+mv $targetdir/user/xal/* $targetdir/
+rm -r $targetdir/user
+
+cp $targetdir/common/config.mk.dist $targetdir/common/config.mk
+chmod u+w $targetdir/common/config.mk

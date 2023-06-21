@@ -1,0 +1,161 @@
+#
+# NOTE! Don't add files that are generated in specific
+# subdirectories here. Add them in the ".gitignore" file
+# in that subdirectory instead.
+#
+# NOTE! Please use 'git ls-files -i --exclude-standard'
+# command after changing this file, to see if there are
+# any tracked files which get ignored after the change.
+#
+# Normal rules
+#
+.*
+*.o
+*.o.*
+*.a
+*.s
+*.i
+*.lst
+*.symtypes
+*.order
+*.elf
+*.bin
+*.gz
+*.bz2
+*.lzma
+*.xz
+*.lzo
+*.patch
+*.gcno
+
+#
+# Top-level generic files
+#
+/tags
+/TAGS
+
+
+
+#
+# Debian directory (make deb-pkg)
+#
+/debian/
+
+#
+# git files that we don't want to ignore even it they are dot-files
+#
+!.gitignore
+!.mailmap
+!.keep
+
+#
+# Generated files
+#
+core/Kconfig.ver
+core/build.info
+core/drivers/dep.mk
+core/include/arch
+core/include/autoconf.h
+core/include/comp.h
+core/include/config/apic.h
+core/include/config/vmware.h
+core/include/config/arch.h
+core/include/config/audit/
+core/include/config/auto.conf
+core/include/config/auto.conf.cmd
+core/include/config/debug.h
+core/include/config/dev/
+core/include/config/early/
+core/include/config/hpet.h
+core/include/config/hpet/
+core/include/config/hwirq/
+core/include/config/id/
+core/include/config/kernelversion.h
+core/include/config/kstack/
+core/include/config/max/
+core/include/config/mmu.h
+core/include/config/no/
+core/include/config/obj/
+core/include/config/partition/
+core/include/config/prtos/
+core/include/config/qemu.h
+core/include/config/smp.h
+core/include/config/smp/
+core/include/config/target/
+core/include/config/uart/
+core/include/config/verbose/
+core/include/config/vmm/
+core/include/config/x86.h
+core/include/config/xef/
+core/include/x86/asm_offsets.h
+core/include/x86/ginfo.h
+core/kernel/dep.mk
+core/kernel/mmu/dep.mk
+core/kernel/x86/dep.mk
+core/kernel/x86/prtos.lds
+core/klibc/dep.mk
+core/klibc/x86/dep.mk
+core/objects/dep.mk
+core/pbl/pbl.lds
+core/prtos_core
+core/prtos_core.xef
+prtos-1.0.0.run
+prtos_config
+scripts/extractinfo
+scripts/kconfig/conf
+scripts/kconfig/mconf
+user/bin/prtosbuildinfo
+user/bin/prtoscparser
+user/bin/prtoseformat
+user/bin/prtospack
+user/bin/rswbuild
+user/bootloaders/rsw/include/autoconf.h
+user/bootloaders/rsw/include/config/
+user/bootloaders/rsw/x86/rsw.lds
+user/libprtos/common/md5.c
+user/libprtos/dep.mk
+user/libprtos/dephost.mk
+user/libprtos/include/arch
+user/libprtos/include/prtos_inc
+user/tools/prtosbuildinfo/prtosbuildinfo
+user/tools/prtoscparser/dephost.mk
+user/tools/prtoscparser/prtosc.xsd
+user/tools/prtoscparser/prtosc.xsd.bl
+user/tools/prtoscparser/prtoscparser
+user/tools/prtospack/dephost.mk
+user/tools/prtospack/prtospack
+user/tools/xef/dephost.mk
+user/tools/xef/prtoseformat
+user/xal/include/arch
+user/xal/include/autoconf.h
+user/xal/include/config/arch.h
+user/xal/include/config/auto.conf
+user/xal/include/config/auto.conf.cmd
+user/xal/include/config/debug.h
+user/xal/include/config/kernelversion.h
+user/xal/include/config/prtos/
+user/xal/include/config/size/
+user/xal/include/config/stack/
+user/xal/lib/loader.lds
+compile_commands.json
+
+# stgit generated dirs
+patches-*
+
+# quilt's files
+patches
+series
+
+# cscope files
+cscope.*
+ncscope.*
+
+# gnu global files
+GPATH
+GRTAGS
+GSYMS
+GTAGS
+
+*.orig
+*~
+\#*#

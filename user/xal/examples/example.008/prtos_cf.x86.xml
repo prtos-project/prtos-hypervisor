@@ -1,0 +1,46 @@
+<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="hello_world">
+    <HwDescription>
+        <MemoryLayout>
+            <Region type="ram" start="0x0" size="512MB" />
+        </MemoryLayout>
+        <ProcessorTable>
+            <Processor id="0">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="1000ms">
+                        <Slot id="0" start="0ms" duration="500ms" partitionId="0" vCpuId="0"/>
+                        <Slot id="1" start="500ms" duration="500ms" partitionId="1" vCpuId="0"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="1">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="1000ms">
+                        <Slot id="0" start="0ms" duration="500ms" partitionId="0" vCpuId="1"/>
+                        <Slot id="1" start="500ms" duration="500ms" partitionId="1" vCpuId="1"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+        </ProcessorTable>
+        <Devices>
+            <Uart name="uart" id="0" baudRate="115200" />
+            <Vga name="vga"/>
+        </Devices>
+    </HwDescription>
+
+    <PRTOSHypervisor console="uart">
+        <PhysicalMemoryArea size="4MB" />
+    </PRTOSHypervisor>
+
+    <PartitionTable>
+        <Partition id="0" name="Partition1" console="uart" flags="system" num_of_vcpus="2">
+            <PhysicalMemoryAreas>
+                <Area start="0x6000000" size="1MB" />
+            </PhysicalMemoryAreas>
+        </Partition>
+        <Partition id="1" name="Partition2" console="uart" flags="system" num_of_vcpus="2">
+            <PhysicalMemoryAreas>
+                <Area start="0x6100000" size="1MB" />
+            </PhysicalMemoryAreas>
+        </Partition>
+    </PartitionTable>
+</SystemDescription>

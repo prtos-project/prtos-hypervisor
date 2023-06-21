@@ -1,0 +1,48 @@
+<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="traces">
+
+    <HwDescription>
+        <MemoryLayout>
+            <Region type="ram" start="0x0" size="512MB" />
+        </MemoryLayout>
+        <ProcessorTable>
+            <Processor id="0">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="600ms">
+                        <Slot id="0" start="0ms" duration="200ms" partitionId="0" />
+                        <Slot id="1" start="200ms" duration="200ms" partitionId="1" />
+                        <Slot id="2" start="400ms" duration="200ms" partitionId="2" />
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+        </ProcessorTable>
+        <Devices>
+            <Uart id="0" baudRate="115200" name="Uart" />
+            <memory_block name="MemDisk0" start="0x2300000" size="256KB" />
+            <memory_block name="MemDisk1" start="0x2400000" size="256KB" />
+        </Devices>
+    </HwDescription>
+
+    <PRTOSHypervisor console="Uart">
+        <PhysicalMemoryArea size="4MB" />
+    </PRTOSHypervisor>
+
+    <PartitionTable>
+        <Partition id="0" name="Partition1" flags="" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x6000000" size="1MB" />
+            </PhysicalMemoryAreas>
+            <Trace bitmask="0x01" device="MemDisk0"/>
+        </Partition>
+        <Partition id="1" name="Partition2" flags="" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x6100000" size="1MB" />
+            </PhysicalMemoryAreas>
+            <Trace bitmask="0x01" device="MemDisk1"/>
+        </Partition>
+        <Partition id="2" name="Partition3" flags="system" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x6200000" size="1MB" />
+            </PhysicalMemoryAreas>
+        </Partition>
+    </PartitionTable>
+</SystemDescription>

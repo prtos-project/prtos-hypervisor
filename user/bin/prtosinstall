@@ -1,0 +1,226 @@
+#!/bin/bash
+
+CONFIG=\
+(
+	# dirs
+	core
+	user/bootloaders/rsw
+
+	# files
+	README.md
+	prtos_config
+	version
+	config.mk
+	user/rules.mk
+
+	core/.config
+	user/bootloaders/rsw/.config
+)
+
+BIN_APPS=\
+(
+	# binaries (stripped)
+	user/bin/prtoseformat
+	user/bin/prtospack
+	user/bin/prtoscparser
+
+	# scripts
+	user/bin/rswbuild
+	user/bin/prtosinstall
+	user/bin/prtosbuildinfo
+
+    # iso x86
+	user/bin/grub_iso
+)
+
+PRTOS_LIBS=\
+(
+	# dirs
+	user/libprtos
+	user/bootloaders/rsw/$ARCH
+
+	# files
+	core/prtos_core
+	core/prtos_core.xef
+
+	user/libprtos/libprtos.a
+	user/bootloaders/rsw/rsw_objs.o
+	user/bootloaders/rsw/$ARCH/rsw.lds
+)
+
+LIBPRTOS_PATH=user/libprtos
+INCLUDE_FILES=\
+(
+	# dirs
+	user/libprtos/include
+	user/libprtos/include/arch
+	user/libprtos/include/prtos_inc/arch
+	user/libprtos/include/prtos_inc/objects
+	user/libprtos/include/prtos_inc/drivers
+
+	# files
+	user/libprtos/include/prtos.h
+	user/libprtos/include/prtos_inc/config.h
+	user/libprtos/include/prtos_inc/guest.h
+	user/libprtos/include/prtos_inc/arch/asm_offsets.h
+
+	`case "$ARCH" in 
+	x86)
+cat <<EOF
+	user/libprtos/include/prtos_inc/arch/physmm.h
+EOF
+	;;
+	esac`
+	
+	`(cd ${PRTOS_PATH:-.};
+	 echo '#include <prtos.h>' | gcc -O2 -D"__PRTOS_INCFLD(_fld)=<prtos_inc/_fld>" -x c -I $LIBPRTOS_PATH/include -M -) |
+		 sed -n '2,$ {s|[^h]$||; p}'`
+)
+
+progname=$(basename $0)
+function warn() { echo -e $* 1>&2; }
+function eprint() { warn $progname: $*; exit 1; }
+function usage(){ eprint "usage: $progname [-dc] -t <target_dir>"; }
+
+function install(){
+	if $drflag; then
+		for i in $*; do test -f "$i" && echo $i; done
+	else
+		$(which install) $* # -v
+	fi
+}
+
+# parse options
+args=`getopt -n $prog -o igchdt: -- "$@"`
+if test $? != 0; then
+		usage
+		exit 1
+fi
+
+opmode=install	# operation: install, sha1sum, sha1check
+drflag=false	# dry run
+sha1file=sha1sum.txt
+targetdir=
+
+set -- $(eval echo "$args")
+for i in $*
+do
+	case "$i" in
+	-i)	shift; opmode=install;;
+	-g)	shift; opmode=sha1sum;;
+	-c)	shift; opmode=sha1check;;
+
+	-h)	shift; usage; exit;;
+	-d)	shift; drflag=true;;
+	-t)
+		shift
+		targetdir="$1"; shift
+		;;
+	--)	shift;;
+	esac
+done
+
+if test -z "$targetdir"; then
+	warn option -t targetdir required
+	usage
+fi
+
+case "$opmode" in
+install)
+	# fall through
+	;;
+
+sha1sum)
+	(
+	cd $targetdir;
+	rm -f $sha1file && sha1sum -b `find -type f` > $sha1file;
+	chmod 400 $sha1file
+	)
+	exit
+	;;
+
+sha1check)
+	if ! test -r $targetdir/$sha1file; then
+		echo "prtos integrity NOT verified: \"$targetdir/$sha1file\" not found"
+		exit
+	else
+		if (cd $targetdir; sha1sum -c $sha1file >/dev/null); then
+			echo "prtos integrity verified using \"$targetdir/$sha1file\""
+			exit
+		else
+			echo prtos integrity corrupted: sha1sum missmatch:
+			(cd $targetdir; sha1sum -c $sha1file) | grep -v OK
+			exit -1
+		fi
+	fi
+	;;
+
+*)
+	usage
+	exit -1
+	;;	
+esac
+
+# installation
+
+if test -z "$PRTOS_PATH"; then
+	eprint '$PRTOS_PATH variable does not exist'
+fi
+
+if test -z "$ARCH"; then
+	eprint '$ARCH variable does not exist'
+fi
+
+if test -e $targetdir; then
+	eprint error: target dir $targetdir already exists
+fi
+
+install -m 755 -d $targetdir/user/bin
+for e in ${BIN_APPS[@]}; do
+	if file $e | grep -q 'application/x-executable'; then
+		install -s -m 755 $e $targetdir/$e
+	else
+		install -m 755 $e $targetdir/$e
+	fi
+done
+
+for e in ${CONFIG[@]} ${PRTOS_LIBS[@]} ${INCLUDE_FILES[@]}; do
+	if test -d $e; then
+		install -m 755 -d $targetdir/$e
+	else
+		install -m 644 $e $targetdir/$e
+	fi
+done
+
+# rearrangement
+
+sed -i "s|PRTOS_PATH[ ]*=.*|PRTOS_PATH=|" $targetdir/prtos_config
+chmod u+w $targetdir/prtos_config
+
+mv $targetdir/user/bin $targetdir
+sed -i '/^PRTOS_PATH=/ s|/user/bin|/bin|' $targetdir/bin/rswbuild
+sed -i '/PRTOS_PATH\/user\/bin\/prtoscparser/ s|/user/bin|/bin|' $targetdir/bin/rswbuild
+
+mkdir $targetdir/lib
+mv $targetdir/core/prtos_core $targetdir/core/prtos_core.xef  $targetdir/lib
+
+mv $targetdir/core/.config $targetdir/lib/dot.config
+mv $targetdir/user/bootloaders/rsw/.config $targetdir/user/bootloaders/rsw/dot.config
+
+rm -r $targetdir/core
+sed -i 's|core/.config|lib/.config|g' $targetdir/config.mk
+sed -i '/prtos_core.xef/ s|/core/|/lib/|' $targetdir/bin/rswbuild
+
+mv $targetdir/user/libprtos/include $targetdir
+sed -i '/$(LIBPRTOS_PATH)\/include/ s|$(LIBPRTOS_PATH)/include|$(PRTOS_PATH)/include|g' $targetdir/user/rules.mk
+sed -i '/^LIBPRTOS_PATH=/ s|user/libprtos|.|g' $targetdir/bin/prtosinstall
+
+mv $targetdir/user/libprtos/libprtos.a $targetdir/lib
+rm -rf $targetdir/user/libprtos
+sed -i '/LIBPRTOS_PATH=/ s|user/libprtos|lib|g' $targetdir/user/rules.mk
+sed -i '/PRTOS_PATH=/ s|/user/bin|bin|' $targetdir/bin/rswbuild
+sed -i '/user\/libprtos\/libprtos.a/ s|/user/libprtos/|/lib/|' $targetdir/bin/rswbuild
+sed -i '/RSW_PATH/ s|/user/|/lib/|' $targetdir/bin/rswbuild
+
+mv $targetdir/user/* $targetdir/lib
+rm -r $targetdir/user
