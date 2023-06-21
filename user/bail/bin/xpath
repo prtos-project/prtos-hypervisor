@@ -1,0 +1,58 @@
+#!/bin/bash
+# usage: xpath:  [-c] [-f file] [-n nspace] xpath
+# xpath obtains the conf params from the xml files using a standarized notation.
+# xpath query, see: http://www.w3.org/TR/xpath
+
+prog=$(basename $0)
+nspaces=
+file=
+
+function warn() { echo $* 1>&2; }
+function usage() {
+	warn "usage: $prog: -f file [-c] [-n nspace] xpath"
+	exit 2
+}
+
+if ! which xmllint >/dev/null 2>&1; then
+	warn $(basename $0): xmllint not found
+	exit 1
+fi
+
+cflag=false
+while getopts 'cf:n:' c
+do
+	case $c in
+	c)	cflag=true;;
+	f)	file="$OPTARG";;
+	n)	nspaces="$nspaces $OPTARG";;
+	?)	usage;;
+	esac
+done
+shift $(($OPTIND - 1))
+
+if test -z "$file"; then
+	usage
+fi
+
+# detect prtos namespace and set prtos by default
+if grep -q 'xmlns="http://www.prtos.org/.*"' $file; then
+       prtos=`sed -n 's|.*xmlns="\(http://www.prtos.org/prtos-...\)".*|\1|p' $file`
+       nspaces="$nspaces prtos=$prtos"
+fi
+
+
+(
+	for ns in $nspaces; do
+		echo "setns $ns"
+	done
+	for xp in $*; do
+		echo "xpath $xp"
+	done
+) |
+	xmllint --noent --shell "$file" |
+	if $cflag; then
+		awk '/content/ { if (split($0, content, /=/) == 2) print content[2]; }'
+	else
+		cat
+	fi
+
