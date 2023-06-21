@@ -1,0 +1,226 @@
+#!/bin/bash
+# prtos installer Setup
+
+source prtos/prtos_config
+source prtos/version
+
+progname=$(basename $0)
+aflag=false
+logfile=/tmp/$progname-$$.log
+
+>$logfile
+function warn() {
+	/bin/echo -e $* 1>&2
+	
+	# save warn/errors to logfile
+	/bin/echo -e $* >> $logfile
+}
+
+function quit(){
+    warn ""
+    if [ $1 == 0 ] ; then
+	warn Installation completed.
+    else
+	warn Installation error.
+    fi
+    exit $1
+}
+
+function eprint() { warn $*; quit 1; }
+function usage(){
+	warn \
+	"usage: $progname [-a] -d <destdir> -g <hostgcc> -t <targetgcc>\n"\
+	"where:\n"\
+	"-a) automatic (non-interactive) installer\n"\
+	"-d) destination directory where prtos will be installed)\n"\
+	"-g) host compiler toolchain used for user tools\n"\
+	"-t) target cross-compiler toolchain for prtos."
+	quit 0
+}
+
+function chkdestdir(){
+	warn $progname: chkdestdir $1
+
+	if test -z "$1"; then
+		eprint Error Installation path required
+	fi
+	
+	if test -e $1; then
+		eprint Error Installation path: $1 exists
+	fi
+	
+	if ! test -e $(dirname $1); then
+		eprint Error Installation path: $(dirname $1) does not exist
+	fi
+}
+
+function chkhostgcc(){
+	warn $progname: chkhostgcc $1
+
+	if test -z "$1"; then
+		eprint Error Host toolchain required
+	fi
+	
+	if ! test -x $1/gcc; then
+		eprint Error Host toolchain: $1/gcc not exec
+	fi
+
+#	arch=`uname -m | sed -n 's|\(^i\?.86\).*|\1|p'`
+#	if ! $1/gcc -dumpmachine | grep -q $arch; then
+#		warn option hostgcc: $1/gcc does not match `uname -m`
+#	fi
+}
+
+function chktargetgcc(){
+	warn $progname: chktargetgcc $1
+	local targetgcc=$1/${TARGET_CCPREFIX}gcc
+
+	if test -z "$1"; then
+		eprint Error Target toolchain required
+	fi
+    
+	if ! test -x $targetgcc; then
+		eprint Error Target toolchain: $targetgcc not exec
+	fi
+	
+	arch=`echo $ARCH | sed -n 's|\(^.....\).*|\1|p'`
+	if ! $targetgcc -dumpmachine | grep -q "^$arch"; then
+		eprint Error Target toolchain: $targetgcc does not match "$arch" arch
+	fi
+}
+
+TARGET_TOOLCHAIN=/usr/bin/
+TARGET_PATH=/opt
+HOST_TOOLCHAIN=
+
+if test -n "$TARGET_CCPATH"; then
+    TARGET_TOOLCHAIN=${TARGET_CCPATH}
+fi
+if test -n "$HOST_CCPATH"; then
+    HOST_TOOLCHAIN=${HOST_CCPATH}
+fi
+
+function interact()
+{
+cat <<EOF
+
+1. Select the directory where prtos will be installed. The installation
+   directory shall not exist.
+
+2. Select the target compiler toolchain binary directory (arch $ARCH).  
+
+3. Confirm the installation settings.
+
+Important: you need write permision in the path of the installation directory.
+
+EOF
+
+read -p "Continue with the installation [Y/n]? " INSTALL_CONFIRM
+if test "$INSTALL_CONFIRM" == "n"; then
+	eprint "$progname: Error Installation aborted"
+fi
+
+# build
+cat <<EOF
+
+Press [Enter] for the default value or enter a new one.
+Press [TAB] to complete directory names.
+
+EOF
+
+read -e -p "1.- Installation directory [${TARGET_PATH}]: " U_TARGET_PATH
+read -e -p "2.- Path to the arch toolchain [${TARGET_TOOLCHAIN}]: " U_TARGET_TOOLCHAIN
+
+if [ -n "${U_TARGET_TOOLCHAIN}" ]; then 
+    TARGET_TOOLCHAIN=$U_TARGET_TOOLCHAIN;
+fi
+
+if [ -n "${U_TARGET_PATH}" ]; then 
+    TARGET_PATH=${U_TARGET_PATH}
+fi
+
+chkdestdir ${TARGET_PATH}
+chktargetgcc ${TARGET_TOOLCHAIN}
+#chkhostgcc ${HOST_TOOLCHAIN}
+
+cat <<EOF
+
+Confirm the Installation settings:
+Selected installation path :  ${TARGET_PATH}
+Selected toolchain path    :  ${TARGET_TOOLCHAIN}
+
+EOF
+
+read -e -p "3.- Perform the installation using the above settings [Y/n]? " INSTALL_CONFIRM
+if test "$INSTALL_CONFIRM" == "n"; then
+	eprint "Error Installation aborted"
+fi
+
+return 0
+}
+
+warn "Starting installation."
+warn "Installation log in: " $logfile
+
+# parse options
+args=`getopt -n $prog -o ahd:g:t: -- "$@"`
+if test $? != 0; then
+	usage
+fi
+
+set -- $(eval echo "$args")
+for i in $*
+do
+	case "$i" in
+	-h)	shift; usage; quit;;
+	-a)	shift; aflag=true;;
+
+	-d)	
+		TARGET_PATH="$2"; shift 2
+		chkdestdir $TARGET_PATH
+		;;
+	-g)	
+		HOST_TOOLCHAIN="$2"; shift 2
+		chkcheckgcc $HOST_TOOLCHAIN
+		;;
+	-t)	
+		TARGET_TOOLCHAIN="$2"; shift 2
+		chktargetgcc $TARGET_TOOLCHAIN
+		;;
+
+	--)	shift;;
+	esac
+done
+
+installok=false
+if $aflag; then
+	installok=true
+elif interact; then
+	installok=true
+fi
+
+if $installok; then
+	if ! cp -r `pwd` $TARGET_PATH; then
+		eprint Error Installation path not writtable
+	fi
+		
+	rm -f $TARGET_PATH/$progname
+
+	# prtos/prtos_config
+	sed -i "s|HOST_CCPATH[ ]*=.*|HOST_CCPATH=$HOST_TOOLCHAIN|" $TARGET_PATH/prtos/prtos_config
+	sed -i "s|TARGET_CCPATH[ ]*=.*|TARGET_CCPATH=$TARGET_TOOLCHAIN|" $TARGET_PATH/prtos/prtos_config
+	sed -i "s|PRTOS_PATH[ ]*=.*|PRTOS_PATH=$TARGET_PATH/prtos|" $TARGET_PATH/prtos/prtos_config
+	
+	# bail/common/config.mk
+	sed -i "s|PRTOS_PATH[ ]*=.*|PRTOS_PATH=$TARGET_PATH/prtos|" $TARGET_PATH/bail/common/config.mk.dist
+	sed -i "s|BAIL_PATH[ ]*=.*|BAIL_PATH=$TARGET_PATH/bail|" $TARGET_PATH/bail/common/config.mk.dist
+	cp $TARGET_PATH/bail/common/config.mk.dist $TARGET_PATH/bail/common/config.mk
+	
+	# bail-examples/example.*/Makefile
+	for example in `ls -d $TARGET_PATH/bail-examples/*/`; do
+        sed -i "s|BAIL_PATH[ ]*=.*|BAIL_PATH=$TARGET_PATH/bail|" $example/Makefile;
+    done
+
+fi
+
+quit 0

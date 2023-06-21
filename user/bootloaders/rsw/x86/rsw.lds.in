@@ -1,0 +1,69 @@
+/*
+ * $FILE$
+ * 
+ * ld script to build x86
+ * 
+ * www.prtos.org
+ */
+
+OUTPUT_FORMAT("elf32-i386", "elf32-i386", "elf32-i386")
+OUTPUT_ARCH("i386")
+
+ENTRY(_start)
+
+START_ADDR = CONFIG_LOAD_ADDR;
+
+SECTIONS
+{
+  . = START_ADDR;
+  _srorsw = .;
+  .text ALIGN (0x1000): {  	
+  	*(.text)
+	. = ALIGN(8);
+	prtos_pef_container_ptr = . ;
+  LONG(_scontainer);
+  }
+
+  .rodata ALIGN (4) : {
+	*(.rodata)
+  	*(.rodata.*)
+	*(.rodata.*.*)
+  }
+#ifdef CONFIG_CONTAINER_AT_FIXED_ADDR
+  prev = .;
+  . = CONFIG_CONTAINER_ADDR;
+#endif
+  .container ALIGN(8) : {
+  _scontainer = . ;
+  *(.container)
+  }
+#ifdef CONFIG_CONTAINER_AT_FIXED_ADDR
+  . = prev;
+#endif
+  _erorsw = .;
+  _srsw = .;
+  .data ALIGN (4) : {
+  _sdata = .;
+	_sdata_lma = LOADADDR(.data); 
+	*(.data)
+	_edata = .;
+	hpv_entry_point = .;
+  LONG(0);
+  }
+  
+  .bss ALIGN (4) : {
+  _sbss = .;
+  *(COMMON)
+  *(.bss)
+  _ebss = .;
+  }
+
+   _ersw = .;
+
+  /DISCARD/ :
+  {
+	*(.note)
+	*(.comment*)
+        *(.eh_frame)
+  }
+}

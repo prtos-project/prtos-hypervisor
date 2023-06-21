@@ -1,0 +1,32 @@
+<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="hello_world">
+    <HwDescription>
+        <MemoryLayout>
+            <Region type="ram" start="0x0" size="512MB" />
+        </MemoryLayout>
+        <ProcessorTable>
+            <Processor id="0">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="2ms">
+                        <Slot id="0" start="0ms" duration="1ms" partitionId="0" />
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+        </ProcessorTable>
+        <Devices>
+            <Uart id="0" baudRate="115200" name="Uart" />
+            <Vga name="Vga" />
+        </Devices>
+    </HwDescription>
+    
+    <PRTOSHypervisor console="Vga">
+        <PhysicalMemoryArea size="4MB" />
+    </PRTOSHypervisor>
+    
+    <PartitionTable>
+        <Partition id="0" name="Partition0" flags="system" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x6000000" size="1MB" />
+            </PhysicalMemoryAreas>
+        </Partition>
+    </PartitionTable>
+</SystemDescription>

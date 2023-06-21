@@ -1,0 +1,38 @@
+<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="timers">
+
+    <HwDescription>
+        <MemoryLayout>
+            <Region type="ram" start="0x0" size="512MB" />
+        </MemoryLayout>
+        <ProcessorTable>
+            <Processor id="0">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="1000ms">
+                        <Slot id="0" start="0ms" duration="500ms" partitionId="0" />
+                        <Slot id="1" start="500ms" duration="500ms" partitionId="1" />
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+        </ProcessorTable>
+        <Devices>
+            <Uart id="0" baudRate="115200" name="Uart" />
+        </Devices>
+    </HwDescription>
+
+    <PRTOSHypervisor console="Uart">
+        <PhysicalMemoryArea size="4MB" />
+    </PRTOSHypervisor>
+
+    <PartitionTable>
+        <Partition id="0" name="Partition0" flags="system" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x6000000" size="1MB" mappedAt="0x6000000"/>
+            </PhysicalMemoryAreas>
+        </Partition>
+        <Partition id="1" name="Partition1" flags="system" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x6100000" size="1MB" mappedAt="0x6100000" />
+            </PhysicalMemoryAreas>
+        </Partition>
+    </PartitionTable>
+</SystemDescription>
