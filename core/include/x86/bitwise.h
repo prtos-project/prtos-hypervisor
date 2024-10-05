@@ -19,7 +19,7 @@ static __inline__ prtos_s32_t _ffs(prtos_s32_t x) {
                          "movl $-1,%0\n"
                          "1:"
                          : "=r"(r)
-                         : "g"(x));
+                         : "r"(x));
     return r;
 }
 
@@ -33,7 +33,7 @@ static __inline__ prtos_s32_t _ffz(prtos_s32_t x) {
                          "movl $-1,%0\n"
                          "1:"
                          : "=r"(r)
-                         : "g"(~x));
+                         : "r"(~x));
     return r;
 }
 
@@ -47,7 +47,7 @@ static __inline__ prtos_s32_t _fls(prtos_s32_t x) {
                          "movl $-1,%0\n"
                          "1:"
                          : "=r"(r)
-                         : "g"(x));
+                         : "r"(x));
     return r;
 }
 
