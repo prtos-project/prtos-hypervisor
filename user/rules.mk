@@ -29,7 +29,7 @@ ifeq ($(ARCH), x86)
     HOST_ASFLAGS += $(HOST_CFLAGS_ARCH)
 endif
 
-TARGET_ASFLAGS = -Wall -O2 -D__ASSEMBLY__ -fno-builtin -D$(ARCH) -D"__PRTOS_INCFLD(_fld)=<prtos_inc/_fld>"
+TARGET_ASFLAGS = -Wall -O0 -D__ASSEMBLY__ -fno-builtin -D$(ARCH) -D"__PRTOS_INCFLD(_fld)=<prtos_inc/_fld>"
 TARGET_ASFLAGS += -I$(LIB_PRTOS_PATH)/include -nostdlib -nostdinc --include prtos_inc/config.h
 TARGET_ASFLAGS += $(TARGET_ASFLAGS_ARCH)
 LIBGCC=`$(TARGET_CC) -print-libgcc-file-name $(TARGET_CFLAGS_ARCH)`

@@ -118,9 +118,10 @@ int main(int argc, char **argv) {
     FILE *out_file = 0;
     int opt, only_c_code = 0;
 
+    /* To check that the libxml version in use is compatible with the version the software has been compiled against */
     LIBXML_TEST_VERSION;
 
-    while ((opt = getopt(argc, argv, "do:s:c:")) != -1) {
+    while ((opt = getopt(argc, argv, "do:s:c")) != -1) {
         switch (opt) {
             case 'c':
                 only_c_code = 1;

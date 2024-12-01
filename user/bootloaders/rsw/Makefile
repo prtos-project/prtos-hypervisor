@@ -13,7 +13,7 @@ RSW_PATH=$(PRTOS_PATH)/user/bootloaders/rsw
 
 RSW-common = common/rsw.c common/rsw_stdc.c
 
-RSW-x86-SRC=x86/boot.S x86/vga.c
+RSW-x86-SRC=x86/boot.S x86/serial.c
 
 RESIDENT_SW_SRC= $(RSW-common) $(RSW-$(ARCH)-SRC)
 
