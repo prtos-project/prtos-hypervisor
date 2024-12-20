@@ -347,19 +347,6 @@ extern void arch_mmu_rsv_mem(FILE *out_file);
 static void generate_rsv_mem(FILE *out_file) {
     int i, j, num_of_vcpus;
 
-#if defined(CONFIG_SMP)
-    for (i = 1; i < CONFIG_NO_CPUS; i++) {
-#ifndef CONFIG_x86
-        rsv_block(CTXTTABSIZE, CTXTTABSIZE, "ctxt_table");
-#endif
-        rsv_block(PTDL1SIZE, PTDL1SIZE, "ptd_level_1_table");
-        rsv_block(PTDL2SIZE, PTDL2SIZE, "ptd_level_2_table");
-#ifndef CONFIG_x86
-        rsv_block(PTDL3SIZE, PTDL3SIZE, "ptd_level_3_table");
-#endif
-    }
-#endif
-
     for (i = 0, num_of_vcpus = 0; i < prtos_conf.num_of_partitions; i++) {
         num_of_vcpus += prtos_conf_partition_table[i].num_of_vcpus;
         rsv_block(prtos_conf_partition_table[i].num_of_vcpus * _KTHREADPTR_T_SIZEOF, ALIGNMENT, "partition's kthread table");
@@ -429,8 +416,6 @@ static void generate_rsv_mem(FILE *out_file) {
 
                 break;
         }
-#if defined(CONFIG_DEV_UART) || defined(CONFIG_DEV_UART_MODULE)
-#endif
 
     print_blocks(out_file);
 }
