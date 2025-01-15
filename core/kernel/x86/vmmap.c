@@ -31,16 +31,9 @@ void __VBOOT setup_vm_map(prtos_address_t *start_frame_area, prtos_s32_t *num_of
     *num_of_frames = ((PRTOS_VMAPEND - *start_frame_area) + 1) / PAGE_SIZE;
 
     page_table = (prtos_u32_t *)_PHYS2VIRT(save_cr3());
-#ifdef PRTOS_VERBOSE
-    eprintf("setup_vm_map: page_table addr=0x%x, v_addr=0x%x:\n", save_cr3(), page_table);
-#endif
     for (page = _PHYS2VIRT(st); page < _PHYS2VIRT(end); page += LPAGE_SIZE) {
         page_table[VADDR_TO_PDE_INDEX(page)] = (_VIRT2PHYS(page) & LPAGE_MASK) | _PG_ARCH_PRESENT | _PG_ARCH_PSE | _PG_ARCH_RW | _PG_ARCH_GLOBAL;
         page_table[VADDR_TO_PDE_INDEX(_VIRT2PHYS(page))] = (_VIRT2PHYS(page) & LPAGE_MASK) | _PG_ARCH_PRESENT | _PG_ARCH_PSE | _PG_ARCH_RW | _PG_ARCH_GLOBAL;
-#ifdef PRTOS_VERBOSE
-        eprintf("\tpage_table[%d]=0x%x\n", VADDR_TO_PDE_INDEX(page), page_table[VADDR_TO_PDE_INDEX(page)]);
-        eprintf("\tpage_table[%d]=0x%x\n", VADDR_TO_PDE_INDEX(_VIRT2PHYS(page)), page_table[VADDR_TO_PDE_INDEX(_VIRT2PHYS(page))]);
-#endif
     }
 
     flush_tlb(); /* The prtos mappings have changed. This is required to update the TLB entries */
@@ -53,9 +46,6 @@ void __VBOOT setup_vm_map(prtos_address_t *start_frame_area, prtos_s32_t *num_of
         page_table[e] = (_VIRT2PHYS(rsv_pages) & PAGE_MASK) | _PG_ARCH_PRESENT | _PG_ARCH_RW;
         rsv_pages = (prtos_address_t *)((prtos_address_t)rsv_pages + PTDL2SIZE);
         num_of_pages--;
-#ifdef PRTOS_VERBOSE
-        eprintf("\tpage_table[%d]=0x%x\n", e, page_table[e]);
-#endif
     }
     flush_tlb_global();
 }
@@ -64,14 +54,8 @@ void setup_ptd_level_1_table(prtos_word_t *ptd_level_1, kthread_t *k) {
     prtos_s32_t l1e, e;
 
     l1e = VADDR_TO_PDE_INDEX(CONFIG_PRTOS_OFFSET);
-#ifdef PRTOS_VERBOSE
-    kprintf("setup_ptd_level_1_table:\n");
-#endif
     for (e = l1e; e < PTDL1ENTRIES; e++) {
         ptd_level_1[e] = _page_tables[e];
-#ifdef PRTOS_VERBOSE
-        kprintf("\tPRTOS Kernel ptd_level_1[%d]=0xx%x\n", e, ptd_level_1[e]);
-#endif
     }
 }
 
@@ -120,10 +104,6 @@ prtos_s32_t vm_map_user_page(partition_t *k, prtos_word_t *ptd_level_1, prtos_ad
             p_ptd_level_2[e] = 0;
         }
         ptd_level_1[l1e] = p_table | _PG_ARCH_PRESENT | _PG_ARCH_RW;
-#ifdef PRTOS_VERBOSE
-        kprintf("\tptd_level_1:(v_addr:0x%x) new alloc page table(v_addr:0x%x=phy_addr:0x%x), ptd_level_1[%d]=0x%x\n", ptd_level_1, p_ptd_level_2, p_table, l1e,
-                ptd_level_1[l1e]);
-#endif
     } else {
         p_table = ptd_level_1[l1e] & PAGE_MASK;
         page_table_level2 = pmm_find_page(p_table, k, 0);
@@ -131,15 +111,8 @@ prtos_s32_t vm_map_user_page(partition_t *k, prtos_word_t *ptd_level_1, prtos_ad
         ASSERT(page_table_level2->type == PPAG_PTDL2);
         ASSERT(page_table_level2->counter > 0);
         p_ptd_level_2 = vcache_map_page(p_table, page_table_level2);
-#ifdef PRTOS_VERBOSE
-        kprintf("\tptd_level_1:(v_addr:0x%x) using existing page table(v_addr:0x%x=phy_addr:0x%x), ptd_level_1[%d]=0x%x\n", ptd_level_1, p_ptd_level_2, p_table,
-                l1e, ptd_level_1[l1e]);
-#endif
     }
     p_ptd_level_2[l2e] = (p_addr & PAGE_MASK) | vm_attr_to_arch_attr(flags);
-#ifdef PRTOS_VERBOSE
-    kprintf("\tMap v_addr:0x%x -> phy_addr:0x%x  p_ptd_level_2[%d]=0x%x\n\n", v_addr, p_addr, l2e, p_ptd_level_2[l2e]);
-#endif
     vcache_unlock_page(page_table_level2);
 
     return 0;

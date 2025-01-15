@@ -167,9 +167,6 @@ __hypercall prtos_s32_t halt_vcpu_sys(prtos_id_t vcpu_id) {
     if (vcpu_id >= get_partition(info->sched.current_kthread)->cfg->num_of_vcpus) return PRTOS_INVALID_PARAM;
 
     k = get_partition(info->sched.current_kthread)->kthread[vcpu_id];
-#ifdef PRTOS_VERBOSE
-    kprintf("Partition[%d]:vCPU[%d] halted\n", get_partition(info->sched.current_kthread)->cfg->id, vcpu_id);
-#endif
     if (are_kthread_flags_set(k, KTHREAD_HALTED_F)) return PRTOS_NO_ACTION;
 
     HALT_VCPU(KID2PARTID(k->ctrl.g->id), KID2VCPUID(k->ctrl.g->id));
