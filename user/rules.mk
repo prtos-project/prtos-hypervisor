@@ -5,10 +5,10 @@ if-success = $(shell { $(1); } >/dev/null 2>&1 && echo "$(2)" || echo "$(3)")
 check_gcc = $(shell if $(TARGET_CC) $(1) -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo "$(1)"; else echo "$(2)"; fi)
 check_hgcc = $(shell if $(HOST_CC) $(1) -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo "$(1)"; else echo "$(2)"; fi)
 
-HOST_CFLAGS = -Wall -O0 -g -D$(ARCH) -I$(LIB_PRTOS_PATH)/include -DHOST -D"__PRTOS_INCFLD(_fld)=<prtos_inc/_fld>" -fno-strict-aliasing
+HOST_CFLAGS = -Wall -D$(ARCH) -I$(LIB_PRTOS_PATH)/include -DHOST -D"__PRTOS_INCFLD(_fld)=<prtos_inc/_fld>" -fno-strict-aliasing
 HOST_LDFLAGS =
 
-TARGET_CFLAGS = -Wall -O2 -nostdlib -nostdinc -D$(ARCH) -fno-strict-aliasing -fomit-frame-pointer -D"__PRTOS_INCFLD(_fld)=<prtos_inc/_fld>"
+TARGET_CFLAGS = -Wall -nostdlib -nostdinc -D$(ARCH) -fno-strict-aliasing -fomit-frame-pointer -D"__PRTOS_INCFLD(_fld)=<prtos_inc/_fld>"
 TARGET_CFLAGS += -I$(LIB_PRTOS_PATH)/include --include prtos_inc/config.h --include prtos_inc/arch/arch_types.h
 
 TARGET_CFLAGS += $(call check_gcc,-Wno-unused-but-set-variable,)
@@ -29,7 +29,7 @@ ifeq ($(ARCH), x86)
     HOST_ASFLAGS += $(HOST_CFLAGS_ARCH)
 endif
 
-TARGET_ASFLAGS = -Wall -O0 -D__ASSEMBLY__ -fno-builtin -D$(ARCH) -D"__PRTOS_INCFLD(_fld)=<prtos_inc/_fld>"
+TARGET_ASFLAGS = -Wall -D__ASSEMBLY__ -fno-builtin -D$(ARCH) -D"__PRTOS_INCFLD(_fld)=<prtos_inc/_fld>"
 TARGET_ASFLAGS += -I$(LIB_PRTOS_PATH)/include -nostdlib -nostdinc --include prtos_inc/config.h
 TARGET_ASFLAGS += $(TARGET_ASFLAGS_ARCH)
 LIBGCC=`$(TARGET_CC) -print-libgcc-file-name $(TARGET_CFLAGS_ARCH)`
@@ -50,9 +50,12 @@ TARGET_LDFLAGS += $(call if-success,$(TARGET_LD) -v --no-warn-rwx-segments,--no-
 	$(TARGET_CC) $(TARGET_ASFLAGS) -o $@ -c $<
 
 ifdef CONFIG_DEBUG
-TARGET_CFLAGS+=-g -D_DEBUG_
-HOST_CFLAGS+=-g -D_DEBUG_
+TARGET_CFLAGS+=-g -O0 -D_DEBUG_
+TARGET_ASFLAGS+=-g -O0 -D_DEBUG_
+HOST_CFLAGS+=-g -O0 -D_DEBUG_
 else
+TARGET_CFLAGS+= -O2
+HOST_CFLAGS+=-O2
 TARGET_CFLAGS+=-fomit-frame-pointer
 endif
 

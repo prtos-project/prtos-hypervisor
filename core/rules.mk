@@ -20,7 +20,10 @@ TARGET_CFLAGS += $(call check_gcc,-Wno-array-bounds,)
 TARGET_CFLAGS += $(call check_gcc,--std=gnu89,)
 
 ifndef CONFIG_NO_GCC_OPT
- TARGET_CFLAGS += -O2
+ # Using -O1 instead of -O2, because -O2 will result in parsing error "unsupported size for integer register" when using GCC compiler.
+ TARGET_CFLAGS += -O1
+else
+ TARGET_CFLAGS += -O0
 endif
 
 TARGET_ASFLAGS = -Wall -D__ASSEMBLY__ -D_PRTOS_KERNEL_ -fno-builtin -D$(ARCH) -nostdlib -nostdinc -D"__PRTOS_INCFLD(_fld)=<_fld>"

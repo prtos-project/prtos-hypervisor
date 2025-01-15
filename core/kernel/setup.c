@@ -248,7 +248,7 @@ void __VBOOT setup_kernel(prtos_s32_t cpu_id, kthread_t *idle) {
     barrier_wait_mask(&smp_barrier_mask);
 #endif
     setup_partitions();
-#if PRTOS_VERBOSE
+#if CONFIG_DEBUG
     rsv_mem_debug();
 #endif
     free_boot_mem();

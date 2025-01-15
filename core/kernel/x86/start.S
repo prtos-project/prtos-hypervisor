@@ -6,6 +6,7 @@
  * www.prtos.org
  */
 
+#include <config.h>
 #include <linkage.h>
 #include <prtosef.h>
 #include <hypercalls.h>
@@ -56,6 +57,7 @@ ENTRY(_start)
         mov %eax, %gs
        
         mov $_VIRT2PHYS(__idle_kthread)+CONFIG_KSTACK_SIZE, %esp
+#ifndef CONFIG_NO_GCC_OPT
         call boot_detect_cpu_feature
 
         mov %eax, _VIRT2PHYS(cpu_features)
@@ -64,7 +66,7 @@ ENTRY(_start)
         xorl $_DETECTED_I586|_PSE_SUPPORT|_PGE_SUPPORT, %eax
 
         jnz __boot_halt_system
-
+#endif
         movl $_VIRT2PHYS(_page_tables), %eax
         movl $_VIRT2PHYS(_estack), %esp
         call boot_init_page_table

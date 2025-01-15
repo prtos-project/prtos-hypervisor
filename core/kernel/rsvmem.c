@@ -32,8 +32,8 @@ void rsv_mem_debug(void) {
     prtos_s32_t e;
     for (e = 0; prtos_conf_rsv_mem_table[e].obj; e++)
         if (!(prtos_conf_rsv_mem_table[e].used_align & RSV_MEM_USED)) {
-            system_panic("Reserved memory not used %d:%d:0x%x\n", prtos_conf_rsv_mem_table[e].used_align, prtos_conf_rsv_mem_table[e].size,
-                         prtos_conf_rsv_mem_table[e].obj);
+            PWARN("Reserved memory not used %d:%d:0x%x\n", prtos_conf_rsv_mem_table[e].used_align, prtos_conf_rsv_mem_table[e].size,
+                  prtos_conf_rsv_mem_table[e].obj);
         }
 }
 #endif
