@@ -108,9 +108,6 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         prtos_s32_t e;
         prtos_u32_t cpu_id;
         p->kthread[i] = k = alloc_kthread(PART_VCPU_ID2KID(cfg->id, i));
-#ifdef PRTOS_VERBOSE
-        kprintf("partition [%d] kthread[%d] created\n", cfg->id, i);
-#endif
         if (cfg->flags & PRTOS_PART_SYSTEM) {
             clear_kthread_flags(k, KTHREAD_NO_PARTITIONS_FIELD);
             set_kthread_flags(k, (prtos_conf_table.num_of_partitions << 16) & KTHREAD_NO_PARTITIONS_FIELD);

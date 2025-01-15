@@ -136,8 +136,8 @@ static kthread_t *get_ready_kthread(struct sched_data *cyclic) {
                (prtos_conf_sched_cyclic_slot_table[slot_table_entry].partition_id < prtos_conf_table.num_of_partitions));
         ASSERT(partition_table[prtos_conf_sched_cyclic_slot_table[slot_table_entry].partition_id]
                    .kthread[prtos_conf_sched_cyclic_slot_table[slot_table_entry].vcpu_id]);
-        new_kthread =
-            partition_table[prtos_conf_sched_cyclic_slot_table[slot_table_entry].partition_id].kthread[prtos_conf_sched_cyclic_slot_table[slot_table_entry].vcpu_id];
+        new_kthread = partition_table[prtos_conf_sched_cyclic_slot_table[slot_table_entry].partition_id]
+                          .kthread[prtos_conf_sched_cyclic_slot_table[slot_table_entry].vcpu_id];
 
         if (is_kthread_ready(new_kthread)) {
             next_time = prtos_conf_sched_cyclic_slot_table[slot_table_entry].end_exec;
@@ -154,16 +154,6 @@ out:
     cyclic->next_act = next_time + cyclic->start_exec;
     arm_ktimer(&cyclic->ktimer, cyclic->next_act, 0);
     slot_table_entry = plan->slots_offset + cyclic->slot;
-#if PRTOS_VERBOSE
-    if (new_kthread) {
-        kprintf("[%d:%d:%d] current_time %lld -> start_exec %lld end_exec %lld\n", GET_CPU_ID(), cyclic->slot,
-                prtos_conf_sched_cyclic_slot_table[slot_table_entry].partition_id, current_time,
-                prtos_conf_sched_cyclic_slot_table[slot_table_entry].start_exec + cyclic->start_exec,
-                prtos_conf_sched_cyclic_slot_table[slot_table_entry].end_exec + cyclic->start_exec);
-    } else {
-        kprintf("[%d] IDLE: %lld\n", GET_CPU_ID(), current_time);
-    }
-#endif
 
     if (new_kthread && new_kthread->ctrl.g) {
         new_kthread->ctrl.g->op_mode = PRTOS_OPMODE_NORMAL;
@@ -234,17 +224,6 @@ void schedule(void) {
 
         audit_args = (new_kthread != info->sched.idle_kthread) ? new_kthread->ctrl.g->id : -1;
         raise_audit_event(TRACE_SCHED_MODULE, AUDIT_SCHED_CONTEXT_SWITCH, 1, &audit_args);
-#endif
-#if PRTOS_VERBOSE
-        if (new_kthread->ctrl.g)
-            kprintf("new_kthread: [%d:%d] 0x%x ", KID2PARTID(new_kthread->ctrl.g->id), KID2VCPUID(new_kthread->ctrl.g->id), new_kthread);
-        else
-            kprintf("new_kthread: idle ");
-
-        if (info->sched.current_kthread->ctrl.g)
-            kprintf("curK: [%d:%d] 0x%x\n", KID2PARTID(info->sched.current_kthread->ctrl.g->id), KID2VCPUID(info->sched.current_kthread->ctrl.g->id));
-        else
-            kprintf("curK: idle\n");
 #endif
 
         switch_kthread_arch_pre(new_kthread, info->sched.current_kthread);

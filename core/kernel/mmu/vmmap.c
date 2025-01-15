@@ -70,11 +70,6 @@ static inline int setup_pbl(partition_t *p, prtos_word_t *p_ptd_level_1_table, p
     b = a + (18 * PAGE_SIZE) - 1;
     v_addr = at - 18 * PAGE_SIZE;
 
-#ifdef PRTOS_VERBOSE
-    kprintf("setup_pbl:p_ptd_level_1_table=0x%x,v_addr_loader=0x%x,page_table=0x%x, size=0x%x\n", p_ptd_level_1_table, at, page_table, size);
-    kprintf("setup_pbl:stack=0x%x,v_addr=0x%x,a=0x%x, b=0x%x\n", stack, v_addr, a, b);
-#endif
-
     for (addr = a; (addr >= a) && (addr < b); addr += PAGE_SIZE, v_addr += PAGE_SIZE) {
         if (vm_map_user_page(p, p_ptd_level_1_table, addr, v_addr, _PG_ATTR_PRESENT | _PG_ATTR_USER | _PG_ATTR_CACHED | _PG_ATTR_RW, alloc_mem, &page_table,
                              &size) < 0) {
@@ -87,9 +82,6 @@ static inline int setup_pbl(partition_t *p, prtos_word_t *p_ptd_level_1_table, p
     a = (prtos_address_t)_spbl;
     b = a + (256 * 1024) - 1;
     v_addr = at;
-#ifdef PRTOS_VERBOSE
-    kprintf("Partition Loader code:p_ptd_level_1_table=0x%x,v_addr=0x%x,a=0x%x, b=0x%x\n", p_ptd_level_1_table, at, a, b);
-#endif
     for (addr = a; (addr >= a) && (addr < b); addr += PAGE_SIZE, v_addr += PAGE_SIZE) {
         if (vm_map_user_page(p, p_ptd_level_1_table, addr, v_addr, _PG_ATTR_PRESENT | _PG_ATTR_USER | _PG_ATTR_CACHED, alloc_mem, &page_table, &size) < 0) {
             kprintf("[setup_pbl(P%d)] Error mapping the Partition Loader Code\n", p->cfg->id);
@@ -102,9 +94,7 @@ static inline int setup_pbl(partition_t *p, prtos_word_t *p_ptd_level_1_table, p
     b = a + (prtos_conf_boot_partition_table[p->cfg->id].img_size) - 1;
     v_addr = a;
     p->image_start = v_addr;
-#ifdef PRTOS_VERBOSE
-    kprintf("Mapping partition image from container: p_ptd_level_1_table=0x%x,v_addr=0x%x,a=0x%x, b=0x%x\n", p_ptd_level_1_table, v_addr, a, b);
-#endif
+
     for (addr = a; (addr >= a) && (addr < b); addr += PAGE_SIZE, v_addr += PAGE_SIZE) {
         if (vm_map_user_page(p, p_ptd_level_1_table, addr, v_addr, _PG_ATTR_PRESENT | _PG_ATTR_USER | _PG_ATTR_CACHED, alloc_mem, &page_table, &size) < 0) {
             kprintf("[setup_pbl(P%d)] Error mapping the Partition image from container\n", p->cfg->id);
@@ -115,14 +105,9 @@ static inline int setup_pbl(partition_t *p, prtos_word_t *p_ptd_level_1_table, p
     for (i = 0; i < prtos_conf_boot_partition_table[p->cfg->id].num_of_custom_files; i++) {
         a = prtos_conf_boot_partition_table[p->cfg->id].custom_file_table[i].start_addr;
         b = a + prtos_conf_boot_partition_table[p->cfg->id].custom_file_table[i].size - 1;
-#ifdef PRTOS_VERBOSE
-        kprintf("custom_file(%d) image from container: p_ptd_level_1_table=0x%x,v_addr=0x%x,a=0x%x, b=0x%x\n", i, p_ptd_level_1_table, v_addr, a, b);
-#endif
+
         for (addr = a; (addr >= a) && (addr < b); addr += PAGE_SIZE, v_addr += PAGE_SIZE) {
             if (vm_map_user_page(p, p_ptd_level_1_table, addr, v_addr, _PG_ATTR_PRESENT | _PG_ATTR_USER | _PG_ATTR_CACHED, alloc_mem, &page_table, &size) < 0) {
-#ifdef PRTOS_VERBOSE
-                kprintf("[setup_pbl(P%d)] Error mapping the custom_file(%d) image from container\n", p->cfg->id, i);
-#endif
                 return -1;
             }
         }
@@ -136,9 +121,7 @@ prtos_address_t setup_page_table(partition_t *p, prtos_address_t page_table, prt
     prtos_word_t *p_ptd_level_1_table, attr;
     struct phys_page *ptd_level_1_table, *page;
     prtos_s32_t e;
-#ifdef PRTOS_VERBOSE
-    kprintf("setup_page_table: prtos_image_hdr->page_table:0x%x, prtos_image_hdr->page_table_size:0x%x\n", page_table, size);
-#endif
+
     if ((pt = alloc_mem(p->cfg, PTDL1SIZE, PTDL1SIZE, &page_table, &size)) == ~0) {
         PWARN("(%d) Unable to create page table (out of memory)\n", p->cfg->id);
         return ~0;
@@ -176,14 +159,9 @@ prtos_address_t setup_page_table(partition_t *p, prtos_address_t page_table, prt
 
     attr = _PG_ATTR_PRESENT | _PG_ATTR_USER;
     ASSERT(p->pct_array_size);
-#ifdef PRTOS_VERBOSE
-    kprintf("PCT v_addr:0x%x=Phy Addr:0x%x\n", p->pct_array, _VIRT2PHYS(p->pct_array));
-#endif
+
     for (v_addr = PRTOS_PCTRLTAB_ADDR, addr = (prtos_address_t)_VIRT2PHYS(p->pct_array); addr < ((prtos_address_t)_VIRT2PHYS(p->pct_array) + p->pct_array_size);
          addr += PAGE_SIZE, v_addr += PAGE_SIZE) {
-#ifdef PRTOS_VERBOSE
-        kprintf("addr:0x%x, v_addr:0x%x, attr:0x%x\n", addr, v_addr, attr);
-#endif
         if (vm_map_user_page(p, p_ptd_level_1_table, addr, v_addr, attr, alloc_mem, &page_table, &size) < 0) return ~0;
     }
 
@@ -215,17 +193,6 @@ prtos_address_t setup_page_table(partition_t *p, prtos_address_t page_table, prt
     }
 
     vcache_unlock_page(ptd_level_1_table);
-#ifdef PRTOS_VERBOSE  // Debug purpose for show which PRTOS kernel space has been used.
-    kprintf("Entries for page directory table start...\n");
-    kprintf("p_ptd_level_1_table Addr: 0x%x\n", p_ptd_level_1_table);
-    int i;
-    for (i = 0; i < 1024; i++) {
-        if (p_ptd_level_1_table[i]) {
-            kprintf("\tL1 Entry[%d]:0x%x\n", i, p_ptd_level_1_table[i]);
-        }
-    }
-    kprintf("Entries for page directory table end...\n");
-#endif
 
     return pt;
 }
