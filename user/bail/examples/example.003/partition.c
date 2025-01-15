@@ -13,6 +13,7 @@
 
 void partition_main(void) {
     prtos_trace_event_t event;
+    memset(&event, 0, sizeof(prtos_trace_event_t));
     prtos_s32_t value;
 
     event.op_code_hi |= (PRTOS_TRACE_WARNING << TRACE_OPCODE_CRIT_BIT) & TRACE_OPCODE_CRIT_MASK;

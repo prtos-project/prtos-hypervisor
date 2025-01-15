@@ -13,8 +13,8 @@ config VERBOSE_TRAP
 endif
 
 config NO_GCC_OPT
-       bool
-       default n
+       bool "Disable GCC optimizations"
+       default y
 
 config ID_STRING_LENGTH
        int "Max. identifier length (B)"
