@@ -20,6 +20,7 @@ TARGET_CFLAGS += $(call check_gcc,-Wno-array-bounds,)
 TARGET_CFLAGS += $(call check_gcc,--std=gnu89,)
 
 ifndef CONFIG_NO_GCC_OPT
+ # Using -O1 instead of -O2, because -O2 will result in parsing error "unsupported size for integer register" when using GCC compiler.
  TARGET_CFLAGS += -O1
 else
  TARGET_CFLAGS += -O0
