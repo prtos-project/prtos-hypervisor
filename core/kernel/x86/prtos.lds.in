@@ -35,10 +35,6 @@ SECTIONS
     }
     _eboot = .;
     
-    .prtos_hdr ALIGN(0x8) : {
-        *(.prtos_hdr)
-    }
-
     . = . + CONFIG_PRTOS_OFFSET - CONFIG_PRTOS_LOAD_ADDR;
     .vboot ALIGN(0x1000) : AT (ADDR (.vboot) + PHYSOFFSET) {
         _svboot = .;
