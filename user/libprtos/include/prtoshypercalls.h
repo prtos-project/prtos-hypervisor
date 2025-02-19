@@ -29,7 +29,7 @@ extern __stdcall prtos_id_t prtos_get_vcpuid(void);
 
 // Time management hypercalls
 extern __stdcall prtos_s32_t prtos_get_time(prtos_u32_t clock_id, prtos_time_t *time);
-extern __stdcall prtos_s32_t prtos_set_timer(prtos_u32_t clock_id, prtos_time_t abs_stime, prtos_time_t interval);
+extern __stdcall prtos_s32_t prtos_set_timer(prtos_u32_t clock_id, prtos_time_t abs_time, prtos_time_t interval);
 
 // Partition status hypercalls
 extern __stdcall prtos_s32_t prtos_suspend_partition(prtos_u32_t partition_id);

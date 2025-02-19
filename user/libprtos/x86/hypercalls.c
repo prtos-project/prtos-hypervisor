@@ -81,9 +81,9 @@ __stdcall prtos_s32_t prtos_multicall(void *start_addr, void *end_addr) {
     return _r;
 }
 
-__stdcall prtos_s32_t prtos_set_timer(prtos_u32_t clock_id, prtos_time_t abs_stime, prtos_time_t interval) {
+__stdcall prtos_s32_t prtos_set_timer(prtos_u32_t clock_id, prtos_time_t abs_time, prtos_time_t interval) {
     prtos_s32_t _r;
-    _PRTOS_HCALL5(clock_id, abs_stime, abs_stime >> 32, interval, interval >> 32, set_timer_nr, _r);
+    _PRTOS_HCALL5(clock_id, abs_time, abs_time >> 32, interval, interval >> 32, set_timer_nr, _r);
     return _r;
 }
 
