@@ -15,6 +15,7 @@
 #include <prtos_inc/digest.h>
 #include <rsw_stdc.h>
 
+
 void halt_system(void) {
     extern void _halt_system(void);
     xprintf("[RSW] System Halted.\n");
@@ -48,6 +49,7 @@ void rsw_main(void) {
 
     init_output();
     xprintf("[RSW] Start Resident Software\n");
+
     // Parse container header
     if ((ret = parse_pef_container(prtos_pef_container_ptr, &container)) != CONTAINER_OK) {
         xprintf("[RSW] Error %d when parsing container file\n", ret);
@@ -76,8 +78,14 @@ void rsw_main(void) {
     }
 
     // Load PRTOS Core file to the specified memory address
+#if defined(CONFIG_AARCH64)
+    prtos_address_t OFFSET = -CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR;
+    prtos_hdr = load_pef_file(&pef_file, 0, 0, 0) + OFFSET;
+    hpv_entry_point[0] = pef_file.hdr->entry_point + OFFSET;
+#else
     prtos_hdr = load_pef_file(&pef_file, 0, 0, 0);
     hpv_entry_point[0] = pef_file.hdr->entry_point;
+#endif
     if ((prtos_hdr->start_signature != PRTOS_EXEC_HYP_MAGIC) || (prtos_hdr->end_signature != PRTOS_EXEC_HYP_MAGIC)) {
         xprintf("[RSW] prtos signature not found\n");
         halt_system();
@@ -85,8 +93,7 @@ void rsw_main(void) {
 
     // Load additional custom files to the specifiled memory address
     min = (container.partition_table[0].num_of_custom_files > prtos_hdr->num_of_custom_files) ? prtos_hdr->num_of_custom_files
-                                                                                         : container.partition_table[0].num_of_custom_files;
-
+                                                                                              : container.partition_table[0].num_of_custom_files;
     for (e = 1; e < min; e++) {
         if ((ret = parse_pef_file((prtos_u8_t *)(container.file_table[container.partition_table[0].custom_file_table[e]].offset + prtos_pef_container_ptr),
                                   &pef_custom_file)) != PEF_OK) {
@@ -102,7 +109,8 @@ void rsw_main(void) {
     // Loading partitions
     for (e = 1; e < container.hdr->num_of_partitions; e++) {
         struct prtos_image_hdr *part_hdr;
-        if ((ret = parse_pef_file((prtos_u8_t *)(container.file_table[container.partition_table[e].file].offset + prtos_pef_container_ptr), &pef_file)) != PEF_OK) {
+        if ((ret = parse_pef_file((prtos_u8_t *)(container.file_table[container.partition_table[e].file].offset + prtos_pef_container_ptr), &pef_file)) !=
+            PEF_OK) {
             xprintf("[RSW] Error %d when parsing PEF file\n", ret);
             halt_system();
         }
@@ -120,7 +128,7 @@ void rsw_main(void) {
         prtos_conf_boot_partition_table[container.partition_table[e].id].img_size = pef_file.hdr->file_size;
         // Loading additional custom files
         min = (container.partition_table[e].num_of_custom_files > part_hdr->num_of_custom_files) ? part_hdr->num_of_custom_files
-                                                                                            : container.partition_table[e].num_of_custom_files;
+                                                                                                 : container.partition_table[e].num_of_custom_files;
 
         if (min > CONFIG_MAX_NO_CUSTOMFILES) {
             xprintf("[RSW] Error when parsing PEF custom files. num_of_custom_files > CONFIG_MAX_NO_CUSTOMFILES\n");
@@ -142,5 +150,6 @@ void rsw_main(void) {
     }
 
     xprintf("[RSW] Starting prtos at 0x%x\n", hpv_entry_point[0]);
+
     ((void (*)(void))ADDR2PTR(hpv_entry_point[0]))();
 }
