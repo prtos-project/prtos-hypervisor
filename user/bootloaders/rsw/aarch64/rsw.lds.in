@@ -1,7 +1,7 @@
 /*
  * $FILE$
  * 
- * ld script to build x86
+ * ld script to build aarch64
  * 
  * www.prtos.org
  */

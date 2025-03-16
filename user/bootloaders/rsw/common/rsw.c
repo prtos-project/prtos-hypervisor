@@ -15,7 +15,6 @@
 #include <prtos_inc/digest.h>
 #include <rsw_stdc.h>
 
-
 void halt_system(void) {
     extern void _halt_system(void);
     xprintf("[RSW] System Halted.\n");
@@ -150,6 +149,5 @@ void rsw_main(void) {
     }
 
     xprintf("[RSW] Starting prtos at 0x%x\n", hpv_entry_point[0]);
-
     ((void (*)(void))ADDR2PTR(hpv_entry_point[0]))();
 }

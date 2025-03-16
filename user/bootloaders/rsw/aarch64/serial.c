@@ -1,4 +1,3 @@
-//#include "layout.h"
 
 #ifdef CONFIG_OUTPUT_ENABLED
 

@@ -31,7 +31,6 @@ $(KCONFIG_AUTOHEADER): silentoldconfig
 $(ARCH)/rsw.lds: $(KCONFIG_AUTOHEADER) $(ARCH)/rsw.lds.in
 	@$(TARGET_CC) $(TARGET_ASFLAGS) -x assembler-with-cpp -E -P $(ARCH)/rsw.lds.in -o $(ARCH)/rsw.lds
 
-
 KCONFIG=$(RSW_PATH)/$(ARCH)/Kconfig
 
 config:
@@ -51,14 +50,13 @@ $(defconfig-targets):
 	@$(PRTOS_PATH)/scripts/kconfig/conf -D $(RSW_PATH)/$(ARCH)/$@ $(KCONFIG)
 
 ifdef CONFIG_STAND_ALONE
-#ifeq (1, 1) // Just WA for debug RSW
 rsw: $(ARCH)/rsw.lds $(RESIDENT_SW)
 	$(TARGET_LD) $(TARGET_LDFLAGS_ARCH) -o rsw $(RESIDENT_SW) -T$(ARCH)/rsw.lds $(LIBGCC) -L$(LIB_PRTOS_PATH) -lprtos
 else
 rsw: rsw_objs.o
 
 rsw_objs.o: $(ARCH)/rsw.lds $(RESIDENT_SW)
-	$(TARGET_LD) $(TARGET_LDFLAGS) -r -o rsw_objs.o $(RESIDENT_SW) -L$(LIB_PRTOS_PATH) -lprtos
+	@$(TARGET_LD) $(TARGET_LDFLAGS) -r -o rsw_objs.o $(RESIDENT_SW) -L$(LIB_PRTOS_PATH) -lprtos
 endif
 
 distclean: clean
