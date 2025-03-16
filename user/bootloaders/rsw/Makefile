@@ -14,11 +14,11 @@ RSW_PATH=$(PRTOS_PATH)/user/bootloaders/rsw
 RSW-common = common/rsw.c common/rsw_stdc.c
 
 RSW-x86-SRC=x86/boot.S x86/serial.c
+RSW-aarch64-SRC=aarch64/boot.S aarch64/serial.c aarch64/pl011.c
 
 RESIDENT_SW_SRC= $(RSW-common) $(RSW-$(ARCH)-SRC)
 
 RESIDENT_SW := $(patsubst %.S,%.o, $(patsubst %.c,%.o,$(RESIDENT_SW_SRC)))
-#RESIDENT_SW := $(patsubst %.S,%.32.o, $(patsubst %.c,%.o,$(RESIDENT_SW_SRC)))
 
 SRCS=$(RESIDENT_SW_SRC)
 
