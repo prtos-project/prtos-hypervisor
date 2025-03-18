@@ -127,7 +127,9 @@ static void check_partition(int part_id, struct file_to_process *part, struct fi
             b = a + RWORD(prtos_conf_mem_area[e].size);
             if ((c >= a) && (d <= b)) break;
         }
-        if (e >= num_of_mem_areas) error_printf("Partition \"%s\" (%d): segment %d [0x%x- 0x%x] does not fit (PRTOS Configure File)", part->name, part_id, s, c, d);
+
+        if (e >= num_of_mem_areas)
+            error_printf("Partition \"%s\" (%d): segment %d [0x%x- 0x%x] does not fit (PRTOS Configure File)", part->name, part_id, s, c, d);
     }
 
     for (e = 0; e < num_of_custom; e++) {
@@ -141,7 +143,6 @@ static void check_partition(int part_id, struct file_to_process *part, struct fi
             d = c + RWORD(prtos_conf_table->size);
         } else
             d = c + RWORD(custom_table[e].pef.hdr->image_length);
-
         for (i = 0; i < num_of_mem_areas; i++) {
             if (hyp) {
                 a = RWORD(prtos_conf_mem_area[i].start_addr);
@@ -152,8 +153,8 @@ static void check_partition(int part_id, struct file_to_process *part, struct fi
             }
             if ((c >= a) && (d <= b)) break;
         }
-
-        if (i >= num_of_mem_areas) error_printf("Customization file \"%s\" (%d): [0x%x- 0x%x] does not fit (PRTOS Configure File)", custom_table[e].name, e, c, d);
+        if (i >= num_of_mem_areas)
+            error_printf("Customization file \"%s\" (%d): [0x%x- 0x%x] does not fit (PRTOS Configure File)", custom_table[e].name, e, c, d);
     }
 }
 
@@ -209,7 +210,7 @@ void do_check(int argc, char **argv) {
 
     prtos_conf.name = strdup(argv[1]);
     if ((ret = parse_pef_file(load_file(prtos_conf.name), &prtos_conf.pef)) != PEF_OK) error_printf("Error loading PEF file \"%s\": %d", prtos_conf.name, ret);
-    prtos_conf_table = parse_prtos_conf(&prtos_conf);
+    prtos_conf_table = parse_prtos_conf(&prtos_conf);  // Get the prtos_conf_table from the prtos prtos_cf.pef.prtos_conf
 
     for (e = 2; e < argc; e++) {
         if (!strcmp(argv[e], "-h")) {
@@ -220,6 +221,7 @@ void do_check(int argc, char **argv) {
             fprintf(stderr, "Ignoring unexpected argument (%s)\n", argv[e]);
             continue;
         }
+
         if ((ret = parse_pef_file(load_file(part.name), &part.pef)) != PEF_OK) error_printf("Error loading PEF file \"%s\": %d", part.name, ret);
         if (num_of_custom) {
             for (i = 0; i < num_of_custom; i++) {
