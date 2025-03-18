@@ -71,6 +71,9 @@ $TARGET_OBJCOPY --add-section=.container=$CONTAINER --set-section-flags=.contain
 RSW_PATH=$PRTOS_PATH/user/bootloaders/rsw
 LIBGCC=`$TARGET_CC -print-libgcc-file-name $TARGET_CFLAGS_ARCH `
 TARGET_LDFLAGS="-T$RSW_PATH/$ARCH/rsw.lds $TARGET_LDFLAGS_ARCH $LIBGCC"
+
+# NOTE: the optin '-S' is added to strip the symbol table for the bootloader(resident software).
+# '-S' could be removed if the bootloader is to be debugged.
 $TARGET_LD -n -S -o $OFILE $RSW_PATH/rsw_objs.o $TARGET_LDFLAGS tmp.o
 
 chmod -x $OFILE
