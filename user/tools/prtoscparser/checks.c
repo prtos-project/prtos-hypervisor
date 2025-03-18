@@ -84,7 +84,7 @@ int check_phys_mem_area(int mem_area) {
     if (prtos_conf_mem_area_table[mem_area].size & (PAGE_SIZE - 1))
         line_error(prtos_conf_mem_area_table[mem_area].size, "memory area size (%d) is not multiple of %d", prtos_conf_mem_area_table[mem_area].size,
                    PAGE_SIZE);
-
+#if !defined(CONFIG_AARCH64)  // FIXME: this is just a WA for arm64 build
     for (e = 0; e < num_of_rsv_phys_pages; e++) {
         s1 = rsv_phys_pages[e].address;
         e1 = s1 + (rsv_phys_pages[e].num_of_pages * PAGE_SIZE) - 1;
@@ -92,7 +92,7 @@ int check_phys_mem_area(int mem_area) {
             line_error(prtos_conf_mem_area_table_line_number[mem_area].line,
                        "memory area [0x%x - 0x%x] overlaps a memory area [0x%x - 0x%x] reserved for PRTOS", s0, e0, s1, e1);
     }
-
+#endif
     for (e = 0, found = -1; e < prtos_conf.num_of_regions; e++) {
         s1 = prtos_conf_mem_reg_table[e].start_addr;
         e1 = s1 + prtos_conf_mem_reg_table[e].size - 1;

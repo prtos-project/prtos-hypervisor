@@ -349,6 +349,7 @@ static struct node_xml memory_layout_node = {BAD_CAST "MemoryLayout", 0, 0, 0, 0
 
 #if defined(CONFIG_DEV_MEMBLOCK) || defined(CONFIG_DEV_MEMBLOCK_MODULE)
 static void name_mem_block_dev_attr_handle(xmlNodePtr node, const xmlChar *val) {
+    printf("name_mem_block_dev_attr_handle: %s\n", val);
     register_device((char *)val, (prtos_dev_t){PRTOS_DEV_LOGSTORAGE_ID, prtos_conf.device_table.num_of_mem_blocks - 1}, node->line);
 }
 
@@ -410,6 +411,7 @@ static void id_uart_attr_handle(xmlNodePtr node, const xmlChar *val) {
 static struct attr_xml id_uart_attr = {BAD_CAST "id", id_uart_attr_handle};
 
 static void name_uart_attr_handle(xmlNodePtr node, const xmlChar *val) {
+    printf("name_uart_attr_handle: %s\n", val);
     register_device((char *)val, (prtos_dev_t){PRTOS_DEV_UART_ID, uart_id}, node->line);
 }
 
@@ -424,8 +426,9 @@ static struct attr_xml baud_rate_uart_attr = {BAD_CAST "baudRate", baud_rate_uar
 static struct node_xml uart_device_node = {BAD_CAST "Uart", 0, 0, 0, (struct attr_xml *[]){&id_uart_attr, &name_uart_attr, &baud_rate_uart_attr, 0}, 0};
 #endif
 
-#ifdef CONFIG_x86
+#if defined(CONFIG_x86)
 static void name_vga_attr_handle(xmlNodePtr node, const xmlChar *val) {
+    printf("name_vga_attr_handle: %s\n", val);
     register_device((char *)val, (prtos_dev_t){PRTOS_DEV_VGA_ID, 0}, node->line);
 }
 
@@ -447,7 +450,7 @@ static struct node_xml devices_node = {BAD_CAST "Devices",
 #if defined(CONFIG_DEV_MEMBLOCK) || defined(CONFIG_DEV_MEMBLOCK_MODULE)
                                            &memory_block_device_node,
 #endif
-#if defined(CONFIG_DEV_UART) || defined(CONFIG_DEV_UART_MODULE)
+#if defined(CONFIG_DEV_UART) || defined(CONFIG_DEV_UART_MODULE) || defined(CONFIG_AARCH64)  // FIXME: Here is WA for aarch64 build
                                            &uart_device_node,
 #endif
 #ifdef CONFIG_x86
@@ -883,6 +886,3 @@ static struct node_xml system_description_node = {
     (struct node_xml *[]){&hw_description_node, &prtos_hypervisor_node, &resident_sw_node, &partition_table_node, &channels_node, 0}};
 
 struct node_xml *root_handlers[] = {&system_description_node, 0};
-
-// static struct attr_xml _attr={BAD_CAST"", 0};
-// static struct node_xml _node={BAD_CAST"", 0, 0, (struct attr_xml *[]){0}, (struct node_xml *[]){0}};
