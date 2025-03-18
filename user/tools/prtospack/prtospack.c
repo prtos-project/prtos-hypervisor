@@ -442,8 +442,14 @@ static void do_list(int argc, char **argv) {
     fprintf(stderr, _SP "<FileTable>\n");
     for (e = 0; e < prtos_exec_container_hdr.num_of_files; e++) {
         fprintf(stderr, _SP _SP "<File entry=\"%d\" name=\"%s\" ", e, &str_tables[prtos_exec_file_table[e].name_offset]);
+// TODO: I haven't figured out a unified way to print values without parse warnings both on 32-bit and 64-bit platforms, so here just use a WA.
+#if defined(CONFIG_AARCH64)
         fprintf(stderr, "offset=\"0x%" PRINT_PREF "llx\" ", prtos_exec_file_table[e].offset);
         fprintf(stderr, "size=\"%" PRINT_PREF "lld\" ", prtos_exec_file_table[e].size);
+#else
+        fprintf(stderr, "offset=\"0x%" PRINT_PREF "x\" ", prtos_exec_file_table[e].offset);
+        fprintf(stderr, "size=\"%" PRINT_PREF "d\" ", prtos_exec_file_table[e].size);
+#endif
         fprintf(stderr, "/>\n");
     }
     fprintf(stderr, _SP "</FileTable>\n");

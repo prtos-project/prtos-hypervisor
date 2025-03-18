@@ -119,27 +119,9 @@ static void check_partition(int part_id, struct file_to_process *part, struct fi
         num_of_mem_areas = RWORD(prtos_conf_partition_table[part_id].num_of_physical_memory_areas);
     }
 
-#if 1
-    printf("num_of_mem_areas: %d in part %s\n", num_of_mem_areas, part->name);
     for (s = 0; s < RWORD(part->pef.hdr->num_of_segments); s++) {
         c = RWORD(part->pef.segment_table[s].phys_addr);
         d = c + RWORD(part->pef.segment_table[s].file_size);
-        printf("c: 0x%llx, d: %llx\n", c, d);
-    }
-
-    printf("------------prtos_conf_mem_area start----------------\n");
-    for (e = 0; e < num_of_mem_areas; e++) {
-        a = RWORD(prtos_conf_mem_area[e].start_addr);
-        b = a + RWORD(prtos_conf_mem_area[e].size);
-        printf("a: 0x%llx, b: 0x%llx\n", a, b);
-    }
-    printf("------------prtos_conf_mem_area end----------------\n");
-#endif
-
-    for (s = 0; s < RWORD(part->pef.hdr->num_of_segments); s++) {
-        c = RWORD(part->pef.segment_table[s].phys_addr);
-        d = c + RWORD(part->pef.segment_table[s].file_size);
-        printf("name %s: [0x%llx --- 0x%llx]\n", part->name, c, d);
         for (e = 0; e < num_of_mem_areas; e++) {
             a = RWORD(prtos_conf_mem_area[e].start_addr);
             b = a + RWORD(prtos_conf_mem_area[e].size);
@@ -150,18 +132,7 @@ static void check_partition(int part_id, struct file_to_process *part, struct fi
             error_printf("Partition \"%s\" (%d): segment %d [0x%x- 0x%x] does not fit (PRTOS Configure File)", part->name, part_id, s, c, d);
     }
 
-    printf("num_of_custom: %d\n", num_of_custom);
-    printf("--------------------------------\n");
     for (e = 0; e < num_of_custom; e++) {
-        printf("name:%s start_address:0x%llx size: %lld, limit: %lld\n", custom_table[e].name, part->pef.custom_file_table[e].start_addr,
-               part->pef.custom_file_table[e].size, custom_table[e].pef.hdr->image_length);
-    }
-    printf("--------------------------------\n\n");
-
-    for (e = 0; e < num_of_custom; e++) {
-        printf("\nname:%s start_address:0x%llx size: %lld, limit: %lld\n", custom_table[e].name, part->pef.custom_file_table[e].start_addr,
-               part->pef.custom_file_table[e].size, custom_table[e].pef.hdr->image_length);
-
         if (RWORD(part->pef.custom_file_table[e].size)) {
             if (RWORD(custom_table[e].pef.hdr->image_length) > RWORD(part->pef.custom_file_table[e].size))
                 error_printf("Customization file \"%s\": too big (%d bytes), partition \"%s\" only reserves %d bytes", custom_table[e].name,
@@ -170,26 +141,20 @@ static void check_partition(int part_id, struct file_to_process *part, struct fi
         c = RWORD(part->pef.custom_file_table[e].start_addr);
         if (hyp && (e == 0)) {  // XML
             d = c + RWORD(prtos_conf_table->size);
-            printf("prtos_conf_table->size: %lld\n", prtos_conf_table->size);
         } else
             d = c + RWORD(custom_table[e].pef.hdr->image_length);
-        printf("c:0x%llx --> d: 0x%llx\n", c, d);
         for (i = 0; i < num_of_mem_areas; i++) {
             if (hyp) {
                 a = RWORD(prtos_conf_mem_area[i].start_addr);
                 b = a + RWORD(prtos_conf_mem_area[i].size);
-                printf("\ta:0x%llx --> b: 0x%llx\n", a, b);
             } else {
                 a = RWORD(prtos_conf_mem_area[i].mapped_at);
                 b = a + RWORD(prtos_conf_mem_area[i].size);
             }
             if ((c >= a) && (d <= b)) break;
         }
-#if defined(CONFIG_AARCH64)
-        // Just command this line for armv8 debug info
         if (i >= num_of_mem_areas)
             error_printf("Customization file \"%s\" (%d): [0x%x- 0x%x] does not fit (PRTOS Configure File)", custom_table[e].name, e, c, d);
-#endif
     }
 }
 
@@ -257,12 +222,9 @@ void do_check(int argc, char **argv) {
             continue;
         }
 
-        printf("\nDo_check Name:%s\n", part.name);
-
         if ((ret = parse_pef_file(load_file(part.name), &part.pef)) != PEF_OK) error_printf("Error loading PEF file \"%s\": %d", part.name, ret);
         if (num_of_custom) {
             for (i = 0; i < num_of_custom; i++) {
-                printf("\nDo_check custom_table[%d].name:%s\n", i, custom_table[i].name);
                 if ((ret = parse_pef_file(load_file(custom_table[i].name), &custom_table[i].pef)) != PEF_OK)
                     error_printf("Error loading PEF file \"%s\": %d", custom_table[i].name, ret);
             }
