@@ -27,11 +27,27 @@
 
 #define CFLAGS "-O2 -Wall -I${PRTOS_PATH}/user/libprtos/include -D\"__PRTOS_INCFLD(_fld)=<prtos_inc/_fld>\" -I${PRTOS_PATH}/include -nostdlib -nostdinc"
 
+#if defined(CONFIG_x86)
+
 #define MAKEFILE                                                                                                                                             \
     "include %s\nrun:a.c.prtos_conf\n\t${TARGET_CC} ${TARGET_CFLAGS_ARCH} -x c %s --include prtos_inc/config.h --include prtos_inc/arch/arch_types.h %s -o " \
     "%s "                                                                                                                                                    \
     "-Wl,--entry=0x0,-T%s\n.PHONY: run\n"
 
+#elif defined(CONFIG_AARCH64)
+
+#define MAKEFILE                                                                                                                                             \
+    "include %s\nrun:a.c.prtos_conf\n\t${TARGET_CC} ${TARGET_CFLAGS_ARCH} -x c %s --include prtos_inc/config.h --include prtos_inc/arch/arch_types.h %s -c " \
+    "-o xml_obj_file.o\n"                                                                                                                                    \
+    "\t${TARGET_LD} xml_obj_file.o -nostdlib  -o obj_exc_elf -e 0x0 -T%s\n"                                                                                  \
+    "\t${TARGET_OBJCOPY} -O binary  obj_exc_elf %s"                                                                                                          \
+    "\n.PHONY: run\n"
+
+#else
+#error "unsupported architecture"
+#endif
+
+#if defined(CONFIG_x86)  // FIXME: will extract the common part before it is merged finally.
 static char lds_content[] = "OUTPUT_FORMAT(\"binary\")\n"
                             "SECTIONS\n"
                             "{\n"
@@ -60,6 +76,39 @@ static char lds_content[] = "OUTPUT_FORMAT(\"binary\")\n"
                             "	    	*(.comment*)\n"
                             "	}\n"
                             "}\n";
+#elif defined(CONFIG_AARCH64)
+static char lds_content[] = "OUTPUT_FORMAT(\"elf64-littleaarch64\")\n"
+                            "SECTIONS\n"
+                            "{\n"
+                            "         . = 0x0;\n"
+                            "         .data ALIGN (8) : {\n"
+                            "      	     *(.rodata.hdr)\n"
+                            "    	     *(.rodata)\n"
+                            "    	     *(.data)\n"
+                            "                _mem_obj_table = .;\n"
+                            "                *(.data.memobj)\n"
+                            "                LONG(0);\n"
+                            "        }\n"
+                            "\n"
+                            "        _data_size = .;\n"
+                            "\n"
+                            "        .bss ALIGN (8) : {\n"
+                            "                *(.bss)\n"
+                            "    	     *(.bss.mempool)\n"
+                            "    	}\n"
+                            "\n"
+                            "    	_prtos_c_size = .;\n"
+                            "\n"
+                            " 	/DISCARD/ : {\n"
+                            "	   	*(.text)\n"
+                            "    	*(.note)\n"
+                            "	    	*(.comment*)\n"
+                            "	}\n"
+                            "}\n";
+
+#else
+#error "unsupported architecture"
+#endif
 
 static void write_ldsfile(char *lds_file) {
     int fd = mkstemp(lds_file);
@@ -90,8 +139,14 @@ void exec_xml_conf_build(char *path, char *in, char *out) {
     write_ldsfile(lds_file);
 
     DO_MALLOC(make_file, strlen(MAKEFILE) + strlen(config_path) + strlen(CFLAGS) + strlen(in) + strlen(out) + strlen(lds_file) + 1);
-    sprintf(make_file, MAKEFILE, config_path, CFLAGS, in, out, lds_file);
 
+#if defined(CONFIG_x86)
+    sprintf(make_file, MAKEFILE, config_path, CFLAGS, in, out, lds_file);
+#elif defined(CONFIG_AARCH64)
+    sprintf(make_file, MAKEFILE, config_path, CFLAGS, in, lds_file, out);
+#else
+#error "unsupported architecture"
+#endif
     write_makefile(file_name, make_file);
 
     DO_MALLOC(build_cmd, strlen(CONFIG_PATH) + strlen(prtos_path) + 1);
