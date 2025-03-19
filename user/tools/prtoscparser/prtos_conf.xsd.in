@@ -161,7 +161,7 @@
       <xs:enumeration value="PRTOS_HM_EV_FP_ERROR"/>
       <xs:enumeration value="PRTOS_HM_EV_MEM_PROTECTION"/>
       <xs:enumeration value="PRTOS_HM_EV_UNEXPECTED_TRAP"/>
-#ifdef CONFIG_x86
+#if defined(CONFIG_x86)
       <xs:enumeration value="PRTOS_HM_EV_X86_DIVIDE_ERROR"/>
       <xs:enumeration value="PRTOS_HM_EV_X86_DEBUG"/>
       <xs:enumeration value="PRTOS_HM_EV_X86_NMI_INTERRUPT"/>
@@ -182,7 +182,7 @@
       <xs:enumeration value="PRTOS_HM_EV_X86_MACHINE_CHECK"/>
       <xs:enumeration value="PRTOS_HM_EV_X86_SIMD_FLOATING_POINT"/>
 #endif
-#ifdef CONFIG_AARCH64
+#if defined(CONFIG_AARCH64)
       <xs:enumeration value="PRTOS_HM_EV_ARM_UNDEF_INSTR"/>
       <xs:enumeration value="PRTOS_HM_EV_ARM_PREFETCH_ABORT"/>
       <xs:enumeration value="PRTOS_HM_EV_ARM_DATA_ABORT"/>
@@ -238,7 +238,7 @@
     </xs:annotation>
     <xs:list itemType="memAreaFlags_t"/>
   </xs:simpleType>
-#ifdef CONFIG_x86
+#if defined(CONFIG_x86)
   <xs:simpleType name="memRegion_t">
     <xs:annotation id="docmemRegion_t">
       <xs:documentation>It declares the access type of the memory. It can be ram or rom.</xs:documentation>
@@ -249,7 +249,7 @@
     </xs:restriction>
   </xs:simpleType>
 #endif
-#ifdef CONFIG_AARCH64 // FIXME: this is just a WA for build pass
+#if defined(CONFIG_AARCH64) // FIXME: this is just a WA for build pass
   <xs:simpleType name="memRegion_t">
     <xs:annotation id="docmemRegion_t">
       <xs:documentation>It declares the access type of the memory. It can be ram or rom.</xs:documentation>
