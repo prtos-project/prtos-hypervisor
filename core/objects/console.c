@@ -45,7 +45,7 @@ static prtos_s32_t write_console_obj(prtos_obj_desc_t desc, prtos_u8_t *__g_para
 
     if (part_id != KID2PARTID(info->sched.current_kthread->ctrl.g->id)) return PRTOS_PERM_ERROR;
 
-    if (check_gp_aram(buffer, length, 1, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(buffer, length, 1, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
 
     // Only strings of a maximum of 128 bytes are allowed
     if (length > 128) return PRTOS_INVALID_PARAM;

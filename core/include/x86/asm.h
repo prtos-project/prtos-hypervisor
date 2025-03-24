@@ -279,7 +279,7 @@ static inline void clear_wp(void) {
     __asm__ __volatile__("movl %0, %%cr0\n\t" : : "r"(tmpreg));
 }
 
-static inline prtos_s32_t asm_rw_check(prtos_address_t param, prtos_u_size_t size, prtos_u32_t aligment) {
+static inline prtos_s32_t asm_rw_check(prtos_address_t param, prtos_u_size_t size, prtos_u32_t alignment) {
     prtos_address_t addr;
     prtos_s32_t ret = 1;
     prtos_u8_t tmp;
@@ -299,7 +299,7 @@ static inline prtos_s32_t asm_rw_check(prtos_address_t param, prtos_u_size_t siz
     return 0; // Have write permission
 }
 
-static inline prtos_s32_t asm_ronly_check(prtos_address_t param, prtos_u_size_t size, prtos_u32_t aligment) {
+static inline prtos_s32_t asm_ronly_check(prtos_address_t param, prtos_u_size_t size, prtos_u32_t alignment) {
     prtos_address_t addr;
     prtos_s32_t ret = 1;
     prtos_u8_t tmp;

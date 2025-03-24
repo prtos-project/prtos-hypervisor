@@ -36,7 +36,7 @@ static inline prtos_s32_t create_sampling_port(prtos_obj_desc_t desc, prtos_s8_t
 
     if (OBJDESC_GET_PARTITIONID(desc) != partition->id) return PRTOS_PERM_ERROR;
 
-    if (check_gp_aram(port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) {
+    if (check_gp_param(port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) {
         return PRTOS_INVALID_PARAM;
     }
 
@@ -103,7 +103,7 @@ static prtos_s32_t read_sampling_port(prtos_obj_desc_t desc, void *__g_param msg
 
     if (OBJDESC_GET_PARTITIONID(desc) != KID2PARTID(processor_info->sched.current_kthread->ctrl.g->id)) return PRTOS_PERM_ERROR;
 
-    if (check_gp_aram(flags, sizeof(prtos_u32_t), 4, PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(flags, sizeof(prtos_u32_t), 4, PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
 
     spin_lock(&port_table[port].lock);
     partition_id = port_table[port].partition_id;
@@ -124,7 +124,7 @@ static prtos_s32_t read_sampling_port(prtos_obj_desc_t desc, void *__g_param msg
         prtos_conf_comm_channel = &prtos_conf_comm_channel_table[prtos_conf_comm_ports[port].channel_id];
         if (msg_size > prtos_conf_comm_channel->s.max_length) return PRTOS_INVALID_CONFIG;
 
-        if (check_gp_aram(msg_ptr, msg_size, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
+        if (check_gp_param(msg_ptr, msg_size, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
 
         channel = &channel_table[prtos_conf_comm_ports[port].channel_id];
         spin_lock(&channel->s.lock);
@@ -198,7 +198,7 @@ static prtos_s32_t write_sampling_port(prtos_obj_desc_t desc, void *__g_param ms
         prtos_conf_comm_channel = &prtos_conf_comm_channel_table[prtos_conf_comm_ports[port].channel_id];
         if (msg_size > prtos_conf_comm_channel->s.max_length) return PRTOS_INVALID_CONFIG;
 
-        if (check_gp_aram(msg_ptr, msg_size, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
+        if (check_gp_param(msg_ptr, msg_size, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
 
         channel = &channel_table[prtos_conf_comm_ports[port].channel_id];
         spin_lock(&channel->s.lock);
@@ -250,7 +250,7 @@ static inline prtos_s32_t get_samping_port_info(prtos_obj_desc_t desc, prtos_sam
 
     if (OBJDESC_GET_PARTITIONID(desc) != partition->id) return PRTOS_PERM_ERROR;
 
-    if (check_gp_aram(info->port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(info->port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
 
     // Look for the channel
     for (port = partition->comm_ports_offset; port < (partition->num_of_ports + partition->comm_ports_offset); port++)
@@ -321,12 +321,12 @@ static inline prtos_s32_t get_sampling_port_status(prtos_obj_desc_t desc, prtos_
 }
 
 static prtos_s32_t ctrl_sampling_port(prtos_obj_desc_t desc, prtos_u32_t cmd, union sampling_port_cmd *__g_param args) {
-    if (check_gp_aram(args, sizeof(union sampling_port_cmd), 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) {
+    if (check_gp_param(args, sizeof(union sampling_port_cmd), 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) {
         return PRTOS_INVALID_PARAM;
     }
     switch (cmd) {
         case PRTOS_COMM_CREATE_PORT:
-            if (!args->create.port_name || (check_gp_aram(args->create.port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL) < 0)) {
+            if (!args->create.port_name || (check_gp_param(args->create.port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL) < 0)) {
                 return PRTOS_INVALID_PARAM;
             }
             return create_sampling_port(desc, args->create.port_name, args->create.max_msg_size, args->create.direction, args->create.valid_period);
@@ -365,7 +365,7 @@ static inline prtos_s32_t create_queuing_port(prtos_obj_desc_t desc, prtos_s8_t 
     partition = get_partition(processor_info->sched.current_kthread)->cfg;
     if (OBJDESC_GET_PARTITIONID(desc) != partition->id) return PRTOS_PERM_ERROR;
 
-    if (check_gp_aram(port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) {
+    if (check_gp_param(port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) {
         return PRTOS_INVALID_PARAM;
     }
     if ((direction != PRTOS_SOURCE_PORT) && (direction != PRTOS_DESTINATION_PORT)) return PRTOS_INVALID_PARAM;
@@ -437,7 +437,7 @@ static prtos_s32_t send_queuing_port(prtos_obj_desc_t desc, void *__g_param msg_
         prtos_conf_comm_channel = &prtos_conf_comm_channel_table[prtos_conf_comm_ports[port].channel_id];
         if (msg_size > prtos_conf_comm_channel->q.max_length) return PRTOS_INVALID_CONFIG;
 
-        if (check_gp_aram(msg_ptr, msg_size, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
+        if (check_gp_param(msg_ptr, msg_size, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
 
         channel = &channel_table[prtos_conf_comm_ports[port].channel_id];
         spin_lock(&channel->q.lock);
@@ -521,7 +521,7 @@ static prtos_s32_t receive_queuing_port(prtos_obj_desc_t desc, void *__g_param m
         prtos_conf_comm_channel = &prtos_conf_comm_channel_table[prtos_conf_comm_ports[port].channel_id];
         if (msg_size > prtos_conf_comm_channel->q.max_length) return PRTOS_INVALID_CONFIG;
 
-        if (check_gp_aram(msg_ptr, msg_size, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
+        if (check_gp_param(msg_ptr, msg_size, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
 
         channel = &channel_table[prtos_conf_comm_ports[port].channel_id];
         spin_lock(&channel->q.lock);
@@ -621,7 +621,7 @@ static inline prtos_s32_t get_queuling_port_info(prtos_obj_desc_t desc, prtos_qu
 
     if (OBJDESC_GET_PARTITIONID(desc) != partition->id) return PRTOS_PERM_ERROR;
 
-    if (check_gp_aram(info->port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(info->port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
 
     // Look for the channel
     for (port = partition->comm_ports_offset; port < (partition->num_of_ports + partition->comm_ports_offset); port++)
@@ -646,11 +646,11 @@ static inline prtos_s32_t get_queuling_port_info(prtos_obj_desc_t desc, prtos_qu
 }
 
 static prtos_s32_t ctrl_queuing_port(prtos_obj_desc_t desc, prtos_u32_t cmd, union queuing_port_cmd *__g_param args) {
-    if (check_gp_aram(args, sizeof(union queuing_port_cmd), 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(args, sizeof(union queuing_port_cmd), 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
 
     switch (cmd) {
         case PRTOS_COMM_CREATE_PORT:
-            if (!args->create.port_name || (check_gp_aram(args->create.port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0)) {
+            if (!args->create.port_name || (check_gp_param(args->create.port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0)) {
                 return PRTOS_INVALID_PARAM;
             }
             return create_queuing_port(desc, args->create.port_name, args->create.max_num_of_msgs, args->create.max_msg_size, args->create.direction);

@@ -35,7 +35,7 @@ static prtos_s32_t read_trace(prtos_obj_desc_t desc, prtos_trace_event_t *__g_pa
 
     if (!num_of_traces) return PRTOS_INVALID_PARAM;
 
-    if (check_gp_aram(event, size, 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(event, size, 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
 
     if (part_id == PRTOS_HYPERVISOR_ID)
         log = &prtos_trace_log_stream;
@@ -60,8 +60,8 @@ static prtos_s32_t write_trace(prtos_obj_desc_t desc, prtos_trace_event_t *__g_p
 
     if (!num_of_traces) return PRTOS_INVALID_PARAM;
 
-    if (check_gp_aram(event, size, 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
-    if (check_gp_aram(bitmap, sizeof(prtos_u32_t), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(event, size, 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(bitmap, sizeof(prtos_u32_t), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
     log = &trace_log_stream[part_id];
     for (written = 0, e = 0; e < num_of_traces; e++) {
         if (bitmap && (get_partition(info->sched.current_kthread)->cfg->trace.bitmap & *bitmap)) {
@@ -121,7 +121,7 @@ static prtos_s32_t ctrl_trace(prtos_obj_desc_t desc, prtos_u32_t cmd, union trac
     part_id = OBJDESC_GET_PARTITIONID(desc);
     if (part_id != KID2PARTID(info->sched.current_kthread->ctrl.g->id))
         if (!(get_partition(info->sched.current_kthread)->cfg->flags & PRTOS_PART_SYSTEM)) return PRTOS_PERM_ERROR;
-    if (check_gp_aram(args, sizeof(union trace_cmd), 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(args, sizeof(union trace_cmd), 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
     if (part_id == PRTOS_HYPERVISOR_ID)
         log = &prtos_trace_log_stream;
     else {
