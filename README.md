@@ -13,7 +13,7 @@ PRTOS Hypervisor stands on the shoulders of giants, drawing inspiration from som
 
 PRTOS is a lightweight real-time hypervisor，Its architecture is as follows:
 
-![architecturezh](./documentation/figures/prtos_architecture_zh.jpg)
+![architecturezh](./doc/figures/prtos_architecture_zh.jpg)
 
 
 ## PRTOS Hypervisor Features
@@ -40,7 +40,7 @@ PRTOS is a lightweight real-time hypervisor，Its architecture is as follows:
 | scripts       | The assist tools to configure PRTOS source code.        |
 | user          | User space utilities (libprtos, tools, examples, etc).  |
 | user/bail     | User' Bare-metal Application Interface Library.         |
-| documentation | PRTOS related document.                                 |
+| doc           | PRTOS related document.                                 |
 
 **NOTE**:BAIL(Bare-metal Application Interface Library) is a minimal partition developing environment for the development of "C" programs directly on top of PRTOS hypervisor. BAIL provides the basic and minimal services to setup a basic "C" execution environment. BAIL is useful for those partitions that are do not need an operating systems and want to do function test for PRTOS hypercall APIs.
 
@@ -59,4 +59,4 @@ PRTOS Hypervisor is very grateful for the support from all community developers,
 
 # Contribution
 
-If you are interested in PRTOS Hypervisor and want to join in the development of PRTOS Hypervisor and become a code contributor,please refer to the [Code Contribution Guide](documentation/contribution_guide/contribution_guide.md).
+If you are interested in PRTOS Hypervisor and want to join in the development of PRTOS Hypervisor and become a code contributor,please refer to the [Code Contribution Guide](doc/contribution_guide/contribution_guide.md).
