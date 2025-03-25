@@ -62,4 +62,4 @@ PRTOS Hypervisor非常感谢所有社区小伙伴的支持，在阅读和开发P
 
 # 贡献代码
 
-如果您对PRTOS Hypervisor感兴趣，并希望参与PRTOS的开发并成为代码贡献者，请参阅[代码贡献指南](documentation/contribution_guide/contribution_guide.md)。
+如果您对PRTOS Hypervisor感兴趣，并希望参与PRTOS的开发并成为代码贡献者，请参阅[代码贡献指南](doc/contribution_guide/contribution_guide_zh.md)。
