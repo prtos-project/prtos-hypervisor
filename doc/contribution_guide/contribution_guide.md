@@ -2,11 +2,11 @@
 
 PRTOS uses Github to host its source code, if you wish to contribute code please use the PR (Pull Request) process of github:
 
-1. [create Issue](https://github.com/prtos-project/prtos-hypervisor/issues/new) - For the larger changes (such as new features, large refactoring, etc.) it is best to first open an issue to discuss, and smaller improvements (such as document improvements, bugfixes, etc.) can be sent directly to PR
+1. [create Issue](https://github.com/prtos-project/prtos-hypervisor/issues/new) - For the larger changes (such as new features, large refactoring, etc.) it is best to first open an issue to discuss, and smaller improvements (such as document improvements, bug fixes, etc.) can be sent directly to PR
 
 2. Fork [PRTOS](https://github.com/prtos-project/prtos-hypervisor) - Click the **Fork** button in the upper right corner
 
-3. Clone Your own fork: ```git clone https://github.com/$userid/prtos-hypervisor.git```
+3. Clone your own fork: ```git clone https://github.com/$userid/prtos-hypervisor.git```
 
    * If your fork is out of date, you need to manually sync: [Sync ](https://help.github.com/articles/syncing-a-fork/)
 
