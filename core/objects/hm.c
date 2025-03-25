@@ -35,7 +35,7 @@ static prtos_s32_t read_hm_log(prtos_obj_desc_t desc, prtos_hm_log_t *__g_param 
 
     if (!(get_partition(info->sched.current_kthread)->cfg->flags & PRTOS_PART_SYSTEM)) return PRTOS_PERM_ERROR;
 
-    if (check_gp_aram(log, size, 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(log, size, 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
 
     if (!log || !num_of_logs) return PRTOS_INVALID_PARAM;
 
@@ -60,7 +60,7 @@ static prtos_s32_t ctrl_hm_log(prtos_obj_desc_t desc, prtos_u32_t cmd, union hm_
     if (OBJDESC_GET_PARTITIONID(desc) != PRTOS_HYPERVISOR_ID) return PRTOS_INVALID_PARAM;
 
     if (!(get_partition(info->sched.current_kthread)->cfg->flags & PRTOS_PART_SYSTEM)) return PRTOS_PERM_ERROR;
-    if (check_gp_aram(args, sizeof(union hm_cmd), 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(args, sizeof(union hm_cmd), 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
     switch (cmd) {
         case PRTOS_HM_GET_STATUS:
             args->status.num_of_events = hm_log_stream.ctrl.elem;

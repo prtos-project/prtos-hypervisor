@@ -52,7 +52,7 @@ static inline prtos_s32_t copy_area(prtos_address_t dst_addr, prtos_id_t dst_id,
 static prtos_s32_t ctrl_mem(prtos_obj_desc_t desc, prtos_u32_t cmd, union mem_cmd *__g_param args) {
     if (!args) return PRTOS_INVALID_PARAM;
 
-    if (check_gp_aram(args, sizeof(union mem_cmd), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(args, sizeof(union mem_cmd), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
 
     switch (cmd) {
         case PRTOS_OBJ_MEM_CPY_AREA:

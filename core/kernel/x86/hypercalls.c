@@ -110,7 +110,7 @@ __hypercall prtos_s32_t x86_load_cr4_sys(prtos_word_t val) {
 __hypercall prtos_s32_t x86_load_tss32_sys(struct x86_tss *__g_param t) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
 
-    if (check_gp_aram(t, sizeof(struct x86_tss), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(t, sizeof(struct x86_tss), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
 
     if (!(t->ss1 & 0x3) || ((t->ss1 >> 3) >= (CONFIG_PARTITION_NO_GDT_ENTRIES + PRTOS_GDT_ENTRIES))) return PRTOS_INVALID_PARAM;
 
@@ -138,7 +138,7 @@ __hypercall prtos_s32_t x86_load_gdt_sys(struct x86_desc_reg *__g_param desc) {
     struct x86_desc *gdt;
     prtos_u32_t type;
 
-    if (check_gp_aram(desc, sizeof(struct x86_desc_reg), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(desc, sizeof(struct x86_desc_reg), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
 
     gdt_num_of_entries = (desc->limit + 1) / sizeof(struct x86_desc);
     if (gdt_num_of_entries > CONFIG_PARTITION_NO_GDT_ENTRIES) return PRTOS_INVALID_PARAM;
@@ -157,7 +157,7 @@ __hypercall prtos_s32_t x86_load_gdt_sys(struct x86_desc_reg *__g_param desc) {
 __hypercall prtos_s32_t x86_load_idtr_sys(struct x86_desc_reg *__g_param desc) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
 
-    if (check_gp_aram(desc, sizeof(struct x86_desc_reg), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(desc, sizeof(struct x86_desc_reg), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
 
     info->sched.current_kthread->ctrl.g->part_ctrl_table->arch.idtr = *desc;
     info->sched.current_kthread->ctrl.g->part_ctrl_table->arch.max_idt_vec = (desc->limit + 1) / sizeof(struct x86_gate);
@@ -192,7 +192,7 @@ __hypercall prtos_s32_t x86_update_gdt_sys(prtos_s32_t entry, struct x86_desc *_
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     prtos_u32_t type;
 
-    if (check_gp_aram(gdt, sizeof(struct x86_desc), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(gdt, sizeof(struct x86_desc), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
 
     if (entry >= CONFIG_PARTITION_NO_GDT_ENTRIES) return PRTOS_INVALID_PARAM;
 
@@ -227,7 +227,7 @@ static inline prtos_s32_t is_gate_desc_valid(struct x86_gate *desc) {
 __hypercall prtos_s32_t x86_update_idt_sys(prtos_s32_t entry, struct x86_gate *__g_param desc) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
 
-    if (check_gp_aram(desc, sizeof(struct x86_gate), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(desc, sizeof(struct x86_gate), 4, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
     if (entry < FIRST_USER_IRQ_VECTOR || entry >= IDT_ENTRIES) return PRTOS_INVALID_PARAM;
 
     if ((desc->low0 & X86GATE_LOW0_P) && !is_gate_desc_valid(desc)) return PRTOS_INVALID_PARAM;

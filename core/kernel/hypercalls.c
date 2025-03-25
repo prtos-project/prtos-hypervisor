@@ -37,7 +37,7 @@ __hypercall prtos_s32_t multi_call_sys(void *__g_param start_addr, void *__g_par
     ASSERT(!hw_is_sti());
     if (end_addr < start_addr) return PRTOS_INVALID_PARAM;
 
-    if (check_gp_aram(start_addr, (prtos_address_t)end_addr - (prtos_address_t)start_addr, 4, PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(start_addr, (prtos_address_t)end_addr - (prtos_address_t)start_addr, 4, PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
 
     for (addr = (prtos_address_t)start_addr; addr < (prtos_address_t)end_addr;) {
         hypercall_nr = *(prtos_u32_t *)addr;
@@ -231,7 +231,7 @@ __hypercall prtos_s32_t switch_sched_plan_sys(prtos_u32_t new_plan_id, prtos_u32
 
     if (!(get_partition(info->sched.current_kthread)->cfg->flags & PRTOS_PART_SYSTEM)) return PRTOS_PERM_ERROR;
 
-    if (check_gp_aram(current_plan_id, sizeof(prtos_u32_t), 4, PFLAG_RW | PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(current_plan_id, sizeof(prtos_u32_t), 4, PFLAG_RW | PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
 
     if (info->sched.data->plan.current->id == new_plan_id) return PRTOS_NO_ACTION;
 
@@ -373,7 +373,7 @@ __hypercall prtos_s32_t set_timer_sys(prtos_u32_t clock_id, prtos_time_t abs_sti
 __hypercall prtos_s32_t get_time_sys(prtos_u32_t clock_id, prtos_time_t *__g_param time) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
 
-    if (check_gp_aram(time, sizeof(prtos_s64_t), 8, PFLAG_RW | PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(time, sizeof(prtos_s64_t), 8, PFLAG_RW | PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
 
     switch (clock_id) {
         case PRTOS_HW_CLOCK:
@@ -626,7 +626,7 @@ __hypercall prtos_s32_t raise_ipvi_sys(prtos_u8_t ipvi_number) {
 __hypercall prtos_s32_t get_gid_by_name_sys(prtos_u8_t *__g_param name, prtos_u32_t entity) {
     prtos_s32_t e, id = PRTOS_INVALID_CONFIG;
 
-    if (check_gp_aram(name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
+    if (check_gp_param(name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL) < 0) return PRTOS_INVALID_PARAM;
 
     switch (entity) {
         case PRTOS_PARTITION_NAME:

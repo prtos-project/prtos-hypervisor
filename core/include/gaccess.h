@@ -21,16 +21,16 @@
 #define PFLAG_NOT_NULL 0x2
 
 #ifdef CONFIG_MMU
-static inline prtos_s32_t check_gp_aram(void *param, prtos_u_size_t size, prtos_u32_t aligment, prtos_s32_t flags) {
+static inline prtos_s32_t check_gp_param(void *param, prtos_u_size_t size, prtos_u32_t alignment, prtos_s32_t flags) {
     if ((flags & PFLAG_NOT_NULL) && !param) {
         return -1;
     }
 
-    if (__arch_check_gp_aram((prtos_address_t)param, size, aligment)) {
+    if (__arch_check_gp_param((prtos_address_t)param, size, alignment)) {
         return -1;
     }
 
-    return ((flags & PFLAG_RW) ? asm_rw_check((prtos_address_t)param, size, aligment) : asm_ronly_check((prtos_address_t)param, size, aligment));
+    return ((flags & PFLAG_RW) ? asm_rw_check((prtos_address_t)param, size, alignment) : asm_ronly_check((prtos_address_t)param, size, alignment));
 }
 #endif
 #endif
