@@ -14,7 +14,7 @@ PRTOS Hypervisor 站在巨人们的肩膀上实现，主要借鉴了一些经典
 
 PRTOS Hypervisor架构如下：
 
-![architecturezh](./documentation/figures/prtos_architecture_zh.jpg)
+![architecturezh](./doc/figures/prtos_architecture_zh.jpg)
 
 ## PRTOS Hypervisor的特点
 
@@ -33,7 +33,7 @@ PRTOS Hypervisor源代码目录结构如下图所示：
 | scripts       | 配置PRTOS Hypervisor的辅助工具。                         |
 | user          | 用户级别工具。                                           |
 | user/bail     | 用户裸机应用程序接口库。                                  |
-| documentation | 相关文档。                                               |
+| doc           | 相关文档。                                               |
 
 **NOTE**:BAIL（Bare-metal Application Interface Library）是一个用于在PRTOS Hypervisor之上直接开发C程序的最小分区开发环境。BAIL提供了建立基本的"C"执行环境所需的基本服务。BAIL适用于那些不需要操作系统的分区、以及测试PROTS提供的超级调用服务接口。
 
