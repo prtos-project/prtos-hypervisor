@@ -45,6 +45,11 @@ PRTOS Hypervisor源代码目录结构如下图所示：
 
 - [x] QEMU或者VMware 32位 X86平台
 
+**计划支持平台**
+- [x] QEMU ARMv8 仿真平台
+- [x] 树莓派4b/5b单板机
+- [x] QEMU RISC-V 仿真平台
+
 ## 文档
 
 [文档中心](http://www.prtos.org ) | [编程指南](http://www.prtos.org/prtos_hypervisor_x86_user_guide/)

@@ -32,6 +32,10 @@ PRTOS is a lightweight real-time hypervisor，Its architecture is as follows:
 **Currently supported platforms**
 - [x] QEMU 32bit X86 platform
 
+**Plan to support platforms**
+- [x] QEMU ARMv8 virt platform
+- [x] Raspberry Pi 4b/5b Single-board Computer
+- [x] QEMU RISC-V virt platform
 
 **PRTOS Hypervisor directory structure**
 | Name          | Description                                             |
@@ -40,7 +44,7 @@ PRTOS is a lightweight real-time hypervisor，Its architecture is as follows:
 | scripts       | The assist tools to configure PRTOS source code.        |
 | user          | User space utilities (libprtos, tools, examples, etc).  |
 | user/bail     | User' Bare-metal Application Interface Library.         |
-| doc           | PRTOS related document.                                 |
+| doc           | PRTOS related documents.                                 |
 
 **NOTE**:BAIL(Bare-metal Application Interface Library) is a minimal partition developing environment for the development of "C" programs directly on top of PRTOS hypervisor. BAIL provides the basic and minimal services to setup a basic "C" execution environment. BAIL is useful for those partitions that are do not need an operating systems and want to do function test for PRTOS hypercall APIs.
 
