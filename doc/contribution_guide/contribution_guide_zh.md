@@ -20,4 +20,4 @@ PRTOS 使用Github托管其源代码，如果希望贡献代码请使用github�
 在提交代码的时候，请遵守以下规则，以提高代码质量：
 
   * 使用clang-format -i ``your_new_file_changed``格式化你的代码
-  * 运行 [本地CI测试](https://github.com/prtos-project/prtos-hypervisor/blob/main/scripts/run_test.sh) 确保没有回归问题产生. 在PRTOS源码跟目录运行命令``bash scripts/run_test.sh check-all``
+  * 运行 [本地CI测试](https://github.com/prtos-project/prtos-hypervisor/blob/main/scripts/run_test.sh) 确保没有回归问题产生. 在PRTOS源码根目录运行命令``bash scripts/run_test.sh check-all``
