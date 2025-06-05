@@ -51,7 +51,6 @@ void init_arch(void) {
     hw_set_trap_gate(10, vtrap_table[10], 1);
     hw_set_trap_gate(11, vtrap_table[11], 1);
     hw_set_trap_gate(12, vtrap_table[12], 1);
-    hw_set_trap_gate(13, vtrap_table[13], 1);
     hw_set_irq_gate(13, vtrap_table[13], 1);
     hw_set_irq_gate(14, vtrap_table[14], 1);
     hw_set_trap_gate(15, vtrap_table[15], 1);
