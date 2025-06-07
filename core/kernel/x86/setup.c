@@ -35,7 +35,7 @@ void __VBOOT early_setup_arch_common(void) {
     setup_x86_idt();
 }
 
-prtos_u32_t __VBOOT get_gpu_khz(void) {
+prtos_u32_t __VBOOT get_cpu_khz(void) {
     extern prtos_u32_t calculate_cpu_freq(void);
     prtos_u32_t cpu_khz = prtos_conf_table.hpv.cpu_table[GET_CPU_ID()].freq;
     if (cpu_khz == PRTOS_CPUFREQ_AUTO) cpu_khz = calculate_cpu_freq() / 1000;
@@ -49,7 +49,7 @@ void __VBOOT setup_arch_common(void) {
 
     init_hpet();
 #endif
-    cpu_khz = get_gpu_khz();
+    cpu_khz = get_cpu_khz();
     init_pic(0x20, 0x28);
 #ifdef CONFIG_SMP
     SET_NRCPUS(init_smp());
