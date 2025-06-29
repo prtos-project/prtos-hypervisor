@@ -64,7 +64,7 @@ static inline void phys_page_dec_counter(struct phys_page *page) {
 
 extern void setup_phys_mm(void);
 extern struct phys_page *pmm_find_page(prtos_address_t p_addr, partition_t *p, prtos_u32_t *flags);
-extern struct phys_page *phis_mm_find_anonymous_page(prtos_address_t p_addr);
+extern struct phys_page *phys_mm_find_anonymous_page(prtos_address_t p_addr);
 extern prtos_s32_t phys_mm_find_addr(prtos_address_t p_addr, partition_t *p, prtos_u32_t *flags);
 extern prtos_s32_t phys_mm_find_area(prtos_address_t p_addr, prtos_s_size_t size, partition_t *k, prtos_u32_t *flags);
 extern void phys_mm_reset_part(partition_t *p);
