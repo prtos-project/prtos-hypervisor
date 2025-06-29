@@ -25,7 +25,7 @@
 static struct dyn_list cache_lru;
 static struct phys_page **phys_page_table;
 
-struct phys_page *phis_mm_find_anonymous_page(prtos_address_t p_addr) {
+struct phys_page *phys_mm_find_anonymous_page(prtos_address_t p_addr) {
     prtos_s32_t l, r, c;
     prtos_address_t a, b;
 
