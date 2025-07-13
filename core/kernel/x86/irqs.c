@@ -229,6 +229,6 @@ void fix_stack(cpu_ctxt_t *ctxt, partition_control_table_t *part_ctrl_table, prt
     ctxt->ip = ip;
 }
 
-prtos_u32_t hw_irq_get_mask(void) {
+prtos_u32_t hw_irq_get_mask(prtos_s32_t e) {
     return x86_hw_irqs_mask[GET_CPU_ID()];
 }

@@ -21,7 +21,7 @@ typedef struct {
 #define CPU_SLOT_ENABLED (1 << 0)
 #define BSP_FLAG (1 << 1)
         volatile prtos_u32_t irq_nesting_counter;
-        prtos_u32_t global_irq_mask;
+        prtos_u32_t global_irq_mask[HWIRQS_VECTOR_SIZE];
     } cpu;
 
     struct local_processor_sched {

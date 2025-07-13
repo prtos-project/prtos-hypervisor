@@ -88,7 +88,8 @@ typedef union kthread {
         struct guest *g;
         void *sched_data;
         cpu_ctxt_t *irq_cpu_ctxt;
-        prtos_u32_t irq_mask;
+        prtos_u32_t irq_mask[HWIRQS_VECTOR_SIZE];
+        prtos_u32_t irq_pend_mask[HWIRQS_VECTOR_SIZE];
         prtos_u32_t magic2;
     } ctrl;
     prtos_u8_t kstack[CONFIG_KSTACK_SIZE];

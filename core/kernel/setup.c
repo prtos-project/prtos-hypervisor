@@ -136,7 +136,10 @@ static void __VBOOT create_local_info(void) {
         system_panic(&ctxt, "No cpu found in the system\n");
     }
     memset(local_processor_info, 0, sizeof(local_processor_t) * CONFIG_NO_CPUS);
-    for (e = 0; e < CONFIG_NO_CPUS; e++) local_processor_info[e].cpu.global_irq_mask = ~0;
+    prtos_s32_t e_index;
+    for (e_index = 0; e_index < HWIRQS_VECTOR_SIZE; e_index++) {
+        for (e = 0; e < CONFIG_NO_CPUS; e++) local_processor_info[e].cpu.global_irq_mask[e_index] = ~0;
+    }
 }
 
 static void __VBOOT local_setup(prtos_s32_t cpu_id, kthread_t *idle) {

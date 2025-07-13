@@ -58,7 +58,10 @@ static prtos_s32_t init_lapic_current_timer(void) {
     lapic_write(APIC_TDCR, APIC_TDR_DIV_32);
     lapic_current_timer_hz[GET_CPU_ID()] = calibrate_lapic_current_timer();
     lapic_current_timer[GET_CPU_ID()].freq_khz = lapic_current_timer_hz[GET_CPU_ID()] / 1000;
-    info->cpu.global_irq_mask &= ~(1 << LAPIC_TIMER_IRQ);
+    prtos_s32_t e;
+    for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
+        info->cpu.global_irq_mask[e] &= ~(1 << LAPIC_TIMER_IRQ);
+    }
     set_irq_handler(LAPIC_TIMER_IRQ, timer_irq_handler, 0);
     lapic_write(APIC_LVTT, (LAPIC_TIMER_IRQ + FIRST_EXTERNAL_VECTOR) | APIC_LVT_MASKED);
     lapic_write(APIC_TMICT, 0);

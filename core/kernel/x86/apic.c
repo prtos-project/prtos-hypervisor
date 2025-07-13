@@ -143,7 +143,7 @@ static void io_apic_disable_irq(prtos_u32_t irq) {
 }
 
 #ifdef CONFIG_APIC
-void hw_irq_set_mask(prtos_u32_t mask) {
+void hw_irq_set_mask(prtos_s32_t e, prtos_u32_t mask) {
 #if 0
     prtos_s32_t e;
     hw_cli();
