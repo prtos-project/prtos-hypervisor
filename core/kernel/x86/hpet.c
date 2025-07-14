@@ -17,6 +17,7 @@
 #include <virtmm.h>
 #include <vmmap.h>
 #include <arch/io.h>
+#include <local.h>
 
 #define FEMTOSECS_PER_SEC 1000000000000000ULL
 
@@ -114,8 +115,10 @@ static void timer_irq_handler(cpu_ctxt_t *ctxt, void *irq_data) {
 static prtos_s32_t init_hpet_timer(void) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     prtos_u32_t cfg;
-
-    info->cpu.global_irq_mask &= ~(1 << HPET_IRQ_NR);
+    prtos_s32_t e;
+    for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
+        info->cpu.global_irq_mask[e] &= ~(1 << HPET_IRQ_NR);
+    }
     set_irq_handler(HPET_IRQ_NR, timer_irq_handler, 0);
 
     cfg = HPET_TNCC_IR(HPET_IRQ_NR) | HPET_TNCC_IE | HPET_TNCC_T32M;

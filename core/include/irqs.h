@@ -55,8 +55,8 @@ typedef struct {
     void (*clear)(prtos_u32_t irq);
 } hw_irq_ctrl_t;
 
-extern prtos_u32_t hw_irq_get_mask(void);
-extern void hw_irq_set_mask(prtos_u32_t mask);
+extern prtos_u32_t hw_irq_get_mask(prtos_s32_t e);
+extern void hw_irq_set_mask(prtos_s32_t e, prtos_u32_t mask);
 
 extern hw_irq_ctrl_t hw_irq_ctrl[CONFIG_NO_HWIRQS];
 

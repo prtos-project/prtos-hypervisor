@@ -33,20 +33,31 @@ static inline void sched_yield(local_processor_t *info, kthread_t *k) {
 static inline void do_preemption(void) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     hw_cli();
-    hw_irq_set_mask(info->cpu.global_irq_mask);
+
+    prtos_s32_t e;
+    for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
+        hw_irq_set_mask(e, info->cpu.global_irq_mask[e]);
+        info->sched.current_kthread->ctrl.irq_pend_mask[e] = 0xFFFFFFFF;
+    }
     hw_sti();
 
     do_nop();
 
     hw_cli();
-    hw_irq_set_mask(info->sched.current_kthread->ctrl.irq_mask);
+    for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
+        hw_irq_set_mask(e, info->sched.current_kthread->ctrl.irq_mask[e]);
+        info->sched.current_kthread->ctrl.irq_pend_mask[e] = 0xFFFFFFFF;
+    }
 }
 
 static inline void preemption_on(void) {
 #ifdef CONFIG_VOLUNTARY_PREEMPTION
     local_processor_t *info = GET_LOCAL_PROCESSOR();
-    info->sched.current_kthread->ctrl.irq_mask = hw_irq_get_mask();
-    hw_irq_set_mask(info->cpu.global_irq_mask);
+    prtos_s32_t e;
+    for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
+        info->sched.current_kthread->ctrl.irq_mask[e] = hw_irq_get_mask(e);
+        hw_irq_set_mask(e, new_kthread->ctrl.irq_mask[e]);
+    }
     hw_sti();
 #endif
 }
@@ -56,7 +67,11 @@ static inline void preemption_off(void) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
 
     hw_cli();
-    hw_irq_set_mask(info->sched.current_kthread->ctrl.irq_mask);
+    prtos_s32_t e;
+    for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
+        info->sched.current_kthread->ctrl.irq_pend_mask[e] = 0xFFFFFFFF;
+        hw_irq_set_mask(e, info->sched.current_kthread->ctrl.irq_mask[e]);
+    }
 #endif
 }
 

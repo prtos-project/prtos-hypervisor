@@ -64,8 +64,10 @@ static void timer_irq_handler(cpu_ctxt_t *ctxt, void *irq_data) {
 
 static prtos_s32_t init_pit_timer(void) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
-
-    info->cpu.global_irq_mask &= ~(1 << PIT_IRQ_NR);
+    prtos_s32_t e;
+    for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
+        info->cpu.global_irq_mask[e] &= ~(1 << PIT_IRQ_NR);
+    }
     set_irq_handler(PIT_IRQ_NR, timer_irq_handler, 0);
 #ifdef CONFIG_PC_PIT_CLOCK
     out_byte_port(0x34, PIT_MODE);  // binary, mode 2, LSB/MSB, ch 0

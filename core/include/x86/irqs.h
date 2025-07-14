@@ -29,6 +29,8 @@ struct trap_handler {
 #define FIRST_EXTERNAL_VECTOR 0x20
 #define FIRST_USER_IRQ_VECTOR 0x30
 
+#define HWIRQS_VECTOR_SIZE ((CONFIG_NO_HWIRQS % 32) ? (CONFIG_NO_HWIRQS / 32) + 1 : (CONFIG_NO_HWIRQS / 32))
+
 #ifdef CONFIG_SMP
 #define NR_IPIS 4
 #endif

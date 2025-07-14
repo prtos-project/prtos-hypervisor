@@ -232,8 +232,12 @@ void schedule(void) {
 
         if (new_kthread->ctrl.g) set_hw_timer(traverse_ktimer_queue(&new_kthread->ctrl.local_active_ktimers, get_sys_clock_usec()));
 
-        info->sched.current_kthread->ctrl.irq_mask = hw_irq_get_mask();
-        hw_irq_set_mask(new_kthread->ctrl.irq_mask);
+        prtos_s32_t e;
+        for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
+            info->sched.current_kthread->ctrl.irq_mask[e] = hw_irq_get_mask(e);
+            hw_irq_set_mask(e, new_kthread->ctrl.irq_mask[e]);
+            info->sched.current_kthread->ctrl.irq_pend_mask[e] = 0xFFFFFFFF;
+        }
 
         CONTEXT_SWITCH(new_kthread, &info->sched.current_kthread);
 

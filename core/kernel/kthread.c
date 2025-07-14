@@ -46,7 +46,10 @@ void init_idle(kthread_t *idle, prtos_s32_t cpu) {
     idle->ctrl.irq_cpu_ctxt = 0;
     idle->ctrl.kstack = 0;
     idle->ctrl.g = 0;
-    idle->ctrl.irq_mask = hw_irq_get_mask() | info->cpu.global_irq_mask;
+    prtos_s32_t e;
+    for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
+        idle->ctrl.irq_mask[e] = hw_irq_get_mask(e) | info->cpu.global_irq_mask[e];
+    }
     set_kthread_flags(idle, KTHREAD_DCACHE_ENABLED_F | KTHREAD_ICACHE_ENABLED_F);
     set_kthread_flags(idle, KTHREAD_READY_F);
     clear_kthread_flags(idle, KTHREAD_HALTED_F);
@@ -86,7 +89,7 @@ static inline kthread_t *alloc_kthread(prtos_id_t id) {
 partition_t *create_partition(struct prtos_conf_part *cfg) {
     prtos_u8_t *pct;
     prtos_u_size_t pct_size;
-    prtos_u32_t local_irq_mask;
+    prtos_u32_t local_irq_mask[HWIRQS_VECTOR_SIZE];
     partition_t *p;
     prtos_s32_t i;
 
@@ -123,12 +126,14 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         init_vtimer(cpu_id, &k->ctrl.g->vtimer, k);
 
         set_kthread_flags(k, KTHREAD_HALTED_F);
-        local_irq_mask = local_processor_info[cpu_id].cpu.global_irq_mask;
-        for (e = 0; e < CONFIG_NO_HWIRQS; e++)
-            if (prtos_conf_table.hpv.hw_irq_table[e].owner == cfg->id) local_irq_mask &= ~(1 << e);
-
+        prtos_s32_t e_index;
+        for (e_index = 0; e_index < HWIRQS_VECTOR_SIZE; e_index++) {
+            local_irq_mask[e_index] = local_processor_info[cpu_id].cpu.global_irq_mask[e_index];
+            for (e = 0; e < CONFIG_NO_HWIRQS; e++)
+                if (prtos_conf_table.hpv.hw_irq_table[e].owner == cfg->id) local_irq_mask[e_index] &= ~(1 << e);
+            k->ctrl.irq_mask[e_index] = local_irq_mask[e_index];
+        }
         k->ctrl.irq_cpu_ctxt = 0;
-        k->ctrl.irq_mask = local_irq_mask;
         k->ctrl.g->part_ctrl_table = (partition_control_table_t *)(pct + pct_size * i);
         k->ctrl.g->part_ctrl_table->part_ctrl_table_size = pct_size;
         setup_kthread_arch(k);

@@ -74,7 +74,7 @@ static void pic_enable_irq(prtos_u32_t irq) {
 }
 
 #ifndef CONFIG_APIC
-void hw_irq_set_mask(prtos_u32_t mask) {
+void hw_irq_set_mask(prtos_s32_t e, prtos_u32_t mask) {
     pic_master_mask = mask & 0xff;
     pic_slave_mask = (mask >> 8) & 0xff;
     if (pic_slave_mask != 0xff) pic_master_mask &= ~(1 << CTLR2_IRQ);
