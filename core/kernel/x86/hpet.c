@@ -17,6 +17,7 @@
 #include <virtmm.h>
 #include <vmmap.h>
 #include <arch/io.h>
+#include <local.h>
 
 #define FEMTOSECS_PER_SEC 1000000000000000ULL
 
