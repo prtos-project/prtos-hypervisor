@@ -49,6 +49,7 @@ void init_idle(kthread_t *idle, prtos_s32_t cpu) {
     prtos_s32_t e;
     for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
         idle->ctrl.irq_mask[e] = hw_irq_get_mask(e) | info->cpu.global_irq_mask[e];
+        idle->ctrl.irq_pend_mask[e] = 0xFFFFFFFF; // All IRQs are pending
     }
     set_kthread_flags(idle, KTHREAD_DCACHE_ENABLED_F | KTHREAD_ICACHE_ENABLED_F);
     set_kthread_flags(idle, KTHREAD_READY_F);
@@ -126,14 +127,18 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         init_vtimer(cpu_id, &k->ctrl.g->vtimer, k);
 
         set_kthread_flags(k, KTHREAD_HALTED_F);
-        prtos_s32_t e_index;
-        for (e_index = 0; e_index < HWIRQS_VECTOR_SIZE; e_index++) {
-            local_irq_mask[e_index] = local_processor_info[cpu_id].cpu.global_irq_mask[e_index];
-            for (e = 0; e < CONFIG_NO_HWIRQS; e++)
-                if (prtos_conf_table.hpv.hw_irq_table[e].owner == cfg->id) local_irq_mask[e_index] &= ~(1 << e);
-            k->ctrl.irq_mask[e_index] = local_irq_mask[e_index];
-        }
+
+        for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) local_irq_mask[e] = local_processor_info[cpu_id].cpu.global_irq_mask[e];
+        for (e = 0; e < CONFIG_NO_HWIRQS; e++)
+            if (prtos_conf_table.hpv.hw_irq_table[e].owner == cfg->id) {
+                local_irq_mask[e / 32] = ~(1 << (e % 32)); // Enable IRQs owned by the partition
+            }
+
         k->ctrl.irq_cpu_ctxt = 0;
+        for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
+            k->ctrl.irq_mask[e] = local_irq_mask[e];
+            k->ctrl.irq_pend_mask[e] = 0;
+        }
         k->ctrl.g->part_ctrl_table = (partition_control_table_t *)(pct + pct_size * i);
         k->ctrl.g->part_ctrl_table->part_ctrl_table_size = pct_size;
         setup_kthread_arch(k);

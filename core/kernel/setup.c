@@ -129,17 +129,15 @@ void reset_system(prtos_u32_t reset_mode) {
 }
 
 static void __VBOOT create_local_info(void) {
-    prtos_s32_t e;
+    prtos_s32_t e, e1;
     if (!GET_NRCPUS()) {
         cpu_ctxt_t ctxt;
         get_cpu_ctxt(&ctxt);
         system_panic(&ctxt, "No cpu found in the system\n");
     }
     memset(local_processor_info, 0, sizeof(local_processor_t) * CONFIG_NO_CPUS);
-    prtos_s32_t e_index;
-    for (e_index = 0; e_index < HWIRQS_VECTOR_SIZE; e_index++) {
-        for (e = 0; e < CONFIG_NO_CPUS; e++) local_processor_info[e].cpu.global_irq_mask[e_index] = ~0;
-    }
+    for (e = 0; e < CONFIG_NO_CPUS; e++)
+        for (e1 = 0; e1 < HWIRQS_VECTOR_SIZE; e1++) local_processor_info[e].cpu.global_irq_mask[e1] = 0xFFFFFFFF;
 }
 
 static void __VBOOT local_setup(prtos_s32_t cpu_id, kthread_t *idle) {
