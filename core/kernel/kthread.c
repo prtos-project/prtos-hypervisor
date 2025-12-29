@@ -208,8 +208,10 @@ void reset_kthread(kthread_t *k, prtos_address_t ptd_level_1, prtos_address_t en
     setup_pct(k->ctrl.g->part_ctrl_table, k, get_partition(k)->cfg);
     k->ctrl.g->part_ctrl_table->reset_counter++;
     k->ctrl.g->part_ctrl_table->reset_status = status;
+#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
     k->ctrl.g->karch.ptd_level_1 = ptd_level_1;
     k->ctrl.g->part_ctrl_table->arch._ARCH_PTDL1_REG = ptd_level_1;
+#endif
 
     set_kthread_flags(k, KTHREAD_READY_F);
     clear_kthread_flags(k, KTHREAD_HALTED_F);

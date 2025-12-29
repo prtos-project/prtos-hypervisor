@@ -79,12 +79,7 @@ extern const struct object *object_table[OBJ_NO_CLASSES];
 
 extern void setup_obj_dir(void);
 
-#define REGISTER_OBJ(_init)                    \
-    __asm__(".section .objsetuptab, \"a\"\n\t" \
-            ".align 4\n\t"                     \
-            ".long " #_init "\n\t"             \
-            ".previous\n\t")
+#define REGISTER_OBJ(_init) static void *__objsetuptab_##_init __attribute__((section(".objsetuptab"), used)) = (void *)(_init);
 
-#endif
-
-#endif
+#endif // _PRTOS_KERNEL_
+#endif // _PRTOS_OBJDIR_H_

@@ -55,8 +55,9 @@ static inline int setup_pbl(partition_t *p, prtos_word_t *p_ptd_level_1_table, p
     void *stack;
     // prtos_word_t attr;
     prtos_s32_t i;
-
+#ifndef CONFIG_AARCH64  //FIXME: this just a WA for aarch64
     ASSERT(((prtos_address_t)_epbl - (prtos_address_t)_spbl) <= 256 * 1024);
+#endif
     ASSERT(prtos_conf_boot_partition_table[p->cfg->id].num_of_custom_files <= CONFIG_MAX_NO_CUSTOMFILES);
 
     /*Partition Loader Stack*/
@@ -79,7 +80,9 @@ static inline int setup_pbl(partition_t *p, prtos_word_t *p_ptd_level_1_table, p
     }
 
     /*Partition Loader code*/
+#ifndef CONFIG_AARCH64  //FIXME: this just a WA for aarch64
     a = (prtos_address_t)_spbl;
+#endif
     b = a + (256 * 1024) - 1;
     v_addr = at;
     for (addr = a; (addr >= a) && (addr < b); addr += PAGE_SIZE, v_addr += PAGE_SIZE) {

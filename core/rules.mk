@@ -5,7 +5,7 @@ if-success = $(shell { $(1); } >/dev/null 2>&1 && echo "$(2)" || echo "$(3)")
 check_gcc = $(shell if $(TARGET_CC) $(1) -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo "$(1)"; else echo "$(2)"; fi)
 
 TARGET_CFLAGS = -fno-pie -Wall -D_PRTOS_KERNEL_ -fno-builtin -nostdlib -nostdinc -D$(ARCH) -fno-strict-aliasing -D"__PRTOS_INCFLD(_fld)=<_fld>"
-TARGET_CFLAGS += -I$(PRTOS_CORE_PATH)/include --include config.h --include $(ARCH)/arch_types.h 
+TARGET_CFLAGS += -I$(PRTOS_CORE_PATH)/include --include config.h --include $(ARCH)/arch_types.h
 
 
 TARGET_CFLAGS += $(TARGET_CFLAGS_ARCH)
@@ -28,6 +28,20 @@ endif
 
 TARGET_ASFLAGS = -Wall -D__ASSEMBLY__ -D_PRTOS_KERNEL_ -fno-builtin -D$(ARCH) -nostdlib -nostdinc -D"__PRTOS_INCFLD(_fld)=<_fld>"
 TARGET_ASFLAGS += -I$(PRTOS_CORE_PATH)/include --include config.h
+
+ifdef CONFIG_AARCH64
+TARGET_CFLAGS +=  -I$(PRTOS_CORE_PATH)/include/asm/ -I$(PRTOS_CORE_PATH)/include/asm/generated 
+TARGET_CFLAGS +=  -I$(PRTOS_CORE_PATH)/include/asm/xen/libfdt 
+TARGET_CFLAGS +=  -I$(PRTOS_CORE_PATH)/kernel/aarch64/xen/common/efi
+TARGET_CFLAGS +=  -I$(PRTOS_CORE_PATH)/kernel/aarch64/xen/arch/arm/efi
+TARGET_CFLAGS +=  -I$(PRTOS_CORE_PATH)/kernel/aarch64/xen/xsm/flask/include
+TARGET_CFLAGS += -D__XEN__
+
+TARGET_ASFLAGS += -I$(PRTOS_CORE_PATH)/include/asm/ -I$(PRTOS_CORE_PATH)/include/asm/generated
+TARGET_ASFLAGS += -D__XEN__
+
+endif
+
 
 TARGET_ASFLAGS += $(TARGET_ASFLAGS_ARCH)
 

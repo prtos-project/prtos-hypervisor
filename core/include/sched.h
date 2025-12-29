@@ -33,7 +33,6 @@ static inline void sched_yield(local_processor_t *info, kthread_t *k) {
 static inline void do_preemption(void) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     hw_cli();
-
     prtos_s32_t e;
     for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
         hw_irq_set_mask(e, info->cpu.global_irq_mask[e]);

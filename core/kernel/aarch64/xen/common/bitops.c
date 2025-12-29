@@ -1,0 +1,92 @@
+#include <xen/xen_config.h>
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
+#include <xen/bitops.h>
+#include <xen/init.h>
+#include <xen/self-tests.h>
+
+static void __init test_ffs(void)
+{
+    /* unsigned int ffs(unsigned int) */
+    CHECK(ffs, 0, 0);
+    CHECK(ffs, 1, 1);
+    CHECK(ffs, 3, 1);
+    CHECK(ffs, 7, 1);
+    CHECK(ffs, 6, 2);
+    CHECK(ffs, 0x80000000U, 32);
+
+    /* unsigned int ffsl(unsigned long) */
+    CHECK(ffsl, 0, 0);
+    CHECK(ffsl, 1, 1);
+    CHECK(ffsl, 3, 1);
+    CHECK(ffsl, 7, 1);
+    CHECK(ffsl, 6, 2);
+
+    CHECK(ffsl, 1UL << (BITS_PER_LONG - 1), BITS_PER_LONG);
+#if BITS_PER_LONG > 32
+    CHECK(ffsl, 1UL << 32, 33);
+    CHECK(ffsl, 1UL << 63, 64);
+#endif
+
+    /*
+     * unsigned int ffs64(uint64_t)
+     *
+     * 32-bit builds of Xen have to split this into two adjacent operations,
+     * so test all interesting bit positions across the divide.
+     */
+    CHECK(ffs64, 0, 0);
+    CHECK(ffs64, 1, 1);
+    CHECK(ffs64, 3, 1);
+    CHECK(ffs64, 7, 1);
+    CHECK(ffs64, 6, 2);
+
+    CHECK(ffs64, 0x8000000080000000ULL, 32);
+    CHECK(ffs64, 0x8000000100000000ULL, 33);
+    CHECK(ffs64, 0x8000000000000000ULL, 64);
+}
+
+static void __init test_fls(void)
+{
+    /* unsigned int fls(unsigned int) */
+    CHECK(fls, 0, 0);
+    CHECK(fls, 1, 1);
+    CHECK(fls, 3, 2);
+    CHECK(fls, 7, 3);
+    CHECK(fls, 6, 3);
+    CHECK(fls, 0x80000000U, 32);
+
+    /* unsigned int flsl(unsigned long) */
+    CHECK(flsl, 0, 0);
+    CHECK(flsl, 1, 1);
+    CHECK(flsl, 3, 2);
+    CHECK(flsl, 7, 3);
+    CHECK(flsl, 6, 3);
+
+    CHECK(flsl, 1 | (1UL << (BITS_PER_LONG - 1)), BITS_PER_LONG);
+#if BITS_PER_LONG > 32
+    CHECK(flsl, 1 | (1UL << 32), 33);
+    CHECK(flsl, 1 | (1UL << 63), 64);
+#endif
+
+    /*
+     * unsigned int fls64(uint64_t)
+     *
+     * 32-bit builds of Xen have to split this into two adjacent operations,
+     * so test all interesting bit positions across the divide.
+     */
+    CHECK(fls64, 0, 0);
+    CHECK(fls64, 1, 1);
+    CHECK(fls64, 3, 2);
+    CHECK(fls64, 7, 3);
+    CHECK(fls64, 6, 3);
+
+    CHECK(fls64, 0x0000000080000001ULL, 32);
+    CHECK(fls64, 0x0000000100000001ULL, 33);
+    CHECK(fls64, 0x8000000000000001ULL, 64);
+}
+
+static void __init __constructor test_bitops(void)
+{
+    test_ffs();
+    test_fls();
+}
