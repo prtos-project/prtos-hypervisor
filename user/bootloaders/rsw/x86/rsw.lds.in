@@ -17,11 +17,12 @@ SECTIONS
 {
   . = START_ADDR;
   _srorsw = .;
-  .text ALIGN (0x1000): {  	
-  	*(.text)
-	. = ALIGN(8);
-	prtos_pef_container_ptr = . ;
-  LONG(_scontainer);
+  .text : {
+    KEEP(*(.multiboot))     /* Keep even if not referenced */
+    *(.text)
+    . = ALIGN(8);
+    prtos_pef_container_ptr = . ;
+    LONG(_scontainer);
   }
 
   .rodata ALIGN (4) : {
