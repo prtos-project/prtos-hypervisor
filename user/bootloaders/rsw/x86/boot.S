@@ -8,6 +8,16 @@
 
 #include "multiboot.h"
 
+.section .multiboot    /* Create separate section for easier linking script positioning */
+.align 4
+_multiboot_header:
+    /* magic */
+    .long __MULTIBOOT_HEADER_MAGIC
+    /* flags */
+    .long __MULTIBOOT_HEADER_FLAGS
+    /* checksum */
+    .long -(__MULTIBOOT_HEADER_MAGIC+__MULTIBOOT_HEADER_FLAGS)
+
 .text
 .align 4
 
@@ -15,18 +25,6 @@
 
 _start:
 start:
-        jmp _multiboot_entry
-.align 4
-
-_multiboot_header:
-/* magic */
-.long __MULTIBOOT_HEADER_MAGIC
-/* flags */
-.long __MULTIBOOT_HEADER_FLAGS
-/* checksum */
-.long -(__MULTIBOOT_HEADER_MAGIC+__MULTIBOOT_HEADER_FLAGS)
-
-_multiboot_entry:
         xorl %eax, %eax
         movl $_sbss, %edi
         movl $_ebss, %ecx
