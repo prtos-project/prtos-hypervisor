@@ -1,24 +1,9 @@
 menu "Drivers"
 
-
-#config TARGET_BIG_ENDIAN
-#       def_bool y
-
 config DEV_UART
        tristate "Enable UART driver"
-       depends on LEON3 || x86
+       depends on AARCH64 || x86
        default y
-
-config DEV_UART_1
-       bool "Reserve UART1"
-       default "y"
-       depends on DEV_UART && !x86
-
-
-config DEV_UART_2
-       bool "Reserve UART2"
-       default "y"
-       depends on DEV_UART && !x86
 
 config DEV_VGA
        bool "Enable VGA driver"
@@ -27,23 +12,23 @@ config DEV_VGA
        
 config EARLY_OUTPUT
        bool "Enable early output"
-       depends on (DEV_UART&&(LEON3))||(x86&&(DEV_UART||DEV_VGA))
+       depends on (DEV_UART&&(AARCH64))||(x86&&(DEV_UART||DEV_VGA))
        default n
 
 config EARLY_CPU_MHZ
        int "CPU frequency (MHz)"
-       depends on EARLY_OUTPUT&&(LEON3)
+       depends on EARLY_OUTPUT&&(AARCH64)
        default 45
 
 config EARLY_UART_BAUDRATE
        int "Early UART baudrate"
-       depends on EARLY_OUTPUT&&(LEON3)
+       depends on EARLY_OUTPUT&&(AARCH64)
        default 115200
 
 choice
         prompt "Select early UART port"
         default EARLY_UART1
-        depends on EARLY_OUTPUT&&(LEON3)
+        depends on EARLY_OUTPUT&&(AARCH64)
 
 config EARLY_UART1
        bool "UART1"
@@ -53,24 +38,16 @@ config EARLY_UART2
 
 endchoice
 
-config DEV_UART_FLOWCONTROL
-       bool "Enable UART flow control"
-       depends on DEV_UART && !x86
-       default y
 
 config DEV_NO_UARTS
        int
        default "2"
        depends on DEV_UART
 
-config UART_THROUGH_DSU
-       bool "DSU samples UART port"
-       depends on (LEON3) && !TSIM
-
 choice
        prompt "Select early output device"
        default EARLY_DEV_UART
-       depends on EARLY_OUTPUT && x86
+       depends on EARLY_OUTPUT && (x86||AARCH64)
        
 config EARLY_DEV_UART
        bool "UART"
@@ -84,5 +61,4 @@ endchoice
 config DEV_MEMBLOCK
        tristate "Enable memory block driver"
        default y
-
 endmenu
