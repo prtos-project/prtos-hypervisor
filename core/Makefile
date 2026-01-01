@@ -109,7 +109,7 @@ core: pbl/pbl.bin $(PRTOS_PATH)/core/include/autoconf.h prtos.lds generate_offse
 	@exec echo "" | $(TARGET_CC) $(TARGET_CFLAGS) -x c -c - -o pbl.o
 	@$(TARGET_OBJCOPY) --add-section .pbl=pbl/pbl.bin --set-section-flags .pbl=alloc pbl.o
 	@exec echo -e "> Linking PRTOS Core";
-	@$(TARGET_LD) $(TARGET_LDFLAGS) -nostdlib -Tkernel/$(ARCH)/prtos.lds -o prtos_core $(KOBJS) $(LIBGCC) ;
+	@$(TARGET_LD) $(TARGET_LDFLAGS) -nostdlib -Tkernel/$(ARCH)/prtos.lds -o prtos_core $(KOBJS) $(LIBGCC)
 	@$(TARGET_SIZE) prtos_core;
 ifdef CONFIG_PEF_COMPRESSION
 	@$(PEF) build prtos_core -c -o prtos_core.pef

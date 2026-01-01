@@ -28,6 +28,11 @@ ifeq ($(ARCH), x86)
     HOST_CFLAGS += $(HOST_CFLAGS_ARCH)
     HOST_ASFLAGS += $(HOST_CFLAGS_ARCH)
 endif
+ifeq ($(ARCH), aarch64)
+    TARGET_CFLAGS += $(TARGET_CFLAGS_ARCH)
+    HOST_CFLAGS += $(HOST_CFLAGS_ARCH)
+    HOST_ASFLAGS += $(HOST_CFLAGS_ARCH)
+endif
 
 TARGET_ASFLAGS = -Wall -D__ASSEMBLY__ -fno-builtin -D$(ARCH) -D"__PRTOS_INCFLD(_fld)=<prtos_inc/_fld>"
 TARGET_ASFLAGS += -I$(LIB_PRTOS_PATH)/include -nostdlib -nostdinc --include prtos_inc/config.h
