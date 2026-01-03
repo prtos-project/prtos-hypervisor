@@ -23,7 +23,7 @@ config VMM_UPDATE_HYPERCALLS
 config NO_HWIRQS
         int
         default "16" if !APIC
-        default "32" if APIC
+        default "1024" if APIC
 
 config TARGET_LITTLE_ENDIAN
         def_bool y

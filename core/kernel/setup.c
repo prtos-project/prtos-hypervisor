@@ -119,10 +119,14 @@ void reset_system(prtos_u32_t reset_mode) {
     raise_audit_event(TRACE_SCHED_MODULE, AUDIT_SCHED_HYP_RESET, 1, (prtos_word_t *)&reset_mode);
 #endif
     if ((reset_mode & PRTOS_RESET_MODE) == PRTOS_WARM_RESET) {
+#ifndef CONFIG_AARCH64  // FIXME: this just a WA for aarch64
         _reset((prtos_address_t)start);
+#endif
     } else {  // Cold reset
         sys_reset_counter[0] = 0;
+#ifndef CONFIG_AARCH64  // FIXME: this just a WA for aarch64
         _reset((prtos_address_t)start);
+#endif
     }
     get_cpu_ctxt(&ctxt);
     system_panic(&ctxt, "Unreachable point\n");
@@ -174,7 +178,7 @@ static void __VBOOT setup_partitions(void) {
                 v_end = v_start + prtos_conf_phys_mem_area_table[a + prtos_conf_partition_table[e].physical_memory_areas_offset].size - 1;
 
                 kprintf("    [0x%lx:0x%lx - 0x%lx:0x%lx]", st, v_start, end, v_end);
-                kprintf(" flags: 0x%x", prtos_conf_phys_mem_area_table[a + prtos_conf_partition_table[e].physical_memory_areas_offset].flags);
+                kprintf(" flags: 0x%llx", prtos_conf_phys_mem_area_table[a + prtos_conf_partition_table[e].physical_memory_areas_offset].flags);
                 kprintf("\n");
             }
 
@@ -194,7 +198,7 @@ static void __VBOOT setup_partitions(void) {
 static void __VBOOT load_conf_table(void) {
     // Check configuration file
     if (prtos_conf_table.signature != PRTOSC_SIGNATURE) halt_system();
-#define CALC_ABS_ADDR_PRTOSC(_offset) (void *)(prtos_conf_table._offset + (prtos_address_t)&prtos_conf_table)
+#define CALC_ABS_ADDR_PRTOSC(_offset) (void *)(prtos_conf_table._offset + (prtos_address_t) & prtos_conf_table)
 
     prtos_conf_partition_table = CALC_ABS_ADDR_PRTOSC(partition_table_offset);
     prtos_conf_boot_partition_table = CALC_ABS_ADDR_PRTOSC(boot_partition_table_offset);
@@ -216,18 +220,304 @@ static void __VBOOT load_conf_table(void) {
 #endif
 }
 
-void __VBOOT setup_kernel(prtos_s32_t cpu_id, kthread_t *idle) {
-#ifdef CONFIG_EARLY_OUTPUT
-    extern void setup_early_output(void);
+#if defined(CONFIG_AARCH64)
+#include <arch/layout.h>
+__attribute__((aligned(SZ_4K))) char _kernel_sp_stack[SZ_4K * NCPU] = {0};
+
+#define __section(s) __attribute__((__section__(s)))
+#define __aligned(a) __attribute__((__aligned__(a)))
+
+#define DEFINE_BOOT_PAGE_TABLES(name, nr) prtos_word_t __aligned(4096L) __section(".data.page_aligned") name[512 * (nr)]
+
+#define DEFINE_BOOT_PAGE_TABLE(name) DEFINE_BOOT_PAGE_TABLES(name, 1)
+#define DEFINE_BOOT_PAGE_TABLES(name, nr) prtos_word_t __aligned(4096L) __section(".data.page_aligned") name[512 * (nr)]
+
+// DEFINE_BOOT_PAGE_TABLE(boot_pgtable);
+// DEFINE_BOOT_PAGE_TABLE(boot_first);
+// DEFINE_BOOT_PAGE_TABLE(boot_first_id);
+// DEFINE_BOOT_PAGE_TABLE(boot_second_id);
+// DEFINE_BOOT_PAGE_TABLE(boot_third_id);
+// DEFINE_BOOT_PAGE_TABLE(boot_second);
+// DEFINE_BOOT_PAGE_TABLES(boot_third, 4);
+
+#if 0
+prtos_word_t __attribute__((aligned(SZ_4K))) __section(".data.page_aligned") boot_pgtable[512];
+prtos_word_t __attribute__((aligned(SZ_4K))) __section(".data.page_aligned") boot_first[512];
+prtos_word_t __attribute__((aligned(SZ_4K))) __section(".data.page_aligned") boot_first_id[512];
+prtos_word_t __attribute__((aligned(SZ_4K))) __section(".data.page_aligned") boot_second_id[512];
+prtos_word_t __attribute__((aligned(SZ_4K))) __section(".data.page_aligned") boot_third_id[512];
+prtos_word_t __attribute__((aligned(SZ_4K))) __section(".data.page_aligned") boot_second[512];
+prtos_word_t __attribute__((aligned(SZ_4K))) __section(".data.page_aligned") boot_third[512 * 4];
+prtos_word_t __attribute__((aligned(SZ_4K))) __section(".data.page_aligned") xen_fixmap[512];
+#else
+
 #endif
 
+struct init_info {
+    /* Pointer to the stack, used by head.S when entering in C */
+    unsigned char *stack;
+    /* Logical CPU ID, used by start_secondary */
+    unsigned int cpuid;
+};
+
+// /* Xen stack for bringing up the first CPU. */
+// static unsigned char __initdata cpu0_boot_stack[STACK_SIZE]
+//        __attribute__((__aligned__(STACK_SIZE)));
+
+__attribute__((aligned(CONFIG_KSTACK_SIZE))) char cpu0_boot_stack_prtos[CONFIG_KSTACK_SIZE] = {0};
+
+/* Boot cpu data */
+struct init_info init_data_prtos = {
+    .stack = cpu0_boot_stack_prtos,
+};
+
+#endif
+
+int prtos_kernel_run = 1;
+
+void __VBOOT setup_kernel(prtos_s32_t cpu_id, kthread_t *idle) {
     ASSERT(!hw_is_sti());
     ASSERT(GET_CPU_ID() == 0);
+
 #ifdef CONFIG_EARLY_OUTPUT
+    extern void setup_early_output(void);
     setup_early_output();
 #endif
+
     load_conf_table();
+
+#if defined(CONFIG_AARCH64)  // Here added print code just for debug in the future.
+    eprintf("cpu_id: %d\n", cpu_id);
+    eprintf("idle: 0x%llx\n", idle);
+    eprintf("base addr of cpu0_boot_stack_prtos: 0x%llx\n", &cpu0_boot_stack_prtos[0]);
+
+    eprintf("_sprtos: 0x%llx --> pa:0x%llx\n", _sprtos, _sprtos - CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR);
+    eprintf("_eprtos: 0x%llx --> pa:0x%llx\n", _eprtos, _eprtos - CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR);
+
+    eprintf("-----------------------------------------------------------\n");
+    {
+        prtos_s32_t e, a;
+        prtos_address_t st, end, v_start, v_end;
+        for (e = 0; e < prtos_conf_table.num_of_partitions; e++) {
+            eprintf("P%d (\"%s\":%d:%d) flags: [", e, &prtos_conf_string_tab[prtos_conf_partition_table[e].name_offset], prtos_conf_partition_table[e].id,
+                    prtos_conf_partition_table[e].num_of_vcpus);
+            if (prtos_conf_partition_table[e].flags & PRTOS_PART_SYSTEM) eprintf(" SYSTEM");
+            if (prtos_conf_partition_table[e].flags & PRTOS_PART_FP) eprintf(" FP");
+            eprintf(" ]:\n");
+
+            for (a = 0; a < prtos_conf_partition_table[e].num_of_physical_memory_areas; a++) {
+                st = prtos_conf_phys_mem_area_table[a + prtos_conf_partition_table[e].physical_memory_areas_offset].start_addr;
+                end = st + prtos_conf_phys_mem_area_table[a + prtos_conf_partition_table[e].physical_memory_areas_offset].size - 1;
+                v_start = prtos_conf_phys_mem_area_table[a + prtos_conf_partition_table[e].physical_memory_areas_offset].mapped_at;
+                v_end = v_start + prtos_conf_phys_mem_area_table[a + prtos_conf_partition_table[e].physical_memory_areas_offset].size - 1;
+
+                eprintf("    [0x%lx:0x%lx - 0x%lx:0x%lx]", st, v_start, end, v_end);
+                eprintf(" flags: 0x%llx", prtos_conf_phys_mem_area_table[a + prtos_conf_partition_table[e].physical_memory_areas_offset].flags);
+                eprintf("\n");
+
+                eprintf("prtos_conf_boot_partition_table[%d].flags:0x%llx\n", e, prtos_conf_boot_partition_table[e].flags);
+                eprintf("prtos_conf_boot_partition_table[%d].hdr_phys_addr:0x%llx\n", e, prtos_conf_boot_partition_table[e].hdr_phys_addr);
+                eprintf("prtos_conf_boot_partition_table[%d].entry_point:0x%llx\n", e, prtos_conf_boot_partition_table[e].entry_point);
+                eprintf("prtos_conf_boot_partition_table[%d].image_start:0x%llx\n", e, prtos_conf_boot_partition_table[e].image_start);
+                eprintf("prtos_conf_boot_partition_table[%d].img_size:0x%llx\n", e, prtos_conf_boot_partition_table[e].img_size);
+                eprintf("prtos_conf_boot_partition_table[%d].num_of_custom_files:0x%llx\n", e, prtos_conf_boot_partition_table[e].num_of_custom_files);
+            }
+        }
+    }
+    eprintf("-----------------------------------------------------------\n");
+
+    eprintf("prtos_conf_rsw_info->entry_point: 0x%llx\n", prtos_conf_rsw_info->entry_point);
+
+    eprintf("-----------------------------------------------------------\n");
+    {
+        prtos_s32_t e;
+        prtos_address_t a, b;
+        for (e = 0; e < prtos_conf_table.num_of_regions; e++) {
+            a = prtos_conf_mem_reg_table[e].start_addr;
+            b = a + prtos_conf_mem_reg_table[e].size - 1;
+            eprintf("prtos_conf_mem_reg_table[%d].start_addr: 0x%llx, end_addr: 0x%llx\n", e, a, b);
+            eprintf("prtos_conf_mem_reg_table[%d].flags: 0x%llx\n", e, prtos_conf_mem_reg_table[e].flags);
+            eprintf("prtos_conf_mem_reg_table[%d].size: 0x%llx\n", e, prtos_conf_mem_reg_table[e].size);
+        }
+    }
+    eprintf("-----------------------------------------------------------\n");
+    {
+        prtos_s32_t e;
+        prtos_address_t a, b;
+        for (e = 0; e < prtos_conf_table.num_of_physical_memory_areas; e++) {
+            a = prtos_conf_phys_mem_area_table[e].start_addr;
+            b = a + prtos_conf_phys_mem_area_table[e].size - 1;
+            eprintf("prtos_conf_phys_mem_area_table[%d].start_addr: 0x%llx, end_addr: 0x%llx\n", e, a, b);
+            eprintf("prtos_conf_phys_mem_area_table[%d].flags: 0x%llx\n", e, prtos_conf_phys_mem_area_table[e].flags);
+            eprintf("prtos_conf_phys_mem_area_table[%d].mapped_at: 0x%llx\n", e, prtos_conf_phys_mem_area_table[e].mapped_at);
+            eprintf("prtos_conf_phys_mem_area_table[%d].memory_region_offset: 0x%llx\n", e, prtos_conf_phys_mem_area_table[e].memory_region_offset);
+            eprintf("prtos_conf_phys_mem_area_table[%d].name_offset: 0x%llx\n", e, prtos_conf_phys_mem_area_table[e].name_offset);
+            eprintf("prtos_conf_phys_mem_area_table[%d].name: %s\n", e, &prtos_conf_string_tab[prtos_conf_phys_mem_area_table[e].name_offset]);
+        }
+    }
+
+    eprintf("-----------------------------------------------------------\n");
+    {
+        prtos_s32_t e;
+        for (e = 0; e < prtos_conf_table.num_of_comm_channels; e++) {
+            eprintf("DOTO:Should print channel info...\n");
+        }
+    }
+    eprintf("-----------------------------------------------------------\n");
+    {
+        prtos_s32_t e;
+        for (e = 0; e < prtos_conf_table.num_of_comm_ports; e++) {
+            eprintf("DOTO:Should print channel ports...\n");
+        }
+    }
+    eprintf("-----------------------------------------------------------\n");
+    {
+        prtos_s32_t e;
+        for (e = 0; e < prtos_conf_table.num_of_sched_cyclic_slots; e++) {
+            eprintf("prtos_conf_sched_cyclic_slot_table[%d].id: %d\n", e, prtos_conf_sched_cyclic_slot_table[e].id);
+            eprintf("prtos_conf_sched_cyclic_slot_table[%d].partition_id: %d\n", e, prtos_conf_sched_cyclic_slot_table[e].partition_id);
+            eprintf("prtos_conf_sched_cyclic_slot_table[%d].vcpu_id: %d\n", e, prtos_conf_sched_cyclic_slot_table[e].vcpu_id);
+            eprintf("prtos_conf_sched_cyclic_slot_table[%d].start_exec: %d\n", e, prtos_conf_sched_cyclic_slot_table[e].start_exec);
+            eprintf("prtos_conf_sched_cyclic_slot_table[%d].end_exec: %d\n", e, prtos_conf_sched_cyclic_slot_table[e].end_exec);
+        }
+    }
+    eprintf("-----------------------------------------------------------\n");
+
+    {
+        prtos_s32_t e;
+        for (e = 0; e < prtos_conf_table.num_of_sched_cyclic_plans; e++) {
+            eprintf("prtos_conf_sched_cyclic_plan_table[%d].name_offset: %d\n", e, prtos_conf_sched_cyclic_plan_table[e].name_offset);
+            eprintf("prtos_conf_sched_cyclic_plan_table[%d].name: %s\n", e, &prtos_conf_string_tab[prtos_conf_sched_cyclic_plan_table[e].name_offset]);
+            eprintf("prtos_conf_sched_cyclic_plan_table[%d].id: %d\n", e, prtos_conf_sched_cyclic_plan_table[e].id);
+            eprintf("prtos_conf_sched_cyclic_plan_table[%d].major_frame: %d\n", e, prtos_conf_sched_cyclic_plan_table[e].major_frame);
+            eprintf("prtos_conf_sched_cyclic_plan_table[%d].num_of_slots: %d\n", e, prtos_conf_sched_cyclic_plan_table[e].num_of_slots);
+            eprintf("prtos_conf_sched_cyclic_plan_table[%d].slots_offset: %d\n", e, prtos_conf_sched_cyclic_plan_table[e].slots_offset);
+        }
+    }
+    eprintf("-----------------------------------------------------------\n");
+
+#endif
+
     init_rsv_mem();
+
+#if defined(CONFIG_AARCH64)
+
+    extern void setup_pagetables(unsigned long boot_phys_offset);
+    unsigned long boot_phys_offset = -CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR;
+    eprintf("boot_phys_offset: 0x%llx\n", boot_phys_offset);
+
+#if 0
+    prtos_kernel_run = 0;
+    eprintf("Booting PRTOS Hypervisor on AArch64\n");
+    void start_xen(unsigned long boot_phys_offset);
+    start_xen(boot_phys_offset);
+#endif
+
+    extern void init_traps(void);
+    extern void init_IRQ(void);
+    void setup_mm(void);
+    void vm_init(void);
+    void smp_clear_cpu_maps(void);
+
+    void init_percpu_areas_prtos();
+    init_percpu_areas_prtos();
+
+    init_traps();
+    setup_pagetables(boot_phys_offset);
+    smp_clear_cpu_maps();
+    setup_mm();
+    vm_init();
+
+    // void  end_boot_allocator(void);
+    // end_boot_allocator();
+
+    init_IRQ();
+
+    void init_global_clock_for_prtos(void);
+    init_global_clock_for_prtos();
+
+    early_setup_arch_common();
+    setup_virt_mm();
+    setup_phys_mm();
+    setup_arch_common();
+    create_local_info();
+    setup_irqs();
+
+    setup_kdev();
+    setup_obj_dir();
+
+    kprintf("PRTOS Hypervisor (%x.%x r%x)\n", (PRTOS_VERSION >> 16) & 0xFF, (PRTOS_VERSION >> 8) & 0xFF, PRTOS_VERSION & 0xFF);
+    kprintf("Detected %lu.%luMHz processor.\n", (prtos_u32_t)(cpu_khz / 1000), (prtos_u32_t)(cpu_khz % 1000));
+    barrier_lock(&smp_start_barrier);
+    init_sched();
+    setup_sys_clock();
+    local_setup(cpu_id, idle);
+
+    void gicv3_dt_preinit_prtos(void);
+    gicv3_dt_preinit_prtos();  // gic_hw_ops is set to gicv3_ops
+
+    void processor_id(void);
+    processor_id();
+
+    void smp_init_cpus_prtos(void);
+    smp_init_cpus_prtos();
+
+    unsigned int smp_get_max_cpus(void);
+    int nr_cpu_ids = smp_get_max_cpus();
+    eprintf("SMP: Allowing %u CPUs\n", nr_cpu_ids);
+
+    int init_xen_time_prtos(void);
+    init_xen_time_prtos();
+
+    void gic_init(void);
+    gic_init();  // Initialize GICv3
+
+    void tasklet_subsys_init(void);
+    tasklet_subsys_init();
+
+    void init_maintenance_interrupt_prtos(void);
+    init_maintenance_interrupt_prtos();  // Initialize maintenance interrupt
+
+    void init_timer_interrupt_prtos(void);
+    init_timer_interrupt_prtos();
+
+    void timer_init(void);
+    timer_init();
+
+    void enable_timer_prtos(void);
+
+    void init_idle_domain_prtos(void);
+    init_idle_domain_prtos();  // Initialize idle domain for other CPUs, // TODO: should be called after smp_init_cpus_prtos()
+
+    void rcu_init(void);
+    rcu_init();
+
+    local_irq_enable();
+
+    void smp_prepare_cpus(void);
+    smp_prepare_cpus();
+
+    // void  do_presmp_initcalls(void);
+    // do_presmp_initcalls();
+
+    int cpu_up_prtos(unsigned int cpu);
+    // int ret = cpu_up_prtos(1);
+    // if ( ret != 0 )
+    //     printk("Failed to bring up CPU %u (error %d)\n", 1, ret);
+
+    void kick_cpus_prtos(void);
+    kick_cpus_prtos();  // TO kick all CPUs
+
+    enable_timer_prtos();  // test timer
+    eprintf("Run to here.......\n");
+    while (1) {
+        prtos_u32_t i;
+        for (i = 0; i < 1000000; i++) {
+            asm volatile("nop");
+        }
+        // printk("PRTOS: Running...\n");
+    };
+#endif
     early_setup_arch_common();
     setup_virt_mm();
     setup_phys_mm();

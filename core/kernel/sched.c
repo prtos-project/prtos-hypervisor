@@ -231,7 +231,6 @@ void schedule(void) {
             stop_vclock(&info->sched.current_kthread->ctrl.g->vclock, &info->sched.current_kthread->ctrl.g->vtimer);
 
         if (new_kthread->ctrl.g) set_hw_timer(traverse_ktimer_queue(&new_kthread->ctrl.local_active_ktimers, get_sys_clock_usec()));
-
         prtos_s32_t e;
         for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
             info->sched.current_kthread->ctrl.irq_mask[e] = hw_irq_get_mask(e);

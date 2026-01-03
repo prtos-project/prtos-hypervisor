@@ -203,6 +203,10 @@ struct prtos_conf_mem_block {
 };
 #endif
 
+#if defined(CONFIG_AARCH64) //FIXME: here just a WA for AARCH64
+#define CONFIG_DEV_NO_UARTS 2
+#endif
+
 struct prtos_conf_device {
 #if defined(CONFIG_DEV_MEMBLOCK) || defined(CONFIG_DEV_MEMBLOCK_MODULE)
     prtos_address_t mem_blocks_offset;
@@ -213,7 +217,7 @@ struct prtos_conf_device {
         prtos_u32_t baud_rate;
     } uart[CONFIG_DEV_NO_UARTS];
 #endif
-#ifdef CONFIG_DEV_VGA
+#if defined(CONFIG_DEV_VGA) || defined (CONFIG_AARCH64)
     struct prtos_conf_vga_cfg {
     } vga;
 #endif

@@ -12,8 +12,13 @@
 #include __PRTOS_INCFLD(arch/irqs.h)
 
 struct hm_cpu_ctxt {
+#ifdef CONFIG_x86
     prtos_u32_t pc;
     prtos_u32_t psr;
+#else
+    prtos_u64_t pc;
+    prtos_u64_t psr;
+#endif
 };
 
 struct prtos_hm_log {

@@ -20,7 +20,15 @@
 #include <arch/physmm.h>
 
 #ifdef CONFIG_MMU
-
+/*
+ * Structure representing a physical page in the physical memory manager
+ * It contains information about the page, such as its virtual address, mapping status,
+ * unlock status, type, and a counter for reference counting
+ * It also includes a spin lock for synchronization
+ * The structure is used to manage physical pages in the system, allowing for operations such as
+ * incrementing and decrementing the reference count, mapping and unlocking pages, and finding pages
+ * in the physical memory manager
+ */
 struct phys_page {
     struct dyn_list_node list_node;
     prtos_address_t v_addr;
