@@ -106,7 +106,7 @@ clean:
 	@exec echo -e "  - Removing *.o *.a *~ files";
 	@find \( -name "*~" -o -name "*.o" -o -name "*.a" -o -name "*.xo" \) -exec rm '{}' \;
 	@find -name "*.gcno" -exec rm '{}' \;
-	@find -name "*.bin" -exec rm '{}' \;
+	@find . -name "*.bin" -not -path "*/user/bail/bin/u-boot.bin" -exec rm '{}' \;
 	@$(RM) -f $(PRTOS_PATH)/core/build.info $(PRTOS_PATH)/user/tools/prtoscparser/prtos_conf.xsd $(PRTOS_PATH)/$(DISTRO).run
 	@exec echo -e "> Done";
 

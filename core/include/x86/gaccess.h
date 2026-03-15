@@ -17,11 +17,14 @@
 #include <arch/asm.h>
 
 #define __arch_g_param
-#define __arch_check_gp_param(__param, __size, __align)                                      \
+#define __arch_check_gp_param(__param, __size, __align)                                     \
     ({                                                                                      \
         prtos_s32_t __r = -1;                                                               \
         if (__param < CONFIG_PRTOS_OFFSET && __param + size < CONFIG_PRTOS_OFFSET) __r = 0; \
         __r;                                                                                \
     })
+
+/* On x86, guest VA == hypervisor VA (identity mapped), so no translation needed */
+#define __arch_gp_to_va(ptr) ((void *)(ptr))
 
 #endif

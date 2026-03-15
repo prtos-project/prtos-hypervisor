@@ -42,15 +42,15 @@ static inline void generate_offsets(void) {
 
     // gctrl_t
     DEFINE(id, offsetof(partition_control_table_t, id), );
-    //DEFINE(iflags, offsetof(partition_control_table_t, iflags), );
-    // DEFINE(flags, offsetof(cpu_ctxt_t, flags), );
-    // DEFINE(cs, offsetof(cpu_ctxt_t, cs), );
-    // DEFINE(ax, offsetof(cpu_ctxt_t, ax), );
-    // DEFINE(err_code, offsetof(cpu_ctxt_t, err_code), );
-    // DEFINE(prev, offsetof(cpu_ctxt_t, prev), );
-    // DEFINE(local_cpu_cpu_ctxt, offsetof(local_cpu_t, cpu_ctxt),);
-    // DEFINE(local_time_flags, offsetof(local_time_t, flags),);
-    // sizeof
+    // DEFINE(iflags, offsetof(partition_control_table_t, iflags), );
+    //  DEFINE(flags, offsetof(cpu_ctxt_t, flags), );
+    //  DEFINE(cs, offsetof(cpu_ctxt_t, cs), );
+    //  DEFINE(ax, offsetof(cpu_ctxt_t, ax), );
+    //  DEFINE(err_code, offsetof(cpu_ctxt_t, err_code), );
+    //  DEFINE(prev, offsetof(cpu_ctxt_t, prev), );
+    //  DEFINE(local_cpu_cpu_ctxt, offsetof(local_cpu_t, cpu_ctxt),);
+    //  DEFINE(local_time_flags, offsetof(local_time_t, flags),);
+    //  sizeof
     DEFINE2(kthread_t, sizeof(kthread_t), );
     DEFINE2(kthreadptr_t, sizeof(kthread_t *), );
     DEFINE2(partition_t, sizeof(partition_t), );
@@ -66,6 +66,8 @@ static inline void generate_offsets(void) {
     DEFINE2(struct_physpageptr, sizeof(struct phys_page *), );
     DEFINE2(struct_physpage, sizeof(struct phys_page), );
     DEFINE2(struct_scheddata, sizeof(struct sched_data), );
+    DEFINE2(partition_control_table_t, sizeof(partition_control_table_t), );
+    DEFINE2(prtos_physical_mem_map, sizeof(struct prtos_physical_mem_map), );
     DEFINE2(local_time_t, sizeof(local_time_t), );
 #ifdef CONFIG_SMP
     DEFINE2(local_processor_t, sizeof(local_processor_t), );

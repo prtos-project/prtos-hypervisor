@@ -419,7 +419,7 @@ void static_gic_interrupt(struct cpu_user_regs *regs) {
                      * Hypervisor timer
                      * Direct call, bypass irq_desc
                      */
-                    printk("CPU%d: static htimer tick\n", smp_processor_id());
+                    // printk("CPU%d: static htimer tick\n", smp_processor_id());
                     static_htimer_isr(irq);
                     // isb();
                     // do_IRQ(regs, irq, 0);

@@ -508,15 +508,12 @@ void __VBOOT setup_kernel(prtos_s32_t cpu_id, kthread_t *idle) {
     void kick_cpus_prtos(void);
     kick_cpus_prtos();  // TO kick all CPUs
 
-    enable_timer_prtos();  // test timer
-    eprintf("Run to here.......\n");
-    while (1) {
-        prtos_u32_t i;
-        for (i = 0; i < 1000000; i++) {
-            asm volatile("nop");
-        }
-        // printk("PRTOS: Running...\n");
-    };
+    enable_timer_prtos();
+    setup_partitions();
+#if CONFIG_DEBUG
+    rsv_mem_debug();
+#endif
+    free_boot_mem();
 #endif
     early_setup_arch_common();
     setup_virt_mm();

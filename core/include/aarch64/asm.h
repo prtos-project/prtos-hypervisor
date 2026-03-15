@@ -16,6 +16,7 @@
 #endif
 
 #include <arch/processor.h>
+#include <arch/paging.h>
 
 #ifndef __ASSEMBLY__
 
@@ -70,10 +71,63 @@ static inline int local_fiq_is_enabled(void) {
 
 #define POP_REGISTERS
 
-/* context-switch */
-#define CONTEXT_SWITCH(next_kthread, current_kthread)
+/* context-switch: save callee-saved registers, swap stacks, restore.
+ * _cs_next: next kthread to run; _cs_old: old kthread (unused, kept for API compat) */
+#define CONTEXT_SWITCH(_cs_next, _cs_old)                                                                                                   \
+    do {                                                                                                                                    \
+        kthread_t **_cs_cur_ptr = &GET_LOCAL_PROCESSOR()->sched.current_kthread;                                                            \
+        __asm__ __volatile__(                  /* Save return address as resume point */                                                    \
+                             "adr x30, 1f\n\t" /* Push callee-saved registers: x19-x28, fp(x29), lr(x30) */                                 \
+                             "stp x29, x30, [sp, #-16]!\n\t"                                                                                \
+                             "stp x27, x28, [sp, #-16]!\n\t"                                                                                \
+                             "stp x25, x26, [sp, #-16]!\n\t"                                                                                \
+                             "stp x23, x24, [sp, #-16]!\n\t"                                                                                \
+                             "stp x21, x22, [sp, #-16]!\n\t"                                                                                \
+                             "stp x19, x20, [sp, #-16]!\n\t" /* Save sp into current kthread->ctrl.kstack */                                \
+                             "ldr x10, [%1]\n\t"             /* x10 = *cur_ptr = old kthread */                                             \
+                             "mov x11, sp\n\t"                                                                                              \
+                             "str x11, [x10, #8]\n\t" /* kthread->ctrl.kstack = sp */ /* Load sp from next kthread->ctrl.kstack */          \
+                             "ldr x11, [%0, #8]\n\t"                                  /* x11 = next->ctrl.kstack */                         \
+                             "mov sp, x11\n\t"                                        /* Update current kthread pointer */                  \
+                             "str %0, [%1]\n\t"                                       /* Restore callee-saved registers */                  \
+                             "ldp x19, x20, [sp], #16\n\t"                                                                                  \
+                             "ldp x21, x22, [sp], #16\n\t"                                                                                  \
+                             "ldp x23, x24, [sp], #16\n\t"                                                                                  \
+                             "ldp x25, x26, [sp], #16\n\t"                                                                                  \
+                             "ldp x27, x28, [sp], #16\n\t"                                                                                  \
+                             "ldp x29, x30, [sp], #16\n\t"                                                                                  \
+                             "ret\n\t"                                                                                                      \
+                             "1:\n\t"                                                                                                       \
+                             :                                                                                                              \
+                             : "r"(_cs_next), "r"(_cs_cur_ptr)                                                                              \
+                             : "x10", "x11", "x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28", "x29", "x30", "memory"); \
+    } while (0)
 
-#define JMP_PARTITION(entry, k)
+/* Jump to partition at EL1 using ERET.
+ * Passes the PCT physical address in x0 (same role as %ebx in x86).
+ * Sets HCR_EL2: HCR_RW(EL1=AArch64) | HCR_AMO | HCR_IMO | HCR_FMO */
+#define JMP_PARTITION(entry, k)                                                                                          \
+    do {                                                                                                                 \
+        prtos_u64_t _pct_paddr = (prtos_u64_t)_VIRT2PHYS((prtos_address_t)(k)->ctrl.g->part_ctrl_table);                 \
+        local_irq_enable();                                                                                              \
+        __asm__ __volatile__(                             /* HCR_EL2: RW=1(EL1 is AArch64) | AMO|IMO|FMO | VM */         \
+                             "mov x10, #0x39\n\t"         /* AMO|IMO|FMO|VM = bits 5:3,0 */                              \
+                             "orr x10, x10, #(1<<31)\n\t" /* HCR_RW = bit 31 */                                          \
+                             "msr hcr_el2, x10\n\t"                                                                      \
+                             "msr elr_el2, %1\n\t"    /* entry point */                                                  \
+                             "mov x10, #0x5\n\t"      /* SPSR_EL2: EL1h mode */                                          \
+                             "msr spsr_el2, x10\n\t"  /* Disable EL1 stage-1 MMU so partition VA=IPA via stage-2 only */ \
+                             "msr sctlr_el1, xzr\n\t" /* Enable FP/SIMD at EL1: CPACR_EL1.FPEN=0b11 (no trap) */         \
+                             "mov x10, #(3 << 20)\n\t"                                                                   \
+                             "msr cpacr_el1, x10\n\t"                                                                    \
+                             "isb\n\t"                                                                                   \
+                             "mov x0, %0\n\t" /* x0 = PCT physical address */                                            \
+                             "isb\n\t"                                                                                   \
+                             "eret\n\t"                                                                                  \
+                             :                                                                                           \
+                             : "r"(_pct_paddr), "r"((prtos_u64_t)(entry))                                                \
+                             : "x0", "x10", "memory");                                                                   \
+    } while (0)
 #endif /*__ASSEMBLY__*/
 
 #define load_seg_selector(_cs, _ds)

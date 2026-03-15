@@ -17,6 +17,12 @@
 
 #define __g_param __arch_g_param
 
+/*
+ * gp_to_va(ptr) - translate a guest parameter pointer to a hypervisor VA.
+ * On x86 (VA==PA): identity.  On AArch64: IPA → Xen directmap EL2 VA.
+ */
+#define gp_to_va(ptr) __arch_gp_to_va(ptr)
+
 #define PFLAG_RW 0x1
 #define PFLAG_NOT_NULL 0x2
 

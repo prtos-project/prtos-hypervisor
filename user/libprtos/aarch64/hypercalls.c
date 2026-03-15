@@ -6,7 +6,7 @@
  * www.prtos.org
  */
 
-//#include <prtoshypercalls.h>
+// #include <prtoshypercalls.h>
 #include <prtos_inc/hypercalls.h>
 #include <hypervisor.h>
 
@@ -23,7 +23,7 @@ prtos_hcall4r(reset_vcpu, prtos_u32_t, vcpu_id, prtos_address_t, ptd_level_1_tab
 
 __stdcall prtos_id_t prtos_get_vcpuid(void) {
     prtos_s32_t _r;
-   // _PRTOS_HCALL0(get_vcpuid_nr, _r);
+    _PRTOS_HCALL0(get_vcpuid_nr, _r);
     return _r;
 }
 prtos_hcall1r(shutdown_partition, prtos_u32_t, partition_id);
@@ -88,5 +88,5 @@ __stdcall prtos_s32_t prtos_set_timer(prtos_u32_t clock_id, prtos_time_t abs_sti
 }
 
 void prtos_x86_iret(void) {
-   // __asm__ __volatile__("lcall $(" TO_STR(PRTOS_IRET_CALLGATE_SEL) "), $0x0\n\t");
+    // __asm__ __volatile__("lcall $(" TO_STR(PRTOS_IRET_CALLGATE_SEL) "), $0x0\n\t");
 }

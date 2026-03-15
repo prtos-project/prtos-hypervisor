@@ -192,10 +192,7 @@ FUNC_LOCAL(create_page_tables)
          * Note the multiplication is just to avoid using an extra
          * register/instruction per iteration.
          */
-        ldr   x0, =_sprtos           /* x0 := vaddr(_start) */
-        add   x1, x0, #XEN_VIRT_SIZE /* x1 := 8MB vaddr size for PRTOS core */
-
-        sub   x0, x1, x0             /* x0 := effective size of PRTOS */
+        ldr   x0, =XEN_VIRT_SIZE      /* x0 := effective size of PRTOS */
         lsr   x0, x0, #PAGE_SHIFT    /* x0 := Number of pages for PRTOS */
         lsl   x0, x0, #3             /* x0 := Number of pages * PTE size */
 
@@ -507,10 +504,19 @@ END(switch_ttbr_id)
 
 ENTRY(start_prtos)
 
-
 .text
+/*
+ * kthread_startup_wrapper - trampoline from CONTEXT_SWITCH into kthread startup
+ * Called with: x19 = start_up function pointer, x20 = entry_point argument
+ */
+FUNC(kthread_startup_wrapper)
+    mov  x0, x20    /* entry_point → first argument */
+    br   x19        /* jump to start_up(entry_point) */
+END(kthread_startup_wrapper)
+
 ENTRY(__halt_system)
-ret
+1:  wfi
+    b   1b
 
 .data
         .word 0

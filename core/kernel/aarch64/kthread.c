@@ -20,32 +20,18 @@
 #include <arch/prtos_def.h>
 
 void switch_kthread_arch_pre(kthread_t *new, kthread_t *current) {
-//     if (current->ctrl.g) {
-//         current->ctrl.g->karch.ptd_level_1 = save_cr3();
-//         current->ctrl.g->karch.cr0 = save_cr0();
-//         if (!(current->ctrl.g->karch.cr0 & _CR0_EM)) {
-//             if (save_cr0() & _CR0_TS) {
-//                 CLTS();
-//             }
-//             save_fpu_state(current->ctrl.g->karch.fp_ctxt);
-//         }
-//     }
-
-//     if (new->ctrl.g) {
-// #ifdef CONFIG_VCPU_MIGRATION
-//         new->ctrl.g->karch.gdt_table[PERCPU_SEL >> 3] = gdt_table[GDT_ENTRY(GET_CPU_ID(), PERCPU_SEL)];
-// #endif
-//         load_gdt(new->ctrl.g->karch.gdtr);
-//         load_idt(new->ctrl.g->karch.idtr);
-//         if (new->ctrl.g->karch.ptd_level_1) {
-//             load_cr3(new->ctrl.g->karch.ptd_level_1);
-//         }
-//         tss_clear_busy(&new->ctrl.g->karch.gdtr, TSS_SEL);
-//         load_tr(TSS_SEL);
-//     } else {
-//         load_hyp_page_table();
-//     }
-//     load_cr0(_CR0_PE | _CR0_PG);
+#ifdef CONFIG_AARCH64
+    if (!new->ctrl.g) {
+        /* Switching to idle kthread: disable stage-2 MMU to prevent
+         * stale VTTBR_EL2 from a previous partition causing translation faults. */
+        asm volatile("msr vttbr_el2, xzr\n\t"
+                     "mrs x10, hcr_el2\n\t"
+                     "bic x10, x10, #1\n\t" /* clear VM bit */
+                     "msr hcr_el2, x10\n\t"
+                     "isb" ::
+                         : "x10", "memory");
+    }
+#endif
 }
 
 void switch_kthread_arch_post(kthread_t *current) {
@@ -55,11 +41,28 @@ void switch_kthread_arch_post(kthread_t *current) {
     // }
 }
 
+extern void kthread_startup_wrapper(void);
+
 extern void setup_kstack(kthread_t *k, void *start_up, prtos_address_t entry_point) {
-    // k->ctrl.kstack = (prtos_u32_t *)&k->kstack[CONFIG_KSTACK_SIZE];
-    // *--(k->ctrl.kstack) = entry_point;
-    // *--(k->ctrl.kstack) = 0;
-    // *--(k->ctrl.kstack) = (prtos_address_t)start_up;
+    prtos_u64_t *sp = (prtos_u64_t *)(&k->kstack[CONFIG_KSTACK_SIZE]);
+    /* Build a stack frame matching the CONTEXT_SWITCH restore sequence:
+     * ldp x19, x20 / ldp x21, x22 / ldp x23, x24 /
+     * ldp x25, x26 / ldp x27, x28 / ldp x29(fp), x30(lr)
+     * x19 = start_up, x20 = entry_point, x30 = kthread_startup_wrapper
+     */
+    *(--sp) = (prtos_u64_t)kthread_startup_wrapper; /* lr (x30) */
+    *(--sp) = 0ULL;                                 /* fp (x29) */
+    *(--sp) = 0ULL;
+    *(--sp) = 0ULL; /* x28, x27 */
+    *(--sp) = 0ULL;
+    *(--sp) = 0ULL; /* x26, x25 */
+    *(--sp) = 0ULL;
+    *(--sp) = 0ULL; /* x24, x23 */
+    *(--sp) = 0ULL;
+    *(--sp) = 0ULL;                     /* x22, x21 */
+    *(--sp) = (prtos_u64_t)entry_point; /* x20 */
+    *(--sp) = (prtos_u64_t)start_up;    /* x19 */
+    k->ctrl.kstack = (prtos_address_t *)sp;
 }
 
 void kthread_arch_init(kthread_t *k) {

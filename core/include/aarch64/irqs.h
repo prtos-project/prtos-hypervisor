@@ -42,7 +42,6 @@ struct trap_handler {
 
 #ifndef __ASSEMBLY__
 
-
 typedef struct _cpu_ctxt {
     prtos_u64_t x19;
     prtos_u64_t x20;
@@ -57,6 +56,7 @@ typedef struct _cpu_ctxt {
     prtos_u64_t fp;
     prtos_u64_t sp;
     prtos_u64_t pc;
+    prtos_u64_t irq_nr;
 } cpu_ctxt_t;
 
 #define GET_CTXT_PC(ctxt) ctxt->pc
@@ -68,7 +68,7 @@ typedef struct _cpu_ctxt {
 #define cpu_ctxt_to_hm_cpu_ctxt(cpu_ctxt, hm_cpu_ctxt) \
     do {                                               \
         (hm_cpu_ctxt)->pc = (cpu_ctxt)->pc;            \
-        (hm_cpu_ctxt)->psr = (cpu_ctxt)->sp;        \
+        (hm_cpu_ctxt)->psr = (cpu_ctxt)->sp;           \
     } while (0)
 
 #define print_hm_cpu_ctxt(ctxt) kprintf("ip: 0x%lx flags: 0x%lx\n", (ctxt)->pc, (ctxt)->psr)
@@ -126,7 +126,7 @@ static inline void mask_part_ctrl_table_irq(prtos_u32_t *mask, prtos_u32_t bitma
 }
 
 static inline prtos_s32_t is_hpv_irq_ctxt(cpu_ctxt_t *ctxt) {
-    //return (ctxt->cs & 0x3) ? 0 : 1;
+    // return (ctxt->cs & 0x3) ? 0 : 1;
     return 1;
 }
 
@@ -149,22 +149,24 @@ static inline prtos_s32_t arch_emul_ext_irq(cpu_ctxt_t *ctxt, partition_control_
 
 /* Access to system registers */
 #define __stringify_1(x...) #x
-#define __stringify(x...)   __stringify_1(x)
+#define __stringify(x...) __stringify_1(x)
 
-#define WRITE_SYSREG64(v, name) do {                    \
-    prtos_u64_t _r = (v);                                  \
-    asm volatile("msr "__stringify(name)", %0" : : "r" (_r));       \
-} while (0)
-#define READ_SYSREG64(name) ({                          \
-    prtos_u64_t _r;                                        \
-    asm volatile("mrs  %0, "__stringify(name) : "=r" (_r));         \
-    _r; })
+#define WRITE_SYSREG64(v, name)                                   \
+    do {                                                          \
+        prtos_u64_t _r = (v);                                     \
+        asm volatile("msr "__stringify(name) ", %0" : : "r"(_r)); \
+    } while (0)
+#define READ_SYSREG64(name)                                    \
+    ({                                                         \
+        prtos_u64_t _r;                                        \
+        asm volatile("mrs  %0, "__stringify(name) : "=r"(_r)); \
+        _r;                                                    \
+    })
 
-#define READ_SYSREG(name)     READ_SYSREG64(name)
+#define READ_SYSREG(name) READ_SYSREG64(name)
 #define WRITE_SYSREG(v, name) WRITE_SYSREG64(v, name)
 
-
-#define SAVE_REG(reg, field)  field = READ_SYSREG64(reg)
+#define SAVE_REG(reg, field) field = READ_SYSREG64(reg)
 
 static inline void get_cpu_ctxt(cpu_ctxt_t *ctxt) {
     // SAVE_REG(x19, ctxt->x19);

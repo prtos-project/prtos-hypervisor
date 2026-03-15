@@ -28,20 +28,20 @@
 #define PTDL1ENTRIES 1024
 #define PTDL2ENTRIES 1024
 
-#define VADDR_TO_PDE_INDEX(x) (((x)&0xffc00000UL) >> PTDL1_SHIFT)
-#define VADDR_TO_PTE_INDEX(x) (((x)&0x3ff000UL) >> PTDL2_SHIFT)
+#define VADDR_TO_PDE_INDEX(x) (((x) & 0xffc00000UL) >> PTDL1_SHIFT)
+#define VADDR_TO_PTE_INDEX(x) (((x) & 0x3ff000UL) >> PTDL2_SHIFT)
 
 #define PDE_AND_PTE_TO_VADDR(l1, l2, l3) (((l1) << PTDL1_SHIFT) | ((l2) << PTDL2_SHIFT))
 #define PRTOS_PCTRLTAB_ADDR (CONFIG_PRTOS_OFFSET - 256 * 1024)
 
 #ifdef _PRTOS_KERNEL_
 #ifndef __ASSEMBLY__
-#define _VIRT2PHYS(x) ((prtos_u32_t)(x)-CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR)
-#define _PHYS2VIRT(x) ((prtos_u32_t)(x) + CONFIG_PRTOS_OFFSET - CONFIG_PRTOS_LOAD_ADDR)
+#define _VIRT2PHYS(x) ((prtos_u64_t)(x) - (prtos_u64_t)CONFIG_PRTOS_OFFSET + (prtos_u64_t)CONFIG_PRTOS_LOAD_ADDR)
+#define _PHYS2VIRT(x) ((prtos_u64_t)(x) + (prtos_u64_t)CONFIG_PRTOS_OFFSET - (prtos_u64_t)CONFIG_PRTOS_LOAD_ADDR)
 
 extern prtos_address_t _page_tables[];
 #else
-#define _VIRT2PHYS(x) ((x)-CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR)
+#define _VIRT2PHYS(x) ((x) - CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR)
 #define _PHYS2VIRT(x) ((x) + CONFIG_PRTOS_OFFSET - CONFIG_PRTOS_LOAD_ADDR)
 #endif
 
@@ -66,14 +66,14 @@ extern prtos_address_t _page_tables[];
 #define _PG_ARCH_PAT 0x100
 #define _PG_ARCH_ADDR (~0xfff)
 
-#define IS_PTD_PRESENT(x) ((x)&_PG_ARCH_PRESENT)
-#define IS_PTE_PRESENT(x) ((x)&_PG_ARCH_PRESENT)
+#define IS_PTD_PRESENT(x) ((x) & _PG_ARCH_PRESENT)
+#define IS_PTE_PRESENT(x) ((x) & _PG_ARCH_PRESENT)
 #define SET_PTD_NOT_PRESENT(x) ((x) & ~_PG_ARCH_PRESENT)
 #define SET_PTE_NOT_PRESENT(x) ((x) & ~_PG_ARCH_PRESENT)
 #define SET_PTE_RONLY(x) ((x) & ~_PG_ARCH_RW)
 #define SET_PTE_UNCACHED(x) ((x) & ~_PG_ARCH_PCD)
-#define GET_PTD_ADDR(x) ((x)&PAGE_MASK)
-#define GET_PTE_ADDR(x) ((x)&PAGE_MASK)
+#define GET_PTD_ADDR(x) ((x) & PAGE_MASK)
+#define GET_PTE_ADDR(x) ((x) & PAGE_MASK)
 #define GET_USER_PTD_ENTRIES(type) VADDR_TO_PDE_INDEX(CONFIG_PRTOS_OFFSET)
 
 #define GET_USER_PTE_ENTRIES(type) PTDL2ENTRIES

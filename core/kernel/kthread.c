@@ -22,6 +22,10 @@
 #include <arch/asm.h>
 #include <arch/prtos_def.h>
 
+#ifdef CONFIG_AARCH64
+extern void setup_stage2_mmu(kthread_t *k);
+#endif
+
 static prtos_s32_t num_of_vcpus;
 
 static void kthread_timer_handle(ktimer_t *ktimer, void *args) {
@@ -49,7 +53,7 @@ void init_idle(kthread_t *idle, prtos_s32_t cpu) {
     prtos_s32_t e;
     for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
         idle->ctrl.irq_mask[e] = hw_irq_get_mask(e) | info->cpu.global_irq_mask[e];
-        idle->ctrl.irq_pend_mask[e] = 0xFFFFFFFF; // All IRQs are pending
+        idle->ctrl.irq_pend_mask[e] = 0xFFFFFFFF;  // All IRQs are pending
     }
     set_kthread_flags(idle, KTHREAD_DCACHE_ENABLED_F | KTHREAD_ICACHE_ENABLED_F);
     set_kthread_flags(idle, KTHREAD_READY_F);
@@ -68,6 +72,9 @@ void start_up_guest(prtos_address_t entry) {
     switch_kthread_arch_post(k);
 
     // JMP_PARTITION must enable interrupts
+#ifdef CONFIG_AARCH64
+    setup_stage2_mmu(k);
+#endif
     JMP_PARTITION(entry, k);
 
     get_cpu_ctxt(&ctxt);
@@ -131,7 +138,7 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) local_irq_mask[e] = local_processor_info[cpu_id].cpu.global_irq_mask[e];
         for (e = 0; e < CONFIG_NO_HWIRQS; e++)
             if (prtos_conf_table.hpv.hw_irq_table[e].owner == cfg->id) {
-                local_irq_mask[e / 32] = ~(1 << (e % 32)); // Enable IRQs owned by the partition
+                local_irq_mask[e / 32] = ~(1 << (e % 32));  // Enable IRQs owned by the partition
             }
 
         k->ctrl.irq_cpu_ctxt = 0;
@@ -251,6 +258,11 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
     // Is partition image valid?
     if (!(prtos_conf_boot_part->flags & PRTOS_PART_BOOT)) return -1;
 
+#ifdef CONFIG_AARCH64
+    /* AArch64: physmm functions are not implemented; skip physical validation.
+     * Stage-2 MMU provides memory isolation; partition runs at EL1 via ERET. */
+    ptd_level_1 = 0;
+#else
     if (!phys_mm_find_area(prtos_conf_boot_part->hdr_phys_addr, sizeof(struct prtos_image_hdr), p, 0)) return -1;
 
     prtos_image_hdr = (struct prtos_image_hdr *)prtos_conf_boot_part->hdr_phys_addr;
@@ -272,6 +284,7 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
     phys_mm_reset_part(p);
     ptd_level_1 = setup_page_table(p, read_by_pass_mmu_word(&prtos_image_hdr->page_table), read_by_pass_mmu_word(&prtos_image_hdr->page_table_size));
     if (ptd_level_1 == ~0) return -1;
+#endif
 
     switch (cold) {
         case PRTOS_WARM_RESET: /*WARM RESET*/
@@ -285,7 +298,13 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
             p->op_mode = PRTOS_OPMODE_COLD_RESET;
             p->kthread[0]->ctrl.g->part_ctrl_table->reset_counter = -1;
             reset_part_ports(p);
+#ifdef CONFIG_AARCH64
+            /* AArch64: no separate partition loader; boot directly to
+             * the partition entry point from the configuration table. */
+            reset_kthread(p->kthread[0], ptd_level_1, prtos_conf_boot_partition_table[p->cfg->id].entry_point, status);
+#else
             reset_kthread(p->kthread[0], ptd_level_1, PRTOS_PCTRLTAB_ADDR - 256 * 1024, status);
+#endif
             break;
         case 2: /*COLD RESET -> used at boot time*/
             p->kthread[0]->ctrl.g->op_mode = PRTOS_OPMODE_COLD_RESET;

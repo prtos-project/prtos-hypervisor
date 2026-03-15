@@ -431,7 +431,14 @@ static void generate_rsv_mem(FILE *out_file) {
     arch_mmu_rsv_mem(out_file);
 #endif
     for (i = 0; i < prtos_conf.num_of_partitions; i++) {
-#if !defined(CONFIG_AARCH64)  // FIXME: here is the WA for build pass
+#if defined(CONFIG_AARCH64)
+        rsv_block(prtos_conf_partition_table[i].num_of_vcpus *
+                      (_PARTITION_CONTROL_TABLE_T_SIZEOF + _PRTOS_PHYSICAL_MEM_MAP_SIZEOF * prtos_conf_partition_table[i].num_of_physical_memory_areas +
+                       ((prtos_conf_partition_table[i].num_of_ports & ((1 << PRTOS_LOG2_WORD_SZ) - 1))
+                            ? (prtos_conf_partition_table[i].num_of_ports >> PRTOS_LOG2_WORD_SZ) + 8 /* sizeof(prtos_word_t) on AArch64 */
+                            : (prtos_conf_partition_table[i].num_of_ports >> PRTOS_LOG2_WORD_SZ))),
+                  PAGE_SIZE, "partition control tables");
+#else
         rsv_block(prtos_conf_partition_table[i].num_of_vcpus *
                       (sizeof(partition_control_table_t) + sizeof(struct prtos_physical_mem_map) * prtos_conf_partition_table[i].num_of_physical_memory_areas +
                        ((prtos_conf_partition_table[i].num_of_ports & ((1 << PRTOS_LOG2_WORD_SZ) - 1))

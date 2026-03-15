@@ -22,22 +22,85 @@
 
 #ifndef __ASSEMBLY__
 
-#define __prtos_cli() prtos_x86_clear_if()
-#define __prtos_sti() prtos_x86_set_if()
+#define __prtos_cli() do {} while (0)
+#define __prtos_sti() do {} while (0)
 
-#define __DO_PRTOSHC "lcall $(" TO_STR(PRTOS_HYPERCALL_CALLGATE_SEL) "), $0x0"
+#define __DO_PRTOSHC "hvc #0"
 
-#define _PRTOS_HCALL0(_hc_nr, _r) 
+#define _PRTOS_HCALL0(_hc_nr, _r)                                          \
+    do {                                                                    \
+        register prtos_u64_t _x0 __asm__("x0") = (prtos_u64_t)(_hc_nr);   \
+        __asm__ __volatile__("hvc #0"                                       \
+            : "+r"(_x0)                                                     \
+            :                                                               \
+            : "x1", "x2", "x3", "x4", "x5", "memory");                    \
+        (_r) = (prtos_s32_t)_x0;                                           \
+    } while (0)
 
-#define _PRTOS_HCALL1(_a0, _hc_nr, _r)
+#define _PRTOS_HCALL1(_a0, _hc_nr, _r)                                     \
+    do {                                                                    \
+        register prtos_u64_t _x0 __asm__("x0") = (prtos_u64_t)(_hc_nr);   \
+        register prtos_u64_t _x1 __asm__("x1") = (prtos_u64_t)(_a0);      \
+        __asm__ __volatile__("hvc #0"                                       \
+            : "+r"(_x0)                                                     \
+            : "r"(_x1)                                                      \
+            : "x2", "x3", "x4", "x5", "memory");                          \
+        (_r) = (prtos_s32_t)_x0;                                           \
+    } while (0)
 
-#define _PRTOS_HCALL2(_a0, _a1, _hc_nr, _r) 
+#define _PRTOS_HCALL2(_a0, _a1, _hc_nr, _r)                                \
+    do {                                                                    \
+        register prtos_u64_t _x0 __asm__("x0") = (prtos_u64_t)(_hc_nr);   \
+        register prtos_u64_t _x1 __asm__("x1") = (prtos_u64_t)(_a0);      \
+        register prtos_u64_t _x2 __asm__("x2") = (prtos_u64_t)(_a1);      \
+        __asm__ __volatile__("hvc #0"                                       \
+            : "+r"(_x0)                                                     \
+            : "r"(_x1), "r"(_x2)                                           \
+            : "x3", "x4", "x5", "memory");                                \
+        (_r) = (prtos_s32_t)_x0;                                           \
+    } while (0)
 
-#define _PRTOS_HCALL3(_a0, _a1, _a2, _hc_nr, _r) 
+#define _PRTOS_HCALL3(_a0, _a1, _a2, _hc_nr, _r)                           \
+    do {                                                                    \
+        register prtos_u64_t _x0 __asm__("x0") = (prtos_u64_t)(_hc_nr);   \
+        register prtos_u64_t _x1 __asm__("x1") = (prtos_u64_t)(_a0);      \
+        register prtos_u64_t _x2 __asm__("x2") = (prtos_u64_t)(_a1);      \
+        register prtos_u64_t _x3 __asm__("x3") = (prtos_u64_t)(_a2);      \
+        __asm__ __volatile__("hvc #0"                                       \
+            : "+r"(_x0)                                                     \
+            : "r"(_x1), "r"(_x2), "r"(_x3)                                \
+            : "x4", "x5", "memory");                                      \
+        (_r) = (prtos_s32_t)_x0;                                           \
+    } while (0)
 
-#define _PRTOS_HCALL4(_a0, _a1, _a2, _a3, _hc_nr, _r) 
+#define _PRTOS_HCALL4(_a0, _a1, _a2, _a3, _hc_nr, _r)                      \
+    do {                                                                    \
+        register prtos_u64_t _x0 __asm__("x0") = (prtos_u64_t)(_hc_nr);   \
+        register prtos_u64_t _x1 __asm__("x1") = (prtos_u64_t)(_a0);      \
+        register prtos_u64_t _x2 __asm__("x2") = (prtos_u64_t)(_a1);      \
+        register prtos_u64_t _x3 __asm__("x3") = (prtos_u64_t)(_a2);      \
+        register prtos_u64_t _x4 __asm__("x4") = (prtos_u64_t)(_a3);      \
+        __asm__ __volatile__("hvc #0"                                       \
+            : "+r"(_x0)                                                     \
+            : "r"(_x1), "r"(_x2), "r"(_x3), "r"(_x4)                     \
+            : "x5", "memory");                                            \
+        (_r) = (prtos_s32_t)_x0;                                           \
+    } while (0)
 
-#define _PRTOS_HCALL5(_a0, _a1, _a2, _a3, _a4, _hc_nr, _r) 
+#define _PRTOS_HCALL5(_a0, _a1, _a2, _a3, _a4, _hc_nr, _r)                 \
+    do {                                                                    \
+        register prtos_u64_t _x0 __asm__("x0") = (prtos_u64_t)(_hc_nr);   \
+        register prtos_u64_t _x1 __asm__("x1") = (prtos_u64_t)(_a0);      \
+        register prtos_u64_t _x2 __asm__("x2") = (prtos_u64_t)(_a1);      \
+        register prtos_u64_t _x3 __asm__("x3") = (prtos_u64_t)(_a2);      \
+        register prtos_u64_t _x4 __asm__("x4") = (prtos_u64_t)(_a3);      \
+        register prtos_u64_t _x5 __asm__("x5") = (prtos_u64_t)(_a4);      \
+        __asm__ __volatile__("hvc #0"                                       \
+            : "+r"(_x0)                                                     \
+            : "r"(_x1), "r"(_x2), "r"(_x3), "r"(_x4), "r"(_x5)          \
+            : "memory");                                                  \
+        (_r) = (prtos_s32_t)_x0;                                           \
+    } while (0)
 
 #define prtos_hcall0(_hc)                        \
     __stdcall void prtos_##_hc(void) {           \
@@ -134,38 +197,15 @@ typedef struct {
     prtos_u32_t low;
 } generic_desc_t;
 
-// extern __stdcall prtos_s32_t prtos_x86_load_cr0(prtos_word_t val);
-// extern __stdcall prtos_s32_t prtos_x86_load_cr3(prtos_word_t val);
-// extern __stdcall prtos_s32_t prtos_x86_load_cr4(prtos_word_t val);
-// extern __stdcall prtos_s32_t prtos_x86_load_tss(struct x86_tss *t);
-// extern __stdcall prtos_s32_t prtos_x86_load_gdt(struct x86_desc_reg *desc);
-// extern __stdcall prtos_s32_t prtos_x86_load_idtr(struct x86_desc_reg *desc);
-// extern __stdcall prtos_s32_t prtos_x86_update_ss_sp(prtos_word_t ss, prtos_word_t sp, prtos_u32_t level);
-// extern __stdcall prtos_s32_t prtos_x86_update_gdt(prtos_s32_t entry, struct x86_desc *gdt);
-// extern __stdcall prtos_s32_t prtos_x86_update_idt(prtos_s32_t entry, struct x86_gate *desc);
-// extern __stdcall void prtos_x86_set_if(void);
-// extern __stdcall void prtos_x86_clear_if(void);
-// extern __stdcall prtos_s32_t prtos_x86_set_watchpoint(prtos_address_t v_addr);
-// extern void prtos_x86_iret(void);
-
-// extern __stdcall void prtos_lazy_x86_load_cr0(prtos_word_t val);
-// extern __stdcall void prtos_lazy_x86_load_cr3(prtos_word_t val);
-// extern __stdcall void prtos_lazy_x86_load_cr4(prtos_word_t val);
-// extern __stdcall void prtos_lazy_x86_load_tss(struct x86_tss *t);
-// extern __stdcall void prtos_lazy_x86_load_gdt(struct x86_desc_reg *desc);
-// extern __stdcall void prtos_lazy_x86_load_idtr(struct x86_desc_reg *desc);
-// extern __stdcall void prtos_lazy_x86_update_ss_sp(prtos_word_t ss, prtos_word_t sp, prtos_u32_t level);
-// extern __stdcall void prtos_lazy_x86_update_gdt(prtos_s32_t entry, struct x86_desc *gdt);
-// extern __stdcall void prtos_lazy_x86_update_idt(prtos_s32_t entry, struct x86_gate *desc);
 #else
 
 // Parameters ->
-// eax: syscall number
-// ebx: 1st parameter
-// ecx: 2nd parameter
+// x0: syscall number
+// x1: 1st parameter
+// x2: 2nd parameter
 // ...
 
-#define __PRTOS_HC lcall $(PRTOS_HYPERCALL_CALLGATE_SEL), $0x0
+#define __PRTOS_HC hvc #0
 
 #endif
 #endif

@@ -193,9 +193,10 @@ void do_unrecover_exception(cpu_ctxt_t *ctxt) {
 }
 
 void do_hyp_irq(cpu_ctxt_t *ctxt) {
-#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
     local_processor_t *info = GET_LOCAL_PROCESSOR();
+#ifndef CONFIG_AARCH64
     ASSERT(!hw_is_sti());
+#endif
 #ifdef CONFIG_AUDIT_EVENTS
     if (is_audit_event_masked(TRACE_IRQ_MODULE)) raise_audit_event(TRACE_IRQ_MODULE, AUDIT_IRQ_RAISED, 1, &ctxt->irq_nr);
 #endif
@@ -215,6 +216,7 @@ void do_hyp_irq(cpu_ctxt_t *ctxt) {
     do {
         schedule();
     } while (info->cpu.irq_nesting_counter == SCHED_PENDING);
+#ifndef CONFIG_AARCH64
     ASSERT(!hw_is_sti());
     ASSERT(!(info->cpu.irq_nesting_counter & SCHED_PENDING));
 #endif
