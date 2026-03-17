@@ -132,6 +132,9 @@ struct kthread_arch {
     /* Timer registers  */
     prtos_u64_t cntkctl;
 
+    /* Stage-2 MMU: per-partition VTTBR_EL2 (includes VMID) */
+    prtos_u64_t vttbr;
+
     // struct vtimer phys_timer;
     // struct vtimer virt_timer;
     // bool vtimer_initialized;

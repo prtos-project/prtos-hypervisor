@@ -50,8 +50,14 @@ static prtos_s32_t init_armv8_current_timer(void) {
     return 1;
 }
 
+/* Xen timer functions for programming CNTHP_CVAL_EL2 */
+extern int reprogram_timer(long long timeout);
+extern long long get_s_time(void);
+
 static void set_armv8_current_timer(prtos_time_t interval) {
-    hw_time_t apic_tmict = (interval * armv8_current_timer_hz[GET_CPU_ID()]) / USECS_PER_SEC;
+    /* Convert interval from microseconds to nanoseconds and program the timer */
+    long long deadline_ns = get_s_time() + (long long)interval * 1000LL;
+    reprogram_timer(deadline_ns);
     hw_enable_irq(LAPIC_TIMER_IRQ);
 }
 

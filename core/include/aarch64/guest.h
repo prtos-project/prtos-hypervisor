@@ -14,15 +14,12 @@
 
 // this structure is visible from the guest
 struct pct_arch {
-//     struct x86_desc_reg gdtr;
-//     struct x86_desc_reg idtr;
-//     prtos_u32_t max_idt_vec;
-//     volatile prtos_u32_t tr;
-//     volatile prtos_u32_t cr4;
-//     volatile prtos_u32_t cr3;
-// #define _ARCH_PTDL1_REG cr3
-//     volatile prtos_u32_t cr2;
-//     volatile prtos_u32_t cr0;
+    prtos_u64_t irq_saved_pc;     // guest PC saved before redirect
+    prtos_u64_t irq_saved_spsr;   // guest SPSR saved before redirect
+    prtos_u64_t irq_saved_x0;    // guest x0 saved before redirect
+    prtos_u32_t irq_vector;       // vector number being delivered (0 = none)
+    prtos_u32_t _pad0;            // alignment padding
+    prtos_u64_t trap_entry;       // partition's trap dispatch stub address
 };
 
 #endif

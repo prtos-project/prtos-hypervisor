@@ -29,7 +29,6 @@ hw_irq_ctrl_t hw_irq_ctrl[CONFIG_NO_HWIRQS];
 void do_unrecover_exception(cpu_ctxt_t *ctxt);
 
 void default_irq_handler(cpu_ctxt_t *ctxt, void *data) {
-#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     prtos_hm_log_t hm_log;
 
@@ -53,29 +52,24 @@ void default_irq_handler(cpu_ctxt_t *ctxt, void *data) {
     hm_raise_event(&hm_log);
 
     kprintf("Unexpected irq %d\n", ctxt->irq_nr);
-#endif
 }
 
 static void trigger_irq_handler(cpu_ctxt_t *ctxt, void *data) {
-#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
     prtos_id_t part_id;
     part_id = prtos_conf_table.hpv.hw_irq_table[ctxt->irq_nr].owner;
 
     set_part_hw_irq_pending(&partition_table[part_id], ctxt->irq_nr);
-#endif
 }
 
 void set_trap_pending(cpu_ctxt_t *ctxt) {
-#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
     local_processor_t *info = GET_LOCAL_PROCESSOR();
 
     ASSERT(!are_kthread_flags_set(info->sched.current_kthread, KTHREAD_TRAP_PENDING_F));
     set_kthread_flags(info->sched.current_kthread, KTHREAD_TRAP_PENDING_F);
-#endif
 }
 
 static inline prtos_address_t is_in_part_exception_table(prtos_address_t addr) {
-#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
+#ifndef CONFIG_AARCH64
     extern struct exception_table {
         prtos_address_t a;
         prtos_address_t b;
@@ -91,7 +85,6 @@ static inline prtos_address_t is_in_part_exception_table(prtos_address_t addr) {
 }
 
 void do_hyp_trap(cpu_ctxt_t *ctxt) {
-#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     prtos_hm_log_t hm_log;
     prtos_s32_t action;
@@ -163,11 +156,9 @@ void do_hyp_trap(cpu_ctxt_t *ctxt) {
     } else
         system_panic(ctxt, "Unexpected/unhandled trap - TRAP: 0x%x ERROR CODE: 0x%x\n",
                      info->sched.current_kthread->ctrl.g->part_ctrl_table->trap_to_vector[ctxt->irq_nr], GET_ECODE(ctxt));
-#endif
 }
 
 void do_unrecover_exception(cpu_ctxt_t *ctxt) {
-#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     prtos_hm_log_t hm_log;
 
@@ -189,7 +180,6 @@ void do_unrecover_exception(cpu_ctxt_t *ctxt) {
     hm_raise_event(&hm_log);
 
     part_panic(ctxt, "Partition unrecoverable error : 0x%x\n", ctxt->irq_nr);
-#endif
 }
 
 void do_hyp_irq(cpu_ctxt_t *ctxt) {
@@ -224,7 +214,6 @@ void do_hyp_irq(cpu_ctxt_t *ctxt) {
 
 void __VBOOT setup_irqs(void) {
     prtos_s32_t irq_nr;
-#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
     for (irq_nr = 0; irq_nr < CONFIG_NO_HWIRQS; irq_nr++) {
         if (prtos_conf_table.hpv.hw_irq_table[irq_nr].owner != PRTOS_IRQ_NO_OWNER) {
             irq_handler_table[irq_nr] = (struct irq_table_entry){
@@ -242,7 +231,6 @@ void __VBOOT setup_irqs(void) {
     for (irq_nr = 0; irq_nr < NO_TRAPS; irq_nr++) trap_handler_table[irq_nr] = 0;
 
     arch_setup_irqs();
-#endif
 }
 
 irq_handler_t set_irq_handler(prtos_s32_t irq, irq_handler_t irq_handler, void *data) {
@@ -330,7 +318,6 @@ static inline prtos_s32_t are_ext_traps_pending(partition_control_table_t *part_
 #endif
 
 prtos_s32_t raise_pend_irqs(cpu_ctxt_t *ctxt) {
-#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     partition_control_table_t *part_ctrl_table;
     prtos_s32_t entry_irq, emul;
@@ -339,6 +326,9 @@ prtos_s32_t raise_pend_irqs(cpu_ctxt_t *ctxt) {
 
     // Software trap
     if (info->sched.current_kthread->ctrl.g->sw_trap & 0x1) {
+#ifdef CONFIG_AARCH64
+        { static int _d=0; if(_d<3){_d++;kprintf("(DBG) raise_pend: sw_trap path\n");} }
+#endif
         emul = info->sched.current_kthread->ctrl.g->sw_trap >> 1;
         info->sched.current_kthread->ctrl.g->sw_trap = 0;
         RAISE_PENDIRQ_AUDIT_EVENT(emul);
@@ -379,6 +369,9 @@ prtos_s32_t raise_pend_irqs(cpu_ctxt_t *ctxt) {
 
     // 4) Check pending extirqs
     if ((entry_irq = are_ext_irqs_pending(part_ctrl_table)) > -1) {
+#ifdef CONFIG_AARCH64
+        { static int _d=0; if(_d<5){_d++;kprintf("(DBG) raise_pend: ext_irq=%d vec=%d pend=0x%x\n",entry_irq,part_ctrl_table->ext_irq_to_vector[entry_irq],part_ctrl_table->ext_irqs_pend);} }
+#endif
         part_ctrl_table->ext_irqs_pend &= ~(1 << entry_irq);
         mask_part_ctrl_table_irq(&part_ctrl_table->ext_irqs_to_mask, (1 << entry_irq));
         disable_part_ctrl_table_irqs(&part_ctrl_table->iflags);
@@ -386,7 +379,7 @@ prtos_s32_t raise_pend_irqs(cpu_ctxt_t *ctxt) {
         RAISE_PENDIRQ_AUDIT_EVENT(emul);
         return irq_vector_to_address(emul);
     }
-#endif
+
     // No emulation required
     return ~0;
 }

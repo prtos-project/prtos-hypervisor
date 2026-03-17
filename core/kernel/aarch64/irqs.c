@@ -71,6 +71,14 @@ prtos_s32_t arch_trap_is_sys_ctxt(cpu_ctxt_t *ctxt) {
     return 1;
 }
 
+prtos_s32_t is_hpv_irq_ctxt(cpu_ctxt_t *ctxt) {
+    local_processor_t *info = GET_LOCAL_PROCESSOR();
+    if (info->sched.current_kthread != info->sched.idle_kthread &&
+        info->sched.current_kthread->ctrl.g)
+        return 0;
+    return 1;
+}
+
 static inline void _set_irq_gate(prtos_s32_t e, void *hndl, prtos_u32_t dpl) {
     // hyp_idt_table[e].seg_selector = CS_SEL;
     // hyp_idt_table[e].offset15_0 = (prtos_address_t)hndl & 0xffff;
@@ -168,65 +176,42 @@ static inline prtos_s32_t test_sp(prtos_address_t *sp, prtos_u32_t size) {
     // return ret;
 }
 
-#define ERRCODE_TAB 0x27d00UL
+/*
+ * prtos_get_guest_regs - Get the Xen guest cpu_user_regs from the stack.
+ * Xen stores guest regs at the top of the per-CPU stack (PAGE_SIZE << 3 = 32KB).
+ */
+#include <arch/paging.h>
+#ifndef STACK_SIZE
+#define STACK_SIZE (PAGE_SIZE << 3)
+#endif
+static inline struct cpu_user_regs *prtos_get_guest_regs(void) {
+    register unsigned long sp asm("sp");
+    struct cpu_info *ci = (struct cpu_info *)((sp & ~(STACK_SIZE - 1)) +
+                                              STACK_SIZE - sizeof(struct cpu_info));
+    return &ci->guest_cpu_user_regs;
+}
+
 void fix_stack(cpu_ctxt_t *ctxt, partition_control_table_t *part_ctrl_table, prtos_s32_t irq_nr, prtos_s32_t vector, prtos_s32_t trap) {
-    // prtos_word_t ip, iflags;
-    // local_processor_t *info = GET_LOCAL_PROCESSOR();
-    // struct x86_gate *idt_entry;
-    // prtos_address_t *sp = 0;
-    // prtos_u16_t cs;
+    struct cpu_user_regs *regs = prtos_get_guest_regs();
 
-    // if (vector >= part_ctrl_table->arch.max_idt_vec) {
-    //     part_panic(ctxt, "error emulating IRQ (%d) bad vector (%d)", irq_nr, vector);
-    // }
-    // idt_entry = (struct x86_gate *)part_ctrl_table->arch.idtr.linear_base + vector;
-    // cs = idt_entry->seg_selector;
-    // ip = (idt_entry->offset31_16 << 16) | idt_entry->offset15_0;
-    // if ((ip >= CONFIG_PRTOS_OFFSET) || !(cs & 0x3)) {
-    //     part_panic(ctxt, "error emulating IRQ (%d) CS:IP (0x%x:0x%x) invalid in IDT", irq_nr, cs, ip);
-    // }
-    // iflags = part_ctrl_table->iflags;
-    // if (!(idt_entry->access & 0x1)) {
-    //     // Disable interruption if in a interrupt process
-    //     part_ctrl_table->iflags &= ~_CPU_FLAG_IF;
-    // }
+    if (!part_ctrl_table->arch.trap_entry) return;
+    if (part_ctrl_table->arch.irq_vector) return;  // already delivering an IRQ
 
-    // if ((ctxt->cs & 0x3) == (cs & 0x3)) {
-    //     // As priority level has not changes, no need to addjust stack regiser(.e.i: ss, esp)
-    //     sp = (prtos_address_t *)ctxt->sp;
-    //     if (test_sp(sp, 16) < 0) part_panic(ctxt, "error emulating IRQ (%d) bad stack pointer 0x%x", irq_nr, sp);
-    // } else {
-    //     prtos_u16_t ss = 0;
-    //     switch (cs & 0x3) {
-    //         case 0x1:
-    //             ss = info->sched.current_kthread->ctrl.g->karch.tss.t.ss1;
-    //             sp = (prtos_address_t *)info->sched.current_kthread->ctrl.g->karch.tss.t.sp1;
-    //             break;
-    //         case 0x2:
-    //             ss = info->sched.current_kthread->ctrl.g->karch.tss.t.ss2;
-    //             sp = (prtos_address_t *)info->sched.current_kthread->ctrl.g->karch.tss.t.sp2;
-    //             break;
-    //         default:
-    //             part_panic(ctxt, "error emulating IRQ (%d) CS (0x%x) corrupted", irq_nr, cs);
-    //             break;
-    //     }
-    //     if (!ss || !sp) {
-    //         part_panic(ctxt, "error emulating IRQ (%d) SS:ESP (0x%x:0x%x) invalid", irq_nr, ss, sp);
-    //     }
-    //     if (test_sp(sp, 24) < 0) part_panic(ctxt, "error emulating IRQ (%d) bad stack pointer 0x%x", irq_nr, sp);
-    //     *(--sp) = ctxt->ss;
-    //     *(--sp) = ctxt->sp;
-    //     ctxt->ss = ss;
-    // }
-    // *(--sp) = (ctxt->flags & ~_CPU_FLAG_IF) | iflags;
-    // *(--sp) = ctxt->cs;
-    // *(--sp) = ctxt->ip;
+    {
+        static int _d = 0;
+        if (_d < 5) {
+            _d++;
+            kprintf("(DBG) fix_stack: vec=%d pc=0x%lx trap_entry=0x%lx regs=%p\n",
+                    vector, (unsigned long)regs->pc,
+                    (unsigned long)part_ctrl_table->arch.trap_entry, regs);
+        }
+    }
 
-    // if (trap && ((1 << irq_nr) & ERRCODE_TAB)) *(--sp) = ctxt->err_code;
-
-    // ctxt->sp = (prtos_word_t)sp;
-    // ctxt->cs = cs;
-    // ctxt->ip = ip;
+    part_ctrl_table->arch.irq_saved_pc = regs->pc;
+    part_ctrl_table->arch.irq_saved_spsr = regs->cpsr;
+    part_ctrl_table->arch.irq_saved_x0 = regs->x0;
+    part_ctrl_table->arch.irq_vector = (prtos_u32_t)vector;
+    regs->pc = part_ctrl_table->arch.trap_entry;
 }
 
 prtos_u32_t hw_irq_get_mask(prtos_s32_t e) {

@@ -59,6 +59,7 @@ typedef struct _cpu_ctxt {
     prtos_u64_t irq_nr;
 } cpu_ctxt_t;
 
+#define GET_ECODE(ctxt) 0
 #define GET_CTXT_PC(ctxt) ctxt->pc
 #define SET_CTXT_PC(ctxt, _pc) \
     do {                       \
@@ -125,10 +126,7 @@ static inline void mask_part_ctrl_table_irq(prtos_u32_t *mask, prtos_u32_t bitma
     // doing nothing
 }
 
-static inline prtos_s32_t is_hpv_irq_ctxt(cpu_ctxt_t *ctxt) {
-    // return (ctxt->cs & 0x3) ? 0 : 1;
-    return 1;
-}
+prtos_s32_t is_hpv_irq_ctxt(cpu_ctxt_t *ctxt);
 
 extern void fix_stack(cpu_ctxt_t *ctxt, partition_control_table_t *part_ctrl_table, prtos_s32_t irq_nr, prtos_s32_t vector, prtos_s32_t trap);
 

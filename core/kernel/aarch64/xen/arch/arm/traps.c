@@ -2019,6 +2019,12 @@ void asmlinkage leave_hypervisor_to_guest(void) {
     while (check_for_vcpu_work()) check_for_pcpu_work();
     check_for_pcpu_work();
 
+    /* PRTOS: deliver pending virtual IRQs to partition before ERET */
+    {
+        extern void prtos_raise_pend_irqs_aarch64(void);
+        prtos_raise_pend_irqs_aarch64();
+    }
+
     vgic_sync_to_lrs();
 
     /*

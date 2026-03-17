@@ -35,10 +35,32 @@ void switch_kthread_arch_pre(kthread_t *new, kthread_t *current) {
 }
 
 void switch_kthread_arch_post(kthread_t *current) {
-    // if (current->ctrl.g) {
-    //     if (!(current->ctrl.g->karch.cr0 & _CR0_EM)) restore_fpu_state(current->ctrl.g->karch.fp_ctxt);
-    //     load_cr0(current->ctrl.g->karch.cr0);
-    // }
+#ifdef CONFIG_AARCH64
+    if (current->ctrl.g) {
+        /* Restore per-partition stage-2 MMU */
+        prtos_u64_t vttbr = current->ctrl.g->karch.vttbr;
+        if (vttbr) {
+            __asm__ __volatile__(
+                "msr vttbr_el2, %0\n\t"
+                "dsb ish\n\t"
+                "tlbi alle1is\n\t"
+                "dsb ish\n\t"
+                "isb\n\t"
+                :
+                : "r"(vttbr)
+                : "memory");
+
+            /* Set HCR_EL2: RW | AMO | IMO | FMO | VM = 0x8000_0039 */
+            prtos_u64_t hcr = 0x80000039ULL;
+            __asm__ __volatile__(
+                "msr hcr_el2, %0\n\t"
+                "isb\n\t"
+                :
+                : "r"(hcr)
+                : "memory");
+        }
+    }
+#endif
 }
 
 extern void kthread_startup_wrapper(void);

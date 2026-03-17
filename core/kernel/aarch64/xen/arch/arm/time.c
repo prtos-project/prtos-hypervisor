@@ -233,7 +233,8 @@ void prtos_gicv3_host_irq_end(int irq);
 extern void prtos_timer_irq_dispatch(int irq_nr);
 void static_htimer_isr(int irq) {
     prtos_gicv3_host_irq_end(irq);
-    enable_timer_prtos();
+    /* Timer reprogramming is now handled by PRTOS's ktimer subsystem
+     * via set_hw_timer() -> set_armv8_current_timer() -> reprogram_timer() */
     prtos_timer_irq_dispatch(irq);
 }
 

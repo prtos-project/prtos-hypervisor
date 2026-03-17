@@ -45,6 +45,9 @@ void *prtos_ipa_to_va(prtos_u64_t ipa) {
 #define S2_L1_ENTRIES 4
 #define S2_L2_ENTRIES 512
 
+/* Maximum number of partitions with independent stage-2 page tables */
+#define MAX_S2_PARTITIONS 4
+
 /* 2MB block stage-2 descriptor attributes:
  *   bits[1:0]  = 0b01  block entry
  *   bits[5:2]  = 0b1111 MemAttr: Normal WB (outer=0b11, inner=0b11)
@@ -78,18 +81,18 @@ void *prtos_ipa_to_va(prtos_u64_t ipa) {
  */
 #define VTCR_EL2_VAL ((1ULL << 31) | (0x2ULL << 16) | (0x3ULL << 12) | (0x1ULL << 10) | (0x1ULL << 8) | (0x1ULL << 6) | 32ULL)
 
-/* Static page tables in BSS (4KB aligned).
- * s2_l2_0: L2 table for L1[0] covering IPA 0x0–0x3FFFFFFF (partition memory).
- * s2_l2_1: L2 table for L1[1] covering IPA 0x40000000–0x7FFFFFFF (PCT in PRTOS memory). */
-static prtos_u64_t s2_l1[S2_L1_ENTRIES] __attribute__((aligned(4096)));
-static prtos_u64_t s2_l2_0[S2_L2_ENTRIES] __attribute__((aligned(4096)));
-static prtos_u64_t s2_l2_1[S2_L2_ENTRIES] __attribute__((aligned(4096)));
+/* Per-partition static page tables in BSS (4KB aligned).
+ * Each partition gets its own L1, L2_0, L2_1 tables indexed by partition ID. */
+static prtos_u64_t s2_l1[MAX_S2_PARTITIONS][S2_L1_ENTRIES] __attribute__((aligned(4096)));
+static prtos_u64_t s2_l2_0[MAX_S2_PARTITIONS][S2_L2_ENTRIES] __attribute__((aligned(4096)));
+static prtos_u64_t s2_l2_1[MAX_S2_PARTITIONS][S2_L2_ENTRIES] __attribute__((aligned(4096)));
 
 /*
  * setup_stage2_mmu - configure stage-2 IPA→PA translation for a partition
  *
  * Maps all partition physical memory areas: IPA (start_addr) → PA (start_addr + offset).
  * Installs VTCR_EL2 and VTTBR_EL2, then enables stage-2 via HCR_EL2.VM.
+ * Stores the VTTBR value in karch.vttbr for context switch restoration.
  *
  * Called from start_up_guest() in kthread.c just before JMP_PARTITION.
  */
@@ -102,22 +105,25 @@ void setup_stage2_mmu(kthread_t *k) {
     prtos_s32_t l1_idx, l2_idx, area;
     prtos_u64_t l2_pa_0, l2_pa_1, pct_pa;
     int pct_l1_idx, pct_l2_idx;
+    prtos_s32_t part_id = KID2PARTID(k->ctrl.g->id);
 
-    /* Zero tables */
-    for (l1_idx = 0; l1_idx < S2_L1_ENTRIES; l1_idx++) s2_l1[l1_idx] = 0;
+    if (part_id >= MAX_S2_PARTITIONS) return;
+
+    /* Zero this partition's tables */
+    for (l1_idx = 0; l1_idx < S2_L1_ENTRIES; l1_idx++) s2_l1[part_id][l1_idx] = 0;
     for (l2_idx = 0; l2_idx < S2_L2_ENTRIES; l2_idx++) {
-        s2_l2_0[l2_idx] = 0;
-        s2_l2_1[l2_idx] = 0;
+        s2_l2_0[part_id][l2_idx] = 0;
+        s2_l2_1[part_id][l2_idx] = 0;
     }
 
-    /* Physical addresses of the two L2 tables */
-    l2_pa_0 = _VIRT2PHYS((prtos_u64_t)s2_l2_0);
-    l2_pa_1 = _VIRT2PHYS((prtos_u64_t)s2_l2_1);
+    /* Physical addresses of this partition's L2 tables */
+    l2_pa_0 = _VIRT2PHYS((prtos_u64_t)s2_l2_0[part_id]);
+    l2_pa_1 = _VIRT2PHYS((prtos_u64_t)s2_l2_1[part_id]);
 
     /* L1[0] → L2 table 0 (covers IPA 0x0 – 0x3FFFFFFF, 1GB window) */
-    s2_l1[0] = l2_pa_0 | S2_TABLE_VALID;
+    s2_l1[part_id][0] = l2_pa_0 | S2_TABLE_VALID;
     /* L1[1] → L2 table 1 (covers IPA 0x40000000 – 0x7FFFFFFF, 1GB window for PCT) */
-    s2_l1[1] = l2_pa_1 | S2_TABLE_VALID;
+    s2_l1[part_id][1] = l2_pa_1 | S2_TABLE_VALID;
 
     /* Map each partition memory area as 2MB blocks */
     p = get_partition(k);
@@ -135,9 +141,9 @@ void setup_stage2_mmu(kthread_t *k) {
             l2_idx = (int)((ipa >> 21) & (S2_L2_ENTRIES - 1));
             block_desc = (pa & ~((1ULL << 21) - 1)) | S2_BLOCK_ATTRS;
             if (l1_idx == 0)
-                s2_l2_0[l2_idx] = block_desc;
+                s2_l2_0[part_id][l2_idx] = block_desc;
             else if (l1_idx == 1)
-                s2_l2_1[l2_idx] = block_desc;
+                s2_l2_1[part_id][l2_idx] = block_desc;
         }
     }
 
@@ -148,14 +154,17 @@ void setup_stage2_mmu(kthread_t *k) {
     pct_l2_idx = (int)((pct_pa >> 21) & (S2_L2_ENTRIES - 1));
     block_desc = (pct_pa & ~((1ULL << 21) - 1)) | S2_BLOCK_ATTRS;
     if (pct_l1_idx == 0)
-        s2_l2_0[pct_l2_idx] = block_desc;
+        s2_l2_0[part_id][pct_l2_idx] = block_desc;
     else if (pct_l1_idx == 1)
-        s2_l2_1[pct_l2_idx] = block_desc;
+        s2_l2_1[part_id][pct_l2_idx] = block_desc;
 
     /* Install stage-2 page tables */
-    prtos_u64_t vttbr = _VIRT2PHYS((prtos_u64_t)s2_l1);
-    /* VMID=1 in bits[63:48] */
-    vttbr |= (1ULL << 48);
+    prtos_u64_t vttbr = _VIRT2PHYS((prtos_u64_t)s2_l1[part_id]);
+    /* VMID = part_id + 1 (VMID 0 reserved for hypervisor) */
+    vttbr |= ((prtos_u64_t)(part_id + 1) << 48);
+
+    /* Store VTTBR for context switch restoration */
+    k->ctrl.g->karch.vttbr = vttbr;
 
     __asm__ __volatile__("msr vtcr_el2, %0\n\t"
                          "msr vttbr_el2, %1\n\t"

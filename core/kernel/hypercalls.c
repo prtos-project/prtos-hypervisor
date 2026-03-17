@@ -395,6 +395,17 @@ __hypercall prtos_s32_t clear_irq_mask_sys(prtos_u32_t hw_irqs_mask, prtos_u32_t
     prtos_s32_t e;
 
     ASSERT(!hw_is_sti());
+#ifdef CONFIG_AARCH64
+    {
+        static int _dbg = 0;
+        if (_dbg < 5) {
+            _dbg++;
+            kprintf("(PRTOS) clear_irq_mask_sys: hw=0x%x ext=0x%x before_mask=0x%x\n",
+                    hw_irqs_mask, ext_irqs_pend,
+                    info->sched.current_kthread->ctrl.g->part_ctrl_table->ext_irqs_to_mask);
+        }
+    }
+#endif
     info->sched.current_kthread->ctrl.g->part_ctrl_table->hw_irqs_mask &= ~hw_irqs_mask;
     info->sched.current_kthread->ctrl.g->part_ctrl_table->ext_irqs_to_mask &= ~ext_irqs_pend;
     unmasked = hw_irqs_mask & get_partition(info->sched.current_kthread)->cfg->hw_irqs;

@@ -83,10 +83,15 @@ __stdcall prtos_s32_t prtos_multicall(void *start_addr, void *end_addr) {
 
 __stdcall prtos_s32_t prtos_set_timer(prtos_u32_t clock_id, prtos_time_t abs_stime, prtos_time_t interval) {
     prtos_s32_t _r;
-    _PRTOS_HCALL5(clock_id, abs_stime, abs_stime >> 32, interval, interval >> 32, set_timer_nr, _r);
+    prtos_u64_t a1 = (prtos_u64_t)abs_stime;
+    prtos_u64_t a2 = (prtos_u64_t)(abs_stime >> 32);
+    prtos_u64_t a3 = (prtos_u64_t)interval;
+    prtos_u64_t a4 = (prtos_u64_t)(interval >> 32);
+    _PRTOS_HCALL5(clock_id, a1, a2, a3, a4, set_timer_nr, _r);
     return _r;
 }
 
 void prtos_x86_iret(void) {
-    // __asm__ __volatile__("lcall $(" TO_STR(PRTOS_IRET_CALLGATE_SEL) "), $0x0\n\t");
+    register prtos_u64_t _x0 __asm__("x0") = 44;  /* PRTOS_IRET_NR = NR_HYPERCALLS */
+    __asm__ __volatile__("hvc #0" : "+r"(_x0) : : "memory");
 }

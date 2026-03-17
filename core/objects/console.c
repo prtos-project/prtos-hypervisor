@@ -54,11 +54,10 @@ static prtos_s32_t write_console_obj(prtos_obj_desc_t desc, prtos_u8_t *__g_para
 
     spin_lock(&console_lock);
     {
-        prtos_u8_t *hbuf = (prtos_u8_t *)gp_to_va(buffer);
         for (e = 0; e < length; e++) {
             preemption_on();
             preemption_off();
-            if (!write_mod(con, &hbuf[e])) {
+            if (!write_mod(con, &buffer[e])) {
                 spin_unlock(&console_lock);
                 return e;
             }

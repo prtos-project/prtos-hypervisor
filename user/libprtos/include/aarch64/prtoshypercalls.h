@@ -83,7 +83,7 @@
         __asm__ __volatile__("hvc #0"                                       \
             : "+r"(_x0)                                                     \
             : "r"(_x1), "r"(_x2), "r"(_x3), "r"(_x4)                     \
-            : "x5", "memory");                                            \
+            : "memory");                                                  \
         (_r) = (prtos_s32_t)_x0;                                           \
     } while (0)
 
@@ -98,7 +98,7 @@
         __asm__ __volatile__("hvc #0"                                       \
             : "+r"(_x0)                                                     \
             : "r"(_x1), "r"(_x2), "r"(_x3), "r"(_x4), "r"(_x5)          \
-            : "memory");                                                  \
+            : );                                                          \
         (_r) = (prtos_s32_t)_x0;                                           \
     } while (0)
 
