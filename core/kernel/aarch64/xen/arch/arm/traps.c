@@ -2008,7 +2008,17 @@ static bool check_for_vcpu_work(void) {
  *
  * The function will return with IRQ masked.
  */
-void asmlinkage leave_hypervisor_to_guest(void) {
+/*
+ * Per-CPU pointer to the current guest's saved cpu_user_regs on the
+ * kthread stack.  Set by leave_hypervisor_to_guest() (called from
+ * entry.S with x0 = sp, which points to the saved frame) so that
+ * PRTOS's fix_stack() can find the guest regs after a CONTEXT_SWITCH
+ * without relying on Xen's STACK_SIZE-aligned per-CPU stack layout.
+ */
+struct cpu_user_regs *prtos_current_guest_regs;
+
+void asmlinkage leave_hypervisor_to_guest(struct cpu_user_regs *regs) {
+    prtos_current_guest_regs = regs;
     local_irq_disable();
 
     /*

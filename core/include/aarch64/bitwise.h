@@ -11,56 +11,37 @@
 
 #define ARCH_HAS_FFS
 
+/* Find first set bit (LSB). Returns bit position (0-based) or -1 if x==0. */
 static __inline__ prtos_s32_t _ffs(prtos_s32_t x) {
-    prtos_s32_t r;
-
-    // __asm__ __volatile__("bsfl %1,%0\n\t"
-    //                      "jnz 1f\n\t"
-    //                      "movl $-1,%0\n"
-    //                      "1:"
-    //                      : "=r"(r)
-    //                      : "g"(x));
-    return r;
+    if (!x) return -1;
+    return __builtin_ctz((unsigned int)x);
 }
 
 #define ARCH_HAS_FFZ
 
+/* Find first zero bit (LSB). Returns bit position (0-based) or -1 if x==~0. */
 static __inline__ prtos_s32_t _ffz(prtos_s32_t x) {
-    prtos_s32_t r;
-
-    // __asm__ __volatile__("bsfl %1,%0\n\t"
-    //                      "jnz 1f\n\t"
-    //                      "movl $-1,%0\n"
-    //                      "1:"
-    //                      : "=r"(r)
-    //                      : "g"(~x));
-    return r;
+    return _ffs(~x);
 }
 
 #define ARCH_HAS_FLS
 
+/* Find last set bit (MSB). Returns bit position (0-based) or -1 if x==0. */
 static __inline__ prtos_s32_t _fls(prtos_s32_t x) {
-    prtos_s32_t r;
-
-    // __asm__ __volatile__("bsrl %1,%0\n\t"
-    //                      "jnz 1f\n\t"
-    //                      "movl $-1,%0\n"
-    //                      "1:"
-    //                      : "=r"(r)
-    //                      : "g"(x));
-    return r;
+    if (!x) return -1;
+    return 31 - __builtin_clz((unsigned int)x);
 }
 
 #define ARCH_HAS_SET_BIT
 
 static inline void _set_bit(prtos_s32_t nr, volatile prtos_u32_t *addr) {
-    // __asm__ __volatile__("btsl %1,%0" : "=m"((*(volatile prtos_s32_t *)addr)) : "Ir"(nr));
+    *addr |= (1U << nr);
 }
 
 #define ARCH_HAS_CLEAR_BIT
 
 static inline void _clear_bit(prtos_s32_t nr, volatile prtos_u32_t *addr) {
-    // __asm__ __volatile__("btrl %1,%0" : "=m"((*(volatile prtos_s32_t *)addr)) : "Ir"(nr));
+    *addr &= ~(1U << nr);
 }
 
 #endif

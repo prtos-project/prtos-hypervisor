@@ -321,14 +321,12 @@ prtos_s32_t raise_pend_irqs(cpu_ctxt_t *ctxt) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     partition_control_table_t *part_ctrl_table;
     prtos_s32_t entry_irq, emul;
-
-    if (!info->sched.current_kthread->ctrl.g || is_hpv_irq_ctxt(ctxt)) return ~0;
+    if (!info->sched.current_kthread->ctrl.g || is_hpv_irq_ctxt(ctxt)) {
+        return ~0;
+    }
 
     // Software trap
     if (info->sched.current_kthread->ctrl.g->sw_trap & 0x1) {
-#ifdef CONFIG_AARCH64
-        { static int _d=0; if(_d<3){_d++;kprintf("(DBG) raise_pend: sw_trap path\n");} }
-#endif
         emul = info->sched.current_kthread->ctrl.g->sw_trap >> 1;
         info->sched.current_kthread->ctrl.g->sw_trap = 0;
         RAISE_PENDIRQ_AUDIT_EVENT(emul);
@@ -369,9 +367,6 @@ prtos_s32_t raise_pend_irqs(cpu_ctxt_t *ctxt) {
 
     // 4) Check pending extirqs
     if ((entry_irq = are_ext_irqs_pending(part_ctrl_table)) > -1) {
-#ifdef CONFIG_AARCH64
-        { static int _d=0; if(_d<5){_d++;kprintf("(DBG) raise_pend: ext_irq=%d vec=%d pend=0x%x\n",entry_irq,part_ctrl_table->ext_irq_to_vector[entry_irq],part_ctrl_table->ext_irqs_pend);} }
-#endif
         part_ctrl_table->ext_irqs_pend &= ~(1 << entry_irq);
         mask_part_ctrl_table_irq(&part_ctrl_table->ext_irqs_to_mask, (1 << entry_irq));
         disable_part_ctrl_table_irqs(&part_ctrl_table->iflags);

@@ -416,14 +416,13 @@ void static_gic_interrupt(struct cpu_user_regs *regs) {
             switch (irq) {
                 case 26:
                     /*
-                     * Hypervisor timer
-                     * Direct call, bypass irq_desc
+                     * Hypervisor timer — EOI+DIR is done inside
+                     * static_htimer_isr() before the handler may
+                     * context-switch.  Use continue to skip the
+                     * loop-bottom EOI+DIR.
                      */
-                    // printk("CPU%d: static htimer tick\n", smp_processor_id());
                     static_htimer_isr(irq);
-                    // isb();
-                    // do_IRQ(regs, irq, 0);
-                    break;
+                    continue;
 
                 default:
                     /*
@@ -439,7 +438,7 @@ void static_gic_interrupt(struct cpu_user_regs *regs) {
             break;
         }
 
-        prtos_gicv3_eoi_irq(irq);
+        prtos_gicv3_host_irq_end(irq);
     }
 }
 

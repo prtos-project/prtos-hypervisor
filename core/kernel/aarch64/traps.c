@@ -100,22 +100,6 @@ extern prtos_s32_t raise_pend_irqs(cpu_ctxt_t *ctxt);
  */
 void prtos_raise_pend_irqs_aarch64(void) {
     cpu_ctxt_t ctxt;
-    local_processor_t *info = GET_LOCAL_PROCESSOR();
-    static int dbg_cnt = 0;
-
     memset(&ctxt, 0, sizeof(ctxt));
-
-    /* Debug: check if we have a partition with pending IRQs */
-    if (info->sched.current_kthread->ctrl.g) {
-        partition_control_table_t *pct = info->sched.current_kthread->ctrl.g->part_ctrl_table;
-        if (pct->ext_irqs_pend && (pct->ext_irqs_pend & ~pct->ext_irqs_to_mask) && dbg_cnt < 10) {
-            dbg_cnt++;
-            kprintf("(PRTOS) raise_pend: pend=0x%x mask=0x%x deliverable=0x%x trap_entry=0x%lx vec=%d\n",
-                    pct->ext_irqs_pend, pct->ext_irqs_to_mask,
-                    pct->ext_irqs_pend & ~pct->ext_irqs_to_mask,
-                    (unsigned long)pct->arch.trap_entry, pct->arch.irq_vector);
-        }
-    }
-
     raise_pend_irqs(&ctxt);
 }

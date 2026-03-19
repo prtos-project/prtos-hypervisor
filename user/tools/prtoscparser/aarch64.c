@@ -120,7 +120,15 @@ void check_io_ports(void) {}
 #define ROUNDUP(r, v) ((((~(r)) + 1) & ((v)-1)) + (r))
 
 void arch_mmu_rsv_mem(FILE *out_file) {
-#if 0  // FIXME: this just a WA to build pass
+#if defined(CONFIG_AARCH64)
+    int i;
+    /* Allocate per-partition stage-2 page tables: L1 + 2 × L2 (each page-aligned) */
+    for (i = 0; i < prtos_conf.num_of_partitions; i++) {
+        rsv_block(PAGE_SIZE, PAGE_SIZE, "s2 L1 table");
+        rsv_block(PAGE_SIZE, PAGE_SIZE, "s2 L2 table");
+        rsv_block(PAGE_SIZE, PAGE_SIZE, "s2 L2 table");
+    }
+#else
     prtos_address_t end;
 
     end = ROUNDUP(_PHYS2VIRT(prtos_conf_mem_area_table[prtos_conf.hpv.physical_memory_areas_offset].start_addr) +

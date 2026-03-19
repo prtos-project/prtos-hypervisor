@@ -149,6 +149,18 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         k->ctrl.g->part_ctrl_table = (partition_control_table_t *)(pct + pct_size * i);
         k->ctrl.g->part_ctrl_table->part_ctrl_table_size = pct_size;
         setup_kthread_arch(k);
+#ifdef CONFIG_AARCH64
+        /* Allocate stage-2 page tables per partition (shared across vcpus) */
+        if (i == 0) {
+            GET_MEMAZ(k->ctrl.g->karch.s2_l1, PAGE_SIZE, PAGE_SIZE);
+            GET_MEMAZ(k->ctrl.g->karch.s2_l2[0], PAGE_SIZE, PAGE_SIZE);
+            GET_MEMAZ(k->ctrl.g->karch.s2_l2[1], PAGE_SIZE, PAGE_SIZE);
+        } else {
+            k->ctrl.g->karch.s2_l1 = p->kthread[0]->ctrl.g->karch.s2_l1;
+            k->ctrl.g->karch.s2_l2[0] = p->kthread[0]->ctrl.g->karch.s2_l2[0];
+            k->ctrl.g->karch.s2_l2[1] = p->kthread[0]->ctrl.g->karch.s2_l2[1];
+        }
+#endif
     }
 
     return p;

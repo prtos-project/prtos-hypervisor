@@ -177,35 +177,19 @@ static inline prtos_s32_t test_sp(prtos_address_t *sp, prtos_u32_t size) {
 }
 
 /*
- * prtos_get_guest_regs - Get the Xen guest cpu_user_regs from the stack.
- * Xen stores guest regs at the top of the per-CPU stack (PAGE_SIZE << 3 = 32KB).
+ * Guest regs pointer set by leave_hypervisor_to_guest() (entry.S passes
+ * sp in x0 which points to the saved cpu_user_regs frame on the current
+ * kthread's stack).  This replaces the old STACK_SIZE-aligned calculation
+ * which assumed Xen's 32 KB per-CPU stack layout.
  */
-#include <arch/paging.h>
-#ifndef STACK_SIZE
-#define STACK_SIZE (PAGE_SIZE << 3)
-#endif
-static inline struct cpu_user_regs *prtos_get_guest_regs(void) {
-    register unsigned long sp asm("sp");
-    struct cpu_info *ci = (struct cpu_info *)((sp & ~(STACK_SIZE - 1)) +
-                                              STACK_SIZE - sizeof(struct cpu_info));
-    return &ci->guest_cpu_user_regs;
-}
+extern struct cpu_user_regs *prtos_current_guest_regs;
 
 void fix_stack(cpu_ctxt_t *ctxt, partition_control_table_t *part_ctrl_table, prtos_s32_t irq_nr, prtos_s32_t vector, prtos_s32_t trap) {
-    struct cpu_user_regs *regs = prtos_get_guest_regs();
+    struct cpu_user_regs *regs = prtos_current_guest_regs;
 
+    if (!regs) return;
     if (!part_ctrl_table->arch.trap_entry) return;
     if (part_ctrl_table->arch.irq_vector) return;  // already delivering an IRQ
-
-    {
-        static int _d = 0;
-        if (_d < 5) {
-            _d++;
-            kprintf("(DBG) fix_stack: vec=%d pc=0x%lx trap_entry=0x%lx regs=%p\n",
-                    vector, (unsigned long)regs->pc,
-                    (unsigned long)part_ctrl_table->arch.trap_entry, regs);
-        }
-    }
 
     part_ctrl_table->arch.irq_saved_pc = regs->pc;
     part_ctrl_table->arch.irq_saved_spsr = regs->cpsr;

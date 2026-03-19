@@ -203,6 +203,7 @@
 
         .if \hyp == 0         /* Guest mode */
 
+        mov     x0, sp
         bl      leave_hypervisor_to_guest /* Mask IRQ on return */
 
         exit_guest \compat
