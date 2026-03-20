@@ -138,6 +138,8 @@ struct kthread_arch {
     /* Stage-2 page table pointers (dynamically allocated via GET_MEMAZ) */
     prtos_u64_t *s2_l1;     /* L1 table: 4 entries, page-aligned */
     prtos_u64_t *s2_l2[2];  /* L2 tables: 512 entries each, page-aligned */
+    prtos_u64_t *s2_l3[8];  /* L3 tables: 512 entries each, for 4KB page mappings */
+    prtos_s32_t s2_l3_count; /* Number of L3 tables allocated so far */
 
     // struct vtimer phys_timer;
     // struct vtimer virt_timer;

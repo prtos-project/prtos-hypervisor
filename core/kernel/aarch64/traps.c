@@ -110,6 +110,26 @@ void prtos_timer_irq_dispatch(int irq_nr) {
     do_hyp_irq(&ctxt);
 }
 
+/*
+ * prtos_stage2_fault_dispatch - Handle stage-2 MMU faults for PRTOS partitions.
+ *
+ * Called from Xen's do_trap_stage2_abort_guest when the faulting domain
+ * is the idle domain (i.e. a PRTOS partition).  Routes the fault through
+ * PRTOS's Health Monitor (do_hyp_trap) so that the configured HM action
+ * (halt, propagate, etc.) is applied.
+ */
+void prtos_stage2_fault_dispatch(prtos_u64_t pc, prtos_u64_t cpsr, int is_data) {
+    cpu_ctxt_t ctxt;
+    memset(&ctxt, 0, sizeof(ctxt));
+    ctxt.pc = pc;
+    ctxt.sp = cpsr;
+    if (is_data)
+        ctxt.irq_nr = AARCH64_DATA_ABORT;
+    else
+        ctxt.irq_nr = AARCH64_PREFETCH_ABORT;
+    do_hyp_trap(&ctxt);
+}
+
 /* Declared in irqs.c */
 extern prtos_s32_t raise_pend_irqs(cpu_ctxt_t *ctxt);
 

@@ -122,11 +122,14 @@ void check_io_ports(void) {}
 void arch_mmu_rsv_mem(FILE *out_file) {
 #if defined(CONFIG_AARCH64)
     int i;
-    /* Allocate per-partition stage-2 page tables: L1 + 2 × L2 (each page-aligned) */
+    int j;
+    /* Allocate per-partition stage-2 page tables: L1 + 2×L2 + 8×L3 (each page-aligned) */
     for (i = 0; i < prtos_conf.num_of_partitions; i++) {
         rsv_block(PAGE_SIZE, PAGE_SIZE, "s2 L1 table");
         rsv_block(PAGE_SIZE, PAGE_SIZE, "s2 L2 table");
         rsv_block(PAGE_SIZE, PAGE_SIZE, "s2 L2 table");
+        for (j = 0; j < 8; j++)
+            rsv_block(PAGE_SIZE, PAGE_SIZE, "s2 L3 table");
     }
 #else
     prtos_address_t end;

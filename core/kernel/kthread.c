@@ -152,13 +152,21 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
 #ifdef CONFIG_AARCH64
         /* Allocate stage-2 page tables per partition (shared across vcpus) */
         if (i == 0) {
+            prtos_s32_t tbl;
             GET_MEMAZ(k->ctrl.g->karch.s2_l1, PAGE_SIZE, PAGE_SIZE);
             GET_MEMAZ(k->ctrl.g->karch.s2_l2[0], PAGE_SIZE, PAGE_SIZE);
             GET_MEMAZ(k->ctrl.g->karch.s2_l2[1], PAGE_SIZE, PAGE_SIZE);
+            for (tbl = 0; tbl < 8; tbl++)
+                GET_MEMAZ(k->ctrl.g->karch.s2_l3[tbl], PAGE_SIZE, PAGE_SIZE);
+            k->ctrl.g->karch.s2_l3_count = 0;
         } else {
+            prtos_s32_t tbl;
             k->ctrl.g->karch.s2_l1 = p->kthread[0]->ctrl.g->karch.s2_l1;
             k->ctrl.g->karch.s2_l2[0] = p->kthread[0]->ctrl.g->karch.s2_l2[0];
             k->ctrl.g->karch.s2_l2[1] = p->kthread[0]->ctrl.g->karch.s2_l2[1];
+            for (tbl = 0; tbl < 8; tbl++)
+                k->ctrl.g->karch.s2_l3[tbl] = p->kthread[0]->ctrl.g->karch.s2_l3[tbl];
+            k->ctrl.g->karch.s2_l3_count = p->kthread[0]->ctrl.g->karch.s2_l3_count;
         }
 #endif
     }

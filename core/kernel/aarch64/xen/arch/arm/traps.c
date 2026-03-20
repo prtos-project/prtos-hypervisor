@@ -1605,13 +1605,12 @@ static void do_trap_stage2_abort_guest(struct cpu_user_regs *regs, const union h
 
     /*
      * PRTOS: For idle domain (PRTOS partitions), Xen's p2m cannot resolve
-     * stage-2 faults. Log the fault for debugging and inject an abort to EL1.
+     * stage-2 faults. Route through PRTOS Health Monitor to halt/propagate.
      */
     if (is_idle_domain(current->domain)) {
-        register_t hpfar = READ_SYSREG(HPFAR_EL2);
-        gprintk(XENLOG_ERR, "PRTOS stage-2 fault: ESR=%#" PRIregister " FAR=%#" PRIvaddr " HPFAR=%#" PRIregister " pc=%#" PRIregister " %s\n", hsr.bits, gva,
-                hpfar, regs->pc, is_data ? "DATA" : "INSN");
-        goto inject_abt;
+        extern void prtos_stage2_fault_dispatch(uint64_t pc, uint64_t cpsr, int is_data);
+        prtos_stage2_fault_dispatch(regs->pc, regs->cpsr, is_data);
+        return;
     }
 
     switch (fsc) {

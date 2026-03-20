@@ -45,25 +45,24 @@ void *prtos_ipa_to_va(prtos_u64_t ipa) {
 #define S2_L1_ENTRIES 4
 #define S2_L2_ENTRIES 512
 
-/* 2MB block stage-2 descriptor attributes:
- *   bits[1:0]  = 0b01  block entry
- *   bits[5:2]  = 0b1111 MemAttr: Normal WB (outer=0b11, inner=0b11)
- *   bits[7:6]  = 0b11  S2AP: R/W
- *   bits[9:8]  = 0b11  SH: Inner Shareable
- *   bit [10]   = 1     AF: Access Flag (avoid AF fault)
- */
-#define S2_BLOCK_AF (1ULL << 10)
-#define S2_BLOCK_SH_IS (3ULL << 8)
-#define S2_BLOCK_S2AP_RW (3ULL << 6)
-#define S2_BLOCK_MEMATTR_NORMAL_WB (0xFULL << 2)
-#define S2_BLOCK_VALID (0x1ULL)
-#define S2_BLOCK_ATTRS (S2_BLOCK_AF | S2_BLOCK_SH_IS | S2_BLOCK_S2AP_RW | S2_BLOCK_MEMATTR_NORMAL_WB | S2_BLOCK_VALID)
+/* Stage-2 descriptor attribute bits (shared between block and page entries) */
+#define S2_AF (1ULL << 10)
+#define S2_SH_IS (3ULL << 8)
+#define S2_S2AP_RW (3ULL << 6)
+#define S2_MEMATTR_NORMAL_WB (0xFULL << 2)
 
-/* L1 table descriptor pointing to an L2 table:
- *   bits[1:0] = 0b11 (table descriptor)
- *   bits[47:12] = L2 physical base address
- */
+/* 2MB block descriptor: bits[1:0] = 0b01 */
+#define S2_BLOCK_VALID (0x1ULL)
+#define S2_BLOCK_ATTRS (S2_AF | S2_SH_IS | S2_S2AP_RW | S2_MEMATTR_NORMAL_WB | S2_BLOCK_VALID)
+
+/* 4KB page descriptor (L3): bits[1:0] = 0b11 */
+#define S2_PAGE_VALID (0x3ULL)
+#define S2_PAGE_ATTRS (S2_AF | S2_SH_IS | S2_S2AP_RW | S2_MEMATTR_NORMAL_WB | S2_PAGE_VALID)
+
+/* Table descriptor (L1→L2 or L2→L3): bits[1:0] = 0b11 */
 #define S2_TABLE_VALID (0x3ULL)
+
+#define S2_L3_ENTRIES 512
 
 /*
  * VTCR_EL2 for 4KB granule, 32-bit IPA, 40-bit PA:
@@ -79,14 +78,38 @@ void *prtos_ipa_to_va(prtos_u64_t ipa) {
 #define VTCR_EL2_VAL ((1ULL << 31) | (0x2ULL << 16) | (0x3ULL << 12) | (0x1ULL << 10) | (0x1ULL << 8) | (0x1ULL << 6) | 32ULL)
 
 /*
+ * get_or_alloc_l3 - Get/allocate an L3 table for a given 2MB block in the L2 table.
+ *
+ * If the L2 entry is already a table descriptor pointing to an L3, return
+ * the L3 pointer.  Otherwise allocate a new L3 table from the pool, install
+ * it in the L2 entry, and return the pointer.
+ */
+static prtos_u64_t *get_or_alloc_l3(kthread_t *k, prtos_u64_t *l2, prtos_s32_t l2_idx) {
+    if ((l2[l2_idx] & 0x3) == S2_TABLE_VALID) {
+        /* Already a table descriptor → find the L3 table by matching PA */
+        prtos_u64_t l3_pa = l2[l2_idx] & ~((1ULL << 12) - 1) & ((1ULL << 48) - 1);
+        prtos_s32_t i;
+        for (i = 0; i < k->ctrl.g->karch.s2_l3_count; i++) {
+            if (_VIRT2PHYS((prtos_u64_t)k->ctrl.g->karch.s2_l3[i]) == l3_pa)
+                return k->ctrl.g->karch.s2_l3[i];
+        }
+    }
+    /* Allocate a new L3 table from the pool */
+    prtos_s32_t idx = k->ctrl.g->karch.s2_l3_count;
+    prtos_u64_t *l3 = k->ctrl.g->karch.s2_l3[idx];
+    prtos_s32_t i;
+    for (i = 0; i < S2_L3_ENTRIES; i++) l3[i] = 0;
+    k->ctrl.g->karch.s2_l3_count++;
+    /* Install L2 table descriptor pointing to this L3 */
+    l2[l2_idx] = _VIRT2PHYS((prtos_u64_t)l3) | S2_TABLE_VALID;
+    return l3;
+}
+
+/*
  * setup_stage2_mmu - configure stage-2 IPA→PA translation for a partition
  *
- * Uses per-partition page tables dynamically allocated via GET_MEMAZ()
- * during create_partition() and stored in karch.s2_l1/s2_l2[].
- *
- * Maps all partition physical memory areas: IPA (start_addr) → PA (start_addr + offset).
- * Installs VTCR_EL2 and VTTBR_EL2, then enables stage-2 via HCR_EL2.VM.
- * Stores the VTTBR value in karch.vttbr for context switch restoration.
+ * Uses L3 (4KB page) mappings for partition memory areas to provide
+ * fine-grained memory isolation between partitions.
  *
  * Called from start_up_guest() in kthread.c just before JMP_PARTITION.
  */
@@ -94,11 +117,9 @@ void setup_stage2_mmu(kthread_t *k) {
     partition_t *p;
     struct prtos_conf_part *cfg;
     struct prtos_conf_memory_area *areas;
-    prtos_u64_t block_desc;
     prtos_u64_t ipa, pa, end_ipa;
-    prtos_s32_t l1_idx, l2_idx, area;
+    prtos_s32_t l1_idx, l2_idx, l3_idx, area, i;
     prtos_u64_t l2_pa_0, l2_pa_1, pct_pa;
-    int pct_l1_idx, pct_l2_idx;
     prtos_s32_t part_id = KID2PARTID(k->ctrl.g->id);
 
     prtos_u64_t *l1 = k->ctrl.g->karch.s2_l1;
@@ -106,22 +127,23 @@ void setup_stage2_mmu(kthread_t *k) {
     prtos_u64_t *l2_1 = k->ctrl.g->karch.s2_l2[1];
 
     /* Zero this partition's tables */
-    for (l1_idx = 0; l1_idx < S2_L1_ENTRIES; l1_idx++) l1[l1_idx] = 0;
-    for (l2_idx = 0; l2_idx < S2_L2_ENTRIES; l2_idx++) {
-        l2_0[l2_idx] = 0;
-        l2_1[l2_idx] = 0;
+    for (i = 0; i < S2_L1_ENTRIES; i++) l1[i] = 0;
+    for (i = 0; i < S2_L2_ENTRIES; i++) {
+        l2_0[i] = 0;
+        l2_1[i] = 0;
     }
+    k->ctrl.g->karch.s2_l3_count = 0;
 
     /* Physical addresses of this partition's L2 tables */
     l2_pa_0 = _VIRT2PHYS((prtos_u64_t)l2_0);
     l2_pa_1 = _VIRT2PHYS((prtos_u64_t)l2_1);
 
-    /* L1[0] → L2 table 0 (covers IPA 0x0 – 0x3FFFFFFF, 1GB window) */
+    /* L1[0] → L2 table 0 (covers IPA 0x0 – 0x3FFFFFFF) */
     l1[0] = l2_pa_0 | S2_TABLE_VALID;
-    /* L1[1] → L2 table 1 (covers IPA 0x40000000 – 0x7FFFFFFF, 1GB window for PCT) */
+    /* L1[1] → L2 table 1 (covers IPA 0x40000000 – 0x7FFFFFFF) */
     l1[1] = l2_pa_1 | S2_TABLE_VALID;
 
-    /* Map each partition memory area as 2MB blocks */
+    /* Map each partition memory area using 4KB pages via L3 tables */
     p = get_partition(k);
     cfg = p->cfg;
     areas = &prtos_conf_phys_mem_area_table[cfg->physical_memory_areas_offset];
@@ -129,37 +151,33 @@ void setup_stage2_mmu(kthread_t *k) {
     for (area = 0; area < cfg->num_of_physical_memory_areas; area++) {
         ipa = areas[area].start_addr;
         end_ipa = ipa + areas[area].size;
-        pa = ipa + AARCH64_IPA_TO_PA_OFFSET;
 
-        /* Align to 2MB boundary and map in 2MB blocks */
-        for (; ipa < end_ipa; ipa += (1ULL << 21), pa += (1ULL << 21)) {
+        for (; ipa < end_ipa; ipa += PAGE_SIZE) {
+            pa = ipa + AARCH64_IPA_TO_PA_OFFSET;
             l1_idx = (int)(ipa >> 30) & (S2_L1_ENTRIES - 1);
             l2_idx = (int)((ipa >> 21) & (S2_L2_ENTRIES - 1));
-            block_desc = (pa & ~((1ULL << 21) - 1)) | S2_BLOCK_ATTRS;
-            if (l1_idx == 0)
-                l2_0[l2_idx] = block_desc;
-            else if (l1_idx == 1)
-                l2_1[l2_idx] = block_desc;
+            l3_idx = (int)((ipa >> 12) & (S2_L3_ENTRIES - 1));
+
+            prtos_u64_t *l2 = (l1_idx == 0) ? l2_0 : l2_1;
+            prtos_u64_t *l3 = get_or_alloc_l3(k, l2, l2_idx);
+            l3[l3_idx] = (pa & ~((1ULL << 12) - 1)) | S2_PAGE_ATTRS;
         }
     }
 
-    /* Map the PCT with identity IPA=PA so the partition can access it.
-     * PCT is in PRTOS BSS (phys 0x49000000+), falling in L1[1] (0x40000000-0x7FFFFFFF). */
+    /* Map the PCT (4KB pages) so the partition can access it */
     pct_pa = _VIRT2PHYS((prtos_u64_t)k->ctrl.g->part_ctrl_table);
-    pct_l1_idx = (int)(pct_pa >> 30) & (S2_L1_ENTRIES - 1);
-    pct_l2_idx = (int)((pct_pa >> 21) & (S2_L2_ENTRIES - 1));
-    block_desc = (pct_pa & ~((1ULL << 21) - 1)) | S2_BLOCK_ATTRS;
-    if (pct_l1_idx == 0)
-        l2_0[pct_l2_idx] = block_desc;
-    else if (pct_l1_idx == 1)
-        l2_1[pct_l2_idx] = block_desc;
+    {
+        prtos_s32_t pct_l1_idx = (int)(pct_pa >> 30) & (S2_L1_ENTRIES - 1);
+        prtos_s32_t pct_l2_idx = (int)((pct_pa >> 21) & (S2_L2_ENTRIES - 1));
+        prtos_s32_t pct_l3_idx = (int)((pct_pa >> 12) & (S2_L3_ENTRIES - 1));
+        prtos_u64_t *l2 = (pct_l1_idx == 0) ? l2_0 : l2_1;
+        prtos_u64_t *l3 = get_or_alloc_l3(k, l2, pct_l2_idx);
+        l3[pct_l3_idx] = (pct_pa & ~((1ULL << 12) - 1)) | S2_PAGE_ATTRS;
+    }
 
     /* Install stage-2 page tables */
     prtos_u64_t vttbr = _VIRT2PHYS((prtos_u64_t)l1);
-    /* VMID = part_id + 1 (VMID 0 reserved for hypervisor) */
     vttbr |= ((prtos_u64_t)(part_id + 1) << 48);
-
-    /* Store VTTBR for context switch restoration */
     k->ctrl.g->karch.vttbr = vttbr;
 
     __asm__ __volatile__("msr vtcr_el2, %0\n\t"
