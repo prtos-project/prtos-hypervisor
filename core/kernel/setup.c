@@ -286,7 +286,7 @@ void __VBOOT setup_kernel(prtos_s32_t cpu_id, kthread_t *idle) {
 
     load_conf_table();
 
-#if defined(CONFIG_AARCH64)  // Here added print code just for debug in the future.
+#if 0  // Here added print code just for debug in the future.
     eprintf("cpu_id: %d\n", cpu_id);
     eprintf("idle: 0x%llx\n", idle);
     eprintf("base addr of cpu0_boot_stack_prtos: 0x%llx\n", &cpu0_boot_stack_prtos[0]);
