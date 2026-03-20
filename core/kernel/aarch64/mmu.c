@@ -121,6 +121,28 @@ void setup_stage2_mmu(kthread_t *k) {
     prtos_s32_t l1_idx, l2_idx, l3_idx, area, i;
     prtos_u64_t l2_pa_0, l2_pa_1, pct_pa;
     prtos_s32_t part_id = KID2PARTID(k->ctrl.g->id);
+    prtos_s32_t vcpu_id = KID2VCPUID(k->ctrl.g->id);
+
+    /*
+     * Stage-2 page tables are shared across all vCPUs of the same partition.
+     * Only vCPU0 populates the tables; subsequent vCPUs just install VTTBR.
+     */
+    if (vcpu_id != 0) {
+        /* Compute VTTBR from the shared L1 table (already populated by vCPU0) */
+        prtos_u64_t vttbr = _VIRT2PHYS((prtos_u64_t)k->ctrl.g->karch.s2_l1);
+        vttbr |= ((prtos_u64_t)(part_id + 1) << 48);
+        k->ctrl.g->karch.vttbr = vttbr;
+        __asm__ __volatile__("msr vtcr_el2, %0\n\t"
+                             "msr vttbr_el2, %1\n\t"
+                             "dsb ish\n\t"
+                             "tlbi alle1is\n\t"
+                             "dsb ish\n\t"
+                             "isb\n\t"
+                             :
+                             : "r"((prtos_u64_t)VTCR_EL2_VAL), "r"(vttbr)
+                             : "memory");
+        return;
+    }
 
     prtos_u64_t *l1 = k->ctrl.g->karch.s2_l1;
     prtos_u64_t *l2_0 = k->ctrl.g->karch.s2_l2[0];
@@ -164,15 +186,19 @@ void setup_stage2_mmu(kthread_t *k) {
         }
     }
 
-    /* Map the PCT (4KB pages) so the partition can access it */
-    pct_pa = _VIRT2PHYS((prtos_u64_t)k->ctrl.g->part_ctrl_table);
+    /* Map the entire PCT array (all vCPUs) so every vCPU can access its PCT */
     {
-        prtos_s32_t pct_l1_idx = (int)(pct_pa >> 30) & (S2_L1_ENTRIES - 1);
-        prtos_s32_t pct_l2_idx = (int)((pct_pa >> 21) & (S2_L2_ENTRIES - 1));
-        prtos_s32_t pct_l3_idx = (int)((pct_pa >> 12) & (S2_L3_ENTRIES - 1));
-        prtos_u64_t *l2 = (pct_l1_idx == 0) ? l2_0 : l2_1;
-        prtos_u64_t *l3 = get_or_alloc_l3(k, l2, pct_l2_idx);
-        l3[pct_l3_idx] = (pct_pa & ~((1ULL << 12) - 1)) | S2_PAGE_ATTRS;
+        prtos_u64_t pct_base_pa = _VIRT2PHYS((prtos_u64_t)p->pct_array);
+        prtos_u64_t pct_end_pa = pct_base_pa + p->pct_array_size;
+        prtos_u64_t pg;
+        for (pg = pct_base_pa & ~((prtos_u64_t)PAGE_SIZE - 1); pg < pct_end_pa; pg += PAGE_SIZE) {
+            prtos_s32_t pg_l1 = (int)(pg >> 30) & (S2_L1_ENTRIES - 1);
+            prtos_s32_t pg_l2 = (int)((pg >> 21) & (S2_L2_ENTRIES - 1));
+            prtos_s32_t pg_l3 = (int)((pg >> 12) & (S2_L3_ENTRIES - 1));
+            prtos_u64_t *l2 = (pg_l1 == 0) ? l2_0 : l2_1;
+            prtos_u64_t *l3 = get_or_alloc_l3(k, l2, pg_l2);
+            l3[pg_l3] = (pg & ~((1ULL << 12) - 1)) | S2_PAGE_ATTRS;
+        }
     }
 
     /* Install stage-2 page tables */
