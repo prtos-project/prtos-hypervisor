@@ -45,7 +45,7 @@ prtos_hcall2r(raise_partition_ipvi, prtos_u32_t, partition_id, prtos_u8_t, no_ip
 prtos_hcall2r(update_page32, prtos_address_t, p_addr, prtos_u32_t, val);
 prtos_hcall2r(set_page_type, prtos_address_t, p_addr, prtos_u32_t, type);
 
-// prtos_hcall2r(switch_sched_plan, prtos_u32_t, new_plan_id, prtos_u32_t *, current_plan_id);
+prtos_hcall2r(switch_sched_plan, prtos_u32_t, new_plan_id, prtos_u32_t *, current_plan_id);
 // prtos_hcall2r(get_gid_by_name, prtos_u8_t *, name, prtos_u32_t, entity);
 
 // prtos_hcall1r(x86_load_cr0, prtos_word_t, val);
@@ -90,4 +90,11 @@ __stdcall prtos_s32_t prtos_set_timer(prtos_u32_t clock_id, prtos_time_t abs_sti
 void prtos_x86_iret(void) {
     register prtos_u64_t _x0 __asm__("x0") = 44;  /* PRTOS_IRET_NR = NR_HYPERCALLS */
     __asm__ __volatile__("hvc #0" : "+r"(_x0) : : "memory");
+}
+
+__stdcall prtos_s32_t prtos_raise_partition_trap(prtos_u32_t trap_nr) {
+    register prtos_u64_t _x0 __asm__("x0") = 45;  /* PRTOS_RAISE_TRAP_NR = NR_HYPERCALLS + 1 */
+    register prtos_u64_t _x1 __asm__("x1") = (prtos_u64_t)trap_nr;
+    __asm__ __volatile__("hvc #0" : "+r"(_x0) : "r"(_x1) : "x2", "x3", "x4", "x5", "memory");
+    return (prtos_s32_t)_x0;
 }

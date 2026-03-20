@@ -505,6 +505,9 @@ void __VBOOT setup_kernel(prtos_s32_t cpu_id, kthread_t *idle) {
     // if ( ret != 0 )
     //     printk("Failed to bring up CPU %u (error %d)\n", 1, ret);
 
+    void prtos_alloc_secondary_idle_kthreads(void);
+    prtos_alloc_secondary_idle_kthreads();
+
     void kick_cpus_prtos(void);
     kick_cpus_prtos();  // TO kick all CPUs
 
@@ -554,4 +557,43 @@ void __VBOOT init_secondary_cpu(prtos_s32_t cpu_id, kthread_t *idle) {
     idle_task();
 }
 
+#endif
+
+#ifdef CONFIG_AARCH64
+/*
+ * prtos_init_secondary_cpu - Initialize PRTOS scheduling on a secondary CPU.
+ *
+ * Called from Xen's idle_loop on AArch64 secondary CPUs that have
+ * PRTOS scheduling assignments. Allocates an idle kthread, sets up
+ * the local processor state, and enables the PRTOS scheduler.
+ *
+ * Returns 1 if this CPU has PRTOS scheduling work, 0 otherwise.
+ */
+static kthread_t *secondary_idle_kthreads[CONFIG_NO_CPUS];
+
+int prtos_init_secondary_cpu(unsigned int cpu) {
+    if (cpu == 0 || cpu >= prtos_conf_table.hpv.num_of_cpus)
+        return 0;
+
+    if (!secondary_idle_kthreads[cpu])
+        return 0;
+
+    local_setup(cpu, secondary_idle_kthreads[cpu]);
+    GET_LOCAL_PROCESSOR()->sched.flags |= LOCAL_SCHED_ENABLED;
+    return 1;
+}
+
+void prtos_alloc_secondary_idle_kthreads(void) {
+    prtos_s32_t cpu;
+    for (cpu = 1; cpu < prtos_conf_table.hpv.num_of_cpus; cpu++) {
+        kthread_t *k;
+        GET_MEMAZ(k, sizeof(kthread_t), ALIGNMENT);
+        GET_MEMAZ(k->ctrl.g, sizeof(struct guest), ALIGNMENT);
+        k->ctrl.magic1 = k->ctrl.magic2 = KTHREAD_MAGIC;
+        k->ctrl.g->id = 0xfe00 | cpu;
+        dyn_list_init(&k->ctrl.local_active_ktimers);
+        k->ctrl.lock = SPINLOCK_INIT;
+        secondary_idle_kthreads[cpu] = k;
+    }
+}
 #endif

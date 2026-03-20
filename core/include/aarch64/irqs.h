@@ -187,7 +187,18 @@ extern prtos_u32_t x86_hw_irqs_mask[CONFIG_NO_CPUS];
 #endif  //__ASSEMBLY__
 #endif  //_PRTOS_KERNEL_
 
-/* x86-exception-list */
+/* AArch64 trap numbers (indices into trap_handler_table / trap_to_vector) */
+#define AARCH64_UNDEF_INSTR 0
+#define AARCH64_PREFETCH_ABORT 1
+#define AARCH64_DATA_ABORT 2
+#define AARCH64_DATA_ALIGNMENT_FAULT 3
+#define AARCH64_DATA_BACKGROUND_FAULT 4
+#define AARCH64_DATA_PERMISSION_FAULT 5
+#define AARCH64_INSTR_ALIGNMENT_FAULT 6
+#define AARCH64_INSTR_BACKGROUND_FAULT 7
+#define AARCH64_INSTR_PERMISSION_FAULT 8
+
+/* x86-exception-list (kept for shared code compatibility) */
 #define DIVIDE_ERROR 0
 #define DEBUG_EXCEPTION 1
 #define NMI_INTERRUPT 2

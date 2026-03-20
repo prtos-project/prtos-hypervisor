@@ -142,9 +142,14 @@ __hypercall prtos_s32_t reset_vcpu_sys(prtos_id_t vcpu_id, prtos_address_t ptd_l
 
     if (vcpu_id >= partition->cfg->num_of_vcpus) return PRTOS_INVALID_PARAM;
 
+#ifdef CONFIG_AARCH64
+    /* AArch64: stage-2 MMU provides memory isolation; no x86-style
+     * page table validation needed. ptd_level_1_table is unused. */
+#else
     if (!(ptd_level_1_page = pmm_find_page(ptd_level_1_table, partition, 0))) return PRTOS_INVALID_PARAM;
 
     if (ptd_level_1_page->type != PPAG_PTDL1) return PRTOS_INVALID_PARAM;
+#endif
 
     HALT_VCPU(partition->cfg->id, vcpu_id);
 
@@ -395,17 +400,6 @@ __hypercall prtos_s32_t clear_irq_mask_sys(prtos_u32_t hw_irqs_mask, prtos_u32_t
     prtos_s32_t e;
 
     ASSERT(!hw_is_sti());
-#ifdef CONFIG_AARCH64
-    {
-        static int _dbg = 0;
-        if (_dbg < 5) {
-            _dbg++;
-            kprintf("(PRTOS) clear_irq_mask_sys: hw=0x%x ext=0x%x before_mask=0x%x\n",
-                    hw_irqs_mask, ext_irqs_pend,
-                    info->sched.current_kthread->ctrl.g->part_ctrl_table->ext_irqs_to_mask);
-        }
-    }
-#endif
     info->sched.current_kthread->ctrl.g->part_ctrl_table->hw_irqs_mask &= ~hw_irqs_mask;
     info->sched.current_kthread->ctrl.g->part_ctrl_table->ext_irqs_to_mask &= ~ext_irqs_pend;
     unmasked = hw_irqs_mask & get_partition(info->sched.current_kthread)->cfg->hw_irqs;

@@ -82,7 +82,7 @@ NULL_HYPERCALL_TAB_A64();                   /* 25 override_trap_hndl (x86) */
 
 HYPERCALLR_TAB_A64(switch_sched_plan_sys, 2); /* 26 switch_sched_plan */
 HYPERCALLR_TAB_A64(get_gid_by_name_sys, 2);   /* 27 get_gid_by_name */
-NULL_HYPERCALL_TAB_A64();                     /* 28 reset_vcpu (needs pmm) */
+HYPERCALLR_TAB_A64(reset_vcpu_sys, 4);        /* 28 reset_vcpu */
 HYPERCALLR_TAB_A64(halt_vcpu_sys, 1);         /* 29 halt_vcpu */
 HYPERCALLR_TAB_A64(suspend_vcpu_sys, 1);      /* 30 suspend_vcpu */
 HYPERCALLR_TAB_A64(resume_vcpu_sys, 1);       /* 31 resume_vcpu */

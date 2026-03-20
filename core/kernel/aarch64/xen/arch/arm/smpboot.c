@@ -570,6 +570,13 @@ void asmlinkage start_secondary(void)
 
     set_current(idle_vcpu[cpuid]);
 
+    /* Initialize vGIC lists for this CPU's idle vcpu so that
+     * vgic_sync_to_lrs() in leave_hypervisor_to_guest() doesn't
+     * dereference NULL list pointers on the first EL2→EL1 return. */
+    INIT_LIST_HEAD(&idle_vcpu[cpuid]->arch.vgic.inflight_irqs);
+    INIT_LIST_HEAD(&idle_vcpu[cpuid]->arch.vgic.lr_pending);
+    spin_lock_init(&idle_vcpu[cpuid]->arch.vgic.lock);
+
     /* Run local notifiers */
     // notify_cpu_starting(cpuid);
     /*

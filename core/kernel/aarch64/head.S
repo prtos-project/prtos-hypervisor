@@ -348,7 +348,7 @@ FUNC(enable_secondary_cpu_mm)
         load_paddr x0, init_ttbr // FIXME: Just  comment for build pass
         ldr   x0, [x0]
 
-        mov   x1, #SCTLR_Axx_ELx_WXN        /* Enable WxN from the start */
+        mov   x1, #0        /* No WXN - matches boot CPU (xen_pt_enforce_wnx disabled for PRTOS) */
         bl    enable_mmu
         mov   lr, x6
 

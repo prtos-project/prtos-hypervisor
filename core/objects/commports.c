@@ -36,9 +36,12 @@ static inline prtos_s32_t create_sampling_port(prtos_obj_desc_t desc, prtos_s8_t
 
     if (OBJDESC_GET_PARTITIONID(desc) != partition->id) return PRTOS_PERM_ERROR;
 
+#ifndef CONFIG_AARCH64
+    /* On AArch64, port_name is already validated and translated by ctrl_sampling_port */
     if (check_gp_param(port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) {
         return PRTOS_INVALID_PARAM;
     }
+#endif
 
     if ((direction != PRTOS_SOURCE_PORT) && (direction != PRTOS_DESTINATION_PORT)) {
         return PRTOS_INVALID_PARAM;
@@ -365,9 +368,12 @@ static inline prtos_s32_t create_queuing_port(prtos_obj_desc_t desc, prtos_s8_t 
     partition = get_partition(processor_info->sched.current_kthread)->cfg;
     if (OBJDESC_GET_PARTITIONID(desc) != partition->id) return PRTOS_PERM_ERROR;
 
+#ifndef CONFIG_AARCH64
+    /* On AArch64, port_name is already validated and translated by ctrl_queuing_port */
     if (check_gp_param(port_name, CONFIG_ID_STRING_LENGTH, 1, PFLAG_NOT_NULL | PFLAG_RW) < 0) {
         return PRTOS_INVALID_PARAM;
     }
+#endif
     if ((direction != PRTOS_SOURCE_PORT) && (direction != PRTOS_DESTINATION_PORT)) return PRTOS_INVALID_PARAM;
 
     // Look for the channel

@@ -4,9 +4,14 @@
  * AArch64 BAIL boot entry point
  * Sets up stack and jumps to C partition code
  *
+ * SMP-aware: only vCPU0 zeroes BSS; each vCPU gets its own stack.
+ * Mirrors the x86 boot.S logic for multi-vCPU partitions.
+ *
  * www.prtos.org
  */
 #include <prtos.h>
+
+#define MAIN_VCPU 0
 
 .text
 .align 4
@@ -16,8 +21,18 @@
 _start:
 start:
     /* x0 = PCT physical address (passed by hypervisor in JMP_PARTITION) */
+    /* Save PCT paddr — x0 will be clobbered by the HVC below */
+    mov x19, x0
 
-    /* Zero BSS */
+    /* Get vCPU ID via hypercall (no stack needed for HVC) */
+    mov x0, #32            /* get_vcpuid_nr = hypercall #32 */
+    hvc #0                 /* result in x0 = vCPU ID */
+    mov x20, x0            /* x20 = vcpuid */
+
+    /* Only the main vCPU (vCPU 0) zeroes BSS */
+    cmp x20, #MAIN_VCPU
+    bne 1f
+
     ldr x1, =_sbss
     ldr x2, =_ebss
     cmp x1, x2
@@ -26,11 +41,16 @@ start:
     cmp x1, x2
     blt 0b
 1:
-    /* Set up stack: top of _stack area (STACK_SIZE bytes) */
+    /* Set up per-vCPU stack: sp = _stack + (vcpuid + 1) * STACK_SIZE */
     ldr x2, =_stack
     ldr x3, =STACK_SIZE
-    add x2, x2, x3
+    add x4, x20, #1        /* x4 = vcpuid + 1 */
+    mul x4, x4, x3         /* x4 = (vcpuid + 1) * STACK_SIZE */
+    add x2, x2, x4
     mov sp, x2
+
+    /* Restore PCT paddr to x0 for init_libprtos */
+    mov x0, x19
 
     /* Call init_libprtos(x0 = part_ctrl_table) */
     bl  init_libprtos
@@ -105,4 +125,4 @@ _bail_trap_dispatch:
 .align 3
 .globl _stack
 _stack:
-    .fill STACK_SIZE, 1, 0
+    .fill STACK_SIZE * CONFIG_MAX_NO_VCPUS, 1, 0

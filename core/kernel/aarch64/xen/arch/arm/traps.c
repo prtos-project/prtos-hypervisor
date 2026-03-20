@@ -2015,10 +2015,10 @@ static bool check_for_vcpu_work(void) {
  * PRTOS's fix_stack() can find the guest regs after a CONTEXT_SWITCH
  * without relying on Xen's STACK_SIZE-aligned per-CPU stack layout.
  */
-struct cpu_user_regs *prtos_current_guest_regs;
+struct cpu_user_regs *prtos_current_guest_regs_percpu[CONFIG_NO_CPUS];
 
 void asmlinkage leave_hypervisor_to_guest(struct cpu_user_regs *regs) {
-    prtos_current_guest_regs = regs;
+    prtos_current_guest_regs_percpu[smp_processor_id()] = regs;
     local_irq_disable();
 
     /*

@@ -109,7 +109,11 @@ static inline int local_fiq_is_enabled(void) {
 #define JMP_PARTITION(entry, k)                                                                                          \
     do {                                                                                                                 \
         prtos_u64_t _pct_paddr = (prtos_u64_t)_VIRT2PHYS((prtos_address_t)(k)->ctrl.g->part_ctrl_table);                 \
-        local_irq_enable();                                                                                              \
+        /* IRQs must stay masked until ERET.  ERET atomically loads PSTATE from SPSR_EL2 (= 0x5 = EL1h,                 \
+         * DAIF clear) so IRQs are enabled on arrival at EL1 — same semantics as x86 IRET.                              \
+         * Enabling IRQs here would race with the timer: an IRQ between msr elr/spsr and eret                           \
+         * corrupts the return state (the handler overwrites ELR/SPSR, and the final eret                               \
+         * jumps to a stale address at EL2 instead of EL1). */                                                           \
         __asm__ __volatile__(                             /* HCR_EL2: RW=1(EL1 is AArch64) | AMO|IMO|FMO | VM */         \
                              "mov x10, #0x39\n\t"         /* AMO|IMO|FMO|VM = bits 5:3,0 */                              \
                              "orr x10, x10, #(1<<31)\n\t" /* HCR_RW = bit 31 */                                          \

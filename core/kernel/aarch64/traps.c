@@ -21,12 +21,22 @@ extern prtos_s32_t (*hypercalls_table[])(prtos_word_t, ...);
 
 /* Declared in irqs.c */
 extern void do_hyp_irq(cpu_ctxt_t *ctxt);
+extern void do_hyp_trap(cpu_ctxt_t *ctxt);
 
 /*
  * PRTOS IRET hypercall number: use NR_HYPERCALLS as sentinel.
  * Partition calls HVC #0 with x0 = PRTOS_IRET_NR after handling a virtual IRQ.
  */
 #define PRTOS_IRET_NR NR_HYPERCALLS
+
+/*
+ * PRTOS_RAISE_TRAP_NR - Partition raises a trap event to the hypervisor.
+ * On AArch64, EL1 exceptions don't trap to EL2, so partitions use this
+ * para-virtualized hypercall to notify the hypervisor of a fault.
+ * x0 = PRTOS_RAISE_TRAP_NR, x1 = trap number (maps to HM event via
+ * trap_nr + PRTOS_HM_MAX_GENERIC_EVENTS).
+ */
+#define PRTOS_RAISE_TRAP_NR (NR_HYPERCALLS + 1)
 
 /*
  * prtos_do_iret - Restore guest PC after virtual IRQ handling.
@@ -64,6 +74,17 @@ int prtos_do_hvc(struct cpu_user_regs *regs) {
     /* IRET: partition finished handling a virtual IRQ */
     if (nr == PRTOS_IRET_NR) {
         prtos_do_iret(regs);
+        return 1;
+    }
+
+    /* Raise trap: partition notifies hypervisor of a fault (para-virt) */
+    if (nr == PRTOS_RAISE_TRAP_NR) {
+        cpu_ctxt_t ctxt;
+        memset(&ctxt, 0, sizeof(ctxt));
+        ctxt.irq_nr = (prtos_u64_t)regs->x1;
+        ctxt.pc = regs->pc;
+        ctxt.sp = regs->cpsr;
+        do_hyp_trap(&ctxt);
         return 1;
     }
 

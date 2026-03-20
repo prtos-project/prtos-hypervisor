@@ -72,16 +72,22 @@ static void noreturn idle_loop(void) {
 
     printk("idle_loop: cpu %u\n", cpu);
     if (prtos_kernel_run) {
-        printk("PRTOS Hypervisor is running on CPU %u\n", cpu);
-        while (1) {
-            prtos_u32_t i;
-            for (i = 0; i < 1000000; i++) {
-                asm volatile("nop");
+        extern int prtos_init_secondary_cpu(unsigned int cpu);
+        if (prtos_init_secondary_cpu(cpu)) {
+            printk("PRTOS Hypervisor is running on CPU %u\n", cpu);
+            enable_timer_prtos();
+        } else {
+            printk("PRTOS: CPU %u has no scheduling work, parking\n", cpu);
+            while (1) {
+                prtos_u32_t i;
+                for (i = 0; i < 1000000; i++) {
+                    asm volatile("nop");
+                }
             }
         }
+    } else {
+        enable_timer_prtos();
     }
-
-    enable_timer_prtos();
 
     for (;;) {
         if (cpu_is_offline(cpu)) stop_cpu();

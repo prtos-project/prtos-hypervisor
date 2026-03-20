@@ -232,13 +232,16 @@ void reset_kthread(kthread_t *k, prtos_address_t ptd_level_1, prtos_address_t en
     k->ctrl.g->part_ctrl_table->arch._ARCH_PTDL1_REG = ptd_level_1;
 #endif
 
-    set_kthread_flags(k, KTHREAD_READY_F);
-    clear_kthread_flags(k, KTHREAD_HALTED_F);
 #ifdef CONFIG_AUDIT_EVENTS
     raise_audit_event(TRACE_SCHED_MODULE, AUDIT_SCHED_VCPU_RESET, 1, &k->ctrl.g->id);
 #endif
     if (k != info->sched.current_kthread) {
+        /* setup_kstack MUST complete before making the kthread schedulable
+         * (READY + !HALTED).  Otherwise another CPU's scheduler may pick it
+         * up with an uninitialised stack. */
         setup_kstack(k, start_up_guest, entry_point);
+        set_kthread_flags(k, KTHREAD_READY_F);
+        clear_kthread_flags(k, KTHREAD_HALTED_F);
 #ifdef CONFIG_SMP
         if (k->ctrl.g) {
             prtos_u8_t cpu = prtos_conf_vcpu_table[(KID2PARTID(k->ctrl.g->id) * prtos_conf_table.hpv.num_of_cpus) + KID2VCPUID(k->ctrl.g->id)].cpu;
@@ -251,6 +254,8 @@ void reset_kthread(kthread_t *k, prtos_address_t ptd_level_1, prtos_address_t en
         schedule();
 #endif
     } else {
+        set_kthread_flags(k, KTHREAD_READY_F);
+        clear_kthread_flags(k, KTHREAD_HALTED_F);
         load_part_page_table(k);
         start_up_guest(entry_point);
     }

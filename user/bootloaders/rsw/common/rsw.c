@@ -165,7 +165,17 @@ void rsw_main(void) {
             }
             prtos_conf_boot_partition_table[container.partition_table[e].id].custom_file_table[i].start_addr = (prtos_address_t)pef_custom_file.hdr;
             prtos_conf_boot_partition_table[container.partition_table[e].id].custom_file_table[i].size = pef_custom_file.hdr->image_length;
+#ifdef CONFIG_AARCH64
+            {
+                /* On AArch64, custom_file start_addr is a partition IPA;
+                   translate to PA for the memcpy in load_pef_custom_file */
+                struct pef_custom_file cf_translated = pef_file.custom_file_table[i];
+                cf_translated.start_addr += AARCH64_IPA_TO_PA_OFFSET;
+                load_pef_custom_file(&pef_custom_file, &cf_translated);
+            }
+#else
             load_pef_custom_file(&pef_custom_file, &pef_file.custom_file_table[i]);
+#endif
         }
     }
 

@@ -410,6 +410,14 @@ static void generate_rsv_mem(FILE *out_file) {
         }
     }
 
+#if defined(CONFIG_AARCH64)
+    /* Reserve kthread + guest for each secondary CPU idle thread (SMP) */
+    for (i = 1; i < prtos_conf.hpv.num_of_cpus; i++) {
+        rsv_block(_KTHREAD_T_SIZEOF, ALIGNMENT, "secondary idle kthread");
+        rsv_block(_STRUCT_GUEST_SIZEOF, ALIGNMENT, "secondary idle vcpu");
+    }
+#endif
+
     // Partitions
     rsv_block(prtos_conf.num_of_partitions * _PARTITION_T_SIZEOF, ALIGNMENT, "scheduler's partitions table");
 

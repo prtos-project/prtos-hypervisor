@@ -31,26 +31,15 @@ prtos_u32_t x86_hw_irqs_mask[CONFIG_NO_CPUS] = {[0 ...(CONFIG_NO_CPUS - 1)] = 0x
 
 #ifdef CONFIG_VERBOSE_TRAP
 prtos_s8_t *trap_to_str[] = {
-    // __STR(DIVIDE_ERROR),                 // 0
-    // __STR(RESERVED_TRAP_1),              // 1
-    // __STR(NMI_INTERUPT),                 // 2
-    // __STR(BREAKPOINT),                   // 3
-    // __STR(OVERFLOW),                     // 4
-    // __STR(BOUND_RANGE_EXCEEDED),         // 5
-    // __STR(UNDEFINED_OPCODE),             // 6
-    // __STR(DEVICE_NOT_AVAILABLE),         // 7
-    // __STR(DOUBLE_FAULT),                 // 8
-    // __STR(COPROCESSOR_SEGMENT_OVERRUN),  // 9
-    // __STR(INVALID_TSS),                  // 10
-    // __STR(SEGMENT_NOT_PRESENT),          // 11
-    // __STR(STACK_SEGMENT_FAULT),          // 12
-    // __STR(GENERAL_PROTECTION),           // 13
-    // __STR(PAGE_FAULT),                   // 14
-    // __STR(RESERVED_TRAP_15),             // 15
-    // __STR(X87_FPU_ERROR),                // 16
-    // __STR(ALIGNMENT_CHECK),              // 17
-    // __STR(MACHINE_CHECK),                // 18
-    // __STR(SIMD_EXCEPTION),               // 19
+    [AARCH64_UNDEF_INSTR]           = "UNDEF_INSTR",
+    [AARCH64_PREFETCH_ABORT]        = "PREFETCH_ABORT",
+    [AARCH64_DATA_ABORT]            = "DATA_ABORT",
+    [AARCH64_DATA_ALIGNMENT_FAULT]  = "DATA_ALIGNMENT_FAULT",
+    [AARCH64_DATA_BACKGROUND_FAULT] = "DATA_BACKGROUND_FAULT",
+    [AARCH64_DATA_PERMISSION_FAULT] = "DATA_PERMISSION_FAULT",
+    [AARCH64_INSTR_ALIGNMENT_FAULT] = "INSTR_ALIGNMENT_FAULT",
+    [AARCH64_INSTR_BACKGROUND_FAULT]= "INSTR_BACKGROUND_FAULT",
+    [AARCH64_INSTR_PERMISSION_FAULT]= "INSTR_PERMISSION_FAULT",
 };
 #endif
 
@@ -182,10 +171,10 @@ static inline prtos_s32_t test_sp(prtos_address_t *sp, prtos_u32_t size) {
  * kthread's stack).  This replaces the old STACK_SIZE-aligned calculation
  * which assumed Xen's 32 KB per-CPU stack layout.
  */
-extern struct cpu_user_regs *prtos_current_guest_regs;
+extern struct cpu_user_regs *prtos_current_guest_regs_percpu[];
 
 void fix_stack(cpu_ctxt_t *ctxt, partition_control_table_t *part_ctrl_table, prtos_s32_t irq_nr, prtos_s32_t vector, prtos_s32_t trap) {
-    struct cpu_user_regs *regs = prtos_current_guest_regs;
+    struct cpu_user_regs *regs = prtos_current_guest_regs_percpu[GET_CPU_ID()];
 
     if (!regs) return;
     if (!part_ctrl_table->arch.trap_entry) return;

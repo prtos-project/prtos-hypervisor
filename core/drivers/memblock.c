@@ -40,9 +40,7 @@ static prtos_s32_t read_mem_block(const kdevice_t *kdev, prtos_u8_t *buffer, prt
     ptr = (prtos_u8_t *)(mem_block_data[kdev->sub_id].addr + mem_block_data[kdev->sub_id].pos);
 
     for (e = 0; e < len; e++, ptr++) {
-#ifdef CONFIG_x86
         buffer[e] = *ptr;
-#endif
         if (!(e & 0x7f)) {
             preemption_on();
             preemption_off();
@@ -63,9 +61,7 @@ static prtos_s32_t write_mem_block(const kdevice_t *kdev, prtos_u8_t *buffer, pr
 
     ptr = (prtos_u8_t *)(mem_block_data[kdev->sub_id].addr + mem_block_data[kdev->sub_id].pos);
 
-#ifdef CONFIG_x86
     memcpy(ptr, buffer, len);
-#endif
     mem_block_data[kdev->sub_id].pos += len;
 
     return len;
@@ -113,6 +109,15 @@ prtos_s32_t __VBOOT init_mem_block(void) {
         mem_block_data[e].cfg = &prtos_conf_mem_block_table[e];
 #if defined(CONFIG_MMU)
         // Mapping on virtual memory
+#ifdef CONFIG_AARCH64
+        /* On AArch64, use Xen's directmap to access the memblock physical memory.
+         * The config address is an IPA; prtos_ipa_to_va converts IPA→PA→directmap VA. */
+        {
+            extern void *prtos_ipa_to_va(prtos_u64_t ipa);
+            mem_block_data[e].addr = (prtos_address_t)prtos_ipa_to_va(
+                prtos_conf_phys_mem_area_table[prtos_conf_mem_block_table[e].physical_memory_areas_offset].start_addr);
+        }
+#else
         num_of_pages = SIZE2PAGES(prtos_conf_phys_mem_area_table[prtos_conf_mem_block_table[e].physical_memory_areas_offset].size);
         if (!(mem_block_data[e].addr = vmm_alloc(num_of_pages))) {
             cpu_ctxt_t ctxt;
@@ -122,6 +127,7 @@ prtos_s32_t __VBOOT init_mem_block(void) {
         for (i = 0; i < (num_of_pages * PAGE_SIZE); i += PAGE_SIZE)
             vm_map_page(prtos_conf_phys_mem_area_table[prtos_conf_mem_block_table[e].physical_memory_areas_offset].start_addr + i, mem_block_data[e].addr + i,
                         _PG_ATTR_PRESENT | _PG_ATTR_RW);
+#endif
 #else
         mem_block_data[e].addr = prtos_conf_phys_mem_area_table[prtos_conf_mem_block_table[e].physical_memory_areas_offset].start_addr;
 #endif

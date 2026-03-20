@@ -119,9 +119,10 @@ void do_hyp_trap(cpu_ctxt_t *ctxt) {
 
     /*Fast propagation of partition events not logged.*/
     if (!is_hpv_irq_ctxt(ctxt)) {
+        partition_t *part = get_partition(info->sched.current_kthread);
         ASSERT(hm_event < PRTOS_HM_MAX_EVENTS);
-        if ((get_partition(info->sched.current_kthread)->cfg->hm_table[hm_event].action == PRTOS_HM_AC_PROPAGATE) &&
-            (!get_partition(info->sched.current_kthread)->cfg->hm_table[hm_event].log)) {
+        if ((part->cfg->hm_table[hm_event].action == PRTOS_HM_AC_PROPAGATE) &&
+            (!part->cfg->hm_table[hm_event].log)) {
 #ifdef CONFIG_VERBOSE_TRAP
             kprintf("[TRAP] %s(0x%x)\n", trap_to_str[ctxt->irq_nr], ctxt->irq_nr);
             dump_state(ctxt);
