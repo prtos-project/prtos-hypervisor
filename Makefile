@@ -85,7 +85,9 @@ distclean: clean
 	@find -type f -name "partition?" -exec rm '{}' \;
 	@find -type f -name "resident_sw" -exec rm '{}' \;
 	@find -type f -name "*.c.prtos_conf" -exec rm '{}' \;
-	@find -type f -name "*.bin.prtos_conf" -exec rm '{}' \;
+	@find -type f -name "resident_sw_image" -exec rm '{}' \;
+	@find -type f -name "obj_exc_elf" -exec rm '{}' \;
+	@find -type f -name "*.pef.prtos_conf" -exec rm '{}' \;
 	@find -type f -name "*.pef.prtos_conf" -exec rm '{}' \;
 	@find -type f -name "*.pef" -exec rm '{}' \;
 	@find -type f -name "prtos_cf" -exec rm '{}' \;

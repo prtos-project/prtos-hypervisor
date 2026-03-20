@@ -1,0 +1,5 @@
+y
+/home/chenweis/prtos-sdk
+/usr/bin/
+y
+
