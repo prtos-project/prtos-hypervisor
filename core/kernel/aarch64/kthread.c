@@ -58,6 +58,17 @@ void switch_kthread_arch_post(kthread_t *current) {
                 :
                 : "r"(hcr)
                 : "memory");
+
+            /* Enable GICv3 virtual CPU interface for hw-virt partitions.
+             * ICH_HCR_EL2.En = 1: activates the virtual CPU interface.
+             * ICH_VMCR_EL2: VPMR=0xFF (unmask all), VENG1=1 (enable Group 1). */
+            __asm__ __volatile__(
+                "msr S3_4_C12_C11_0, %0\n\t"  /* ICH_HCR_EL2 */
+                "msr S3_4_C12_C11_7, %1\n\t"  /* ICH_VMCR_EL2 */
+                "isb\n\t"
+                :
+                : "r"((prtos_u64_t)0x1), "r"((prtos_u64_t)0xFF000002ULL)
+                : "memory");
         }
     }
 #endif

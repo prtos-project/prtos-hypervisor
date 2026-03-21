@@ -50,6 +50,7 @@ void *prtos_ipa_to_va(prtos_u64_t ipa) {
 #define S2_SH_IS (3ULL << 8)
 #define S2_S2AP_RW (3ULL << 6)
 #define S2_MEMATTR_NORMAL_WB (0xFULL << 2)
+#define S2_MEMATTR_DEVICE_nGnRE (0x1ULL << 2)
 
 /* 2MB block descriptor: bits[1:0] = 0b01 */
 #define S2_BLOCK_VALID (0x1ULL)
@@ -58,6 +59,7 @@ void *prtos_ipa_to_va(prtos_u64_t ipa) {
 /* 4KB page descriptor (L3): bits[1:0] = 0b11 */
 #define S2_PAGE_VALID (0x3ULL)
 #define S2_PAGE_ATTRS (S2_AF | S2_SH_IS | S2_S2AP_RW | S2_MEMATTR_NORMAL_WB | S2_PAGE_VALID)
+#define S2_DEVICE_PAGE_ATTRS (S2_AF | S2_SH_IS | S2_S2AP_RW | S2_MEMATTR_DEVICE_nGnRE | S2_PAGE_VALID)
 
 /* Table descriptor (L1→L2 or L2→L3): bits[1:0] = 0b11 */
 #define S2_TABLE_VALID (0x3ULL)
@@ -199,6 +201,18 @@ void setup_stage2_mmu(kthread_t *k) {
             prtos_u64_t *l3 = get_or_alloc_l3(k, l2, pg_l2);
             l3[pg_l3] = (pg & ~((1ULL << 12) - 1)) | S2_PAGE_ATTRS;
         }
+    }
+
+    /* Map UART device MMIO (IPA 0x09000000 → PA 0x09000000, identity-mapped) */
+    {
+        prtos_u64_t uart_ipa = 0x09000000ULL;
+        prtos_u64_t uart_pa = 0x09000000ULL;
+        prtos_s32_t u_l1 = (int)(uart_ipa >> 30) & (S2_L1_ENTRIES - 1);
+        prtos_s32_t u_l2 = (int)((uart_ipa >> 21) & (S2_L2_ENTRIES - 1));
+        prtos_s32_t u_l3 = (int)((uart_ipa >> 12) & (S2_L3_ENTRIES - 1));
+        prtos_u64_t *l2 = (u_l1 == 0) ? l2_0 : l2_1;
+        prtos_u64_t *l3 = get_or_alloc_l3(k, l2, u_l2);
+        l3[u_l3] = (uart_pa & ~((1ULL << 12) - 1)) | S2_DEVICE_PAGE_ATTRS;
     }
 
     /* Install stage-2 page tables */

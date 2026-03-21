@@ -269,24 +269,47 @@ int __arch_get_local_id(void) {
 
 // #endif // CONFIG_STATIC_IRQ_ROUTING
 
+/*
+ * prtos_vtimer_inject_via_lr - Inject virtual timer IRQ via GICv3 List Register.
+ *
+ * For PRTOS partitions using hardware-assisted virtualization (no para-virt),
+ * the virtual timer interrupt is delivered directly via the GICv3 virtual
+ * CPU interface (ICH_LR) instead of PRTOS's PCT-redirect mechanism.
+ *
+ * The guest (e.g. FreeRTOS) handles the interrupt natively via VBAR_EL1
+ * and acknowledges it using ICC_IAR1_EL1/ICC_EOIR1_EL1.
+ */
+static void prtos_vtimer_inject_via_lr(void) {
+    uint64_t ctl = READ_SYSREG(CNTV_CTL_EL0);
+    /* Mask the timer to prevent level-triggered re-assertion after EOI */
+    WRITE_SYSREG(ctl | CNTx_CTL_MASK, CNTV_CTL_EL0);
+    isb();
+
+    /*
+     * Write ICH_LR0_EL2 with virtual IRQ 27 (GUEST_TIMER_VIRT_PPI):
+     *   [63:62] = 0b01 (State = Pending)
+     *   [60]    = 1    (Group 1)
+     *   [55:48] = 0    (Priority 0, highest)
+     *   [31:0]  = 27   (Virtual INTID = GUEST_TIMER_VIRT_PPI)
+     */
+    uint64_t lr_val = (1ULL << 62) | (1ULL << 60) | 27;
+    WRITE_SYSREG(lr_val, ICH_LR0_EL2);
+    isb();
+}
+
 static void vtimer_interrupt(int irq, void *dev_id) {
     /*
-     * Edge-triggered interrupts can be used for the virtual timer. Even
-     * if the timer output signal is masked in the context switch, the
-     * GIC will keep track that of any interrupts raised while IRQS are
-     * disabled. As soon as IRQs are re-enabled, the virtual interrupt
-     * will be injected to Xen.
-     *
-     * If an IDLE vCPU was scheduled next then we should ignore the
-     * interrupt.
+     * PRTOS hw-virt: Always inject virtual timer via GICv3 List Register.
+     * The guest handles the interrupt natively via VBAR_EL1 and ICC_*
+     * system registers. We bypass Xen's vgic_inject_irq() entirely.
      */
-    if (unlikely(is_idle_vcpu(current))) return;
+    prtos_vtimer_inject_via_lr();
+}
 
-    perfc_incr(virt_timer_irqs);
-
-    current->arch.virt_timer.ctl = READ_SYSREG(CNTV_CTL_EL0);
-    WRITE_SYSREG(current->arch.virt_timer.ctl | CNTx_CTL_MASK, CNTV_CTL_EL0);
-    vgic_inject_irq(current->domain, current, current->arch.virt_timer.irq, true);
+/* Static IRQ routing entry point for virtual timer PPI 27.
+ * Called from static_gic_interrupt() in gic.c. */
+void static_vtimer_isr(int irq) {
+    prtos_vtimer_inject_via_lr();
 }
 
 /*

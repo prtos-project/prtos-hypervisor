@@ -397,6 +397,7 @@ void gic_interrupt(struct cpu_user_regs *regs, int is_fiq)
 
 #if CONFIG_STATIC_IRQ_ROUTING
 extern void static_htimer_isr(int irq);
+extern void static_vtimer_isr(int irq);
 extern void prtos_gicv3_eoi_irq(int irq);
 extern void prtos_gicv3_host_irq_end(int irq);
 void static_gic_interrupt(struct cpu_user_regs *regs) {
@@ -411,7 +412,7 @@ void static_gic_interrupt(struct cpu_user_regs *regs) {
             /* ========== PPI ==========
              *
              * IRQ 26: CNTHP EL2 timer
-             * IRQ 27: CNTV (if used)
+             * IRQ 27: CNTV virtual timer
              */
             switch (irq) {
                 case 26:
@@ -424,11 +425,12 @@ void static_gic_interrupt(struct cpu_user_regs *regs) {
                     static_htimer_isr(irq);
                     continue;
 
+                case 27:
+                    /* Virtual timer — inject to partition via ICH_LR */
+                    static_vtimer_isr(irq);
+                    break;
+
                 default:
-                    /*
-                     * Other PPIs are currently ignored
-                     * (could printk for debug)
-                     */
                     break;
             }
         } else if (irq < 1020) {
