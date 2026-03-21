@@ -25,7 +25,7 @@ PARTITIONS=partition.pef
 # ============================================================================
 
 # Original FreeRTOS source tree (unchanged files)
-ORIG = ../port_freertos_to_qemu_a72_virt
+ORIG = ../native_freertos_run_on_qemu_a57_virt
 FREERTOS_SRC = $(ORIG)/FreeRTOS/Source/
 FREERTOS_MEMMANG_SRC = $(FREERTOS_SRC)portable/MemMang/
 APP_SRC = $(ORIG)/FreeRTOS/Demo/CORTEX_A57_64-bit/

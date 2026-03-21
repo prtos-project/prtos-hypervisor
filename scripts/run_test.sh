@@ -23,6 +23,7 @@ ALL_CASES=(
     "example.009:2:15"
     "helloworld:1:15"
     "helloworld_smp:2:15"
+    "freertos:1:20:aarch64"
 )
 
 # Colors for output
@@ -43,7 +44,7 @@ Options:
 Commands:
   check-<case>           Check a specific test case.
                          Available: helloworld, helloworld_smp,
-                         example.001 ~ example.009
+                         example.001 ~ example.009, freertos (aarch64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -123,19 +124,28 @@ function build_prtos() {
     fi
 }
 
-# Lookup test case config: sets CASE_EXPECT and CASE_TIMEOUT
+# Lookup test case config: sets CASE_EXPECT, CASE_TIMEOUT, CASE_ARCH
+# Format: "name:expected_count:timeout[:arch]"
+# If arch is specified, the test only runs on that architecture.
 function lookup_case() {
     local case_name="$1"
     CASE_EXPECT=""
     CASE_TIMEOUT=""
+    CASE_ARCH=""
     for entry in "${ALL_CASES[@]}"; do
         local name="${entry%%:*}"
         local rest="${entry#*:}"
         local expect="${rest%%:*}"
-        local timeout="${rest#*:}"
+        rest="${rest#*:}"
+        local timeout="${rest%%:*}"
+        local arch=""
+        if [[ "${rest}" == *:* ]]; then
+            arch="${rest#*:}"
+        fi
         if [[ "${name}" == "${case_name}" ]]; then
             CASE_EXPECT="${expect}"
             CASE_TIMEOUT="${timeout}"
+            CASE_ARCH="${arch}"
             return 0
         fi
     done
@@ -226,6 +236,7 @@ function builder_to_case() {
     case "${builder}" in
         check-helloworld)     echo "helloworld" ;;
         check-helloworld_smp) echo "helloworld_smp" ;;
+        check-freertos)       echo "freertos" ;;
         check-[0-9]*)         echo "example.${builder#check-}" ;;
         *)                    echo "" ;;
     esac
@@ -241,6 +252,12 @@ check-all)
 
     for entry in "${ALL_CASES[@]}"; do
         case_name="${entry%%:*}"
+        lookup_case "${case_name}"
+        # Skip tests restricted to a different architecture
+        if [[ -n "${CASE_ARCH}" && "${CASE_ARCH}" != "${ARCH}" ]]; then
+            record_result "${case_name}" "SKIP"
+            continue
+        fi
         if run_test "${case_name}"; then
             record_result "${case_name}" "PASS"
         else

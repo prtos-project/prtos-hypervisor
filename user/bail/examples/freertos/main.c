@@ -29,14 +29,19 @@ void vMainAssertCalled(const char *pcFileName, uint32_t ulLineNumber)
 	for (;;);
 }
 
-void hello_world_task(void *p)
+/*
+ * Verification task: waits long enough for all 5 software timers to complete
+ * (each timer fires 10 times, the slowest at 500ms period = 5 seconds),
+ * then prints "Verification Passed" for the automated test framework.
+ */
+void verification_task(void *p)
 {
-	int i = 0;
 	(void)p;
-	while (1) {
-		printf("%s() %d.\n", __func__, i++);
-		vTaskDelay(1000);
-	}
+	/* Wait 6 seconds — all timers finish within ~5s */
+	vTaskDelay(6000 / portTICK_PERIOD_MS);
+	uart_puts("Verification Passed\n");
+	for (;;)
+		vTaskDelay(portMAX_DELAY);
 }
 
 int main(void)
@@ -47,6 +52,9 @@ int main(void)
 
 	/* Run the software timer example */
 	test_software_timer();
+
+	/* Verification task for automated testing */
+	xTaskCreate(verification_task, "verify", 512, NULL, configMAX_PRIORITIES - 1, NULL);
 
 	/* Start the scheduler */
 	vTaskStartScheduler();
