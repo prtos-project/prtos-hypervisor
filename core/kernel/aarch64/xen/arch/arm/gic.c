@@ -434,13 +434,28 @@ void static_gic_interrupt(struct cpu_user_regs *regs) {
                     break;
             }
         } else if (irq < 1020) {
-            static_handle_spi(regs, irq);
+            extern int static_handle_spi(struct cpu_user_regs *regs,
+                                         unsigned int irq);
+            if (static_handle_spi(regs, irq)) {
+                /* HW-linked virtual SPI: only EOI, no DIR.
+                 * Physical deactivation happens when the guest EOIs
+                 * the virtual IRQ via ICH_LR.HW linkage. */
+                prtos_gicv3_eoi_irq(irq);
+                continue;
+            }
         } else {
             local_irq_disable();
             break;
         }
 
         prtos_gicv3_host_irq_end(irq);
+    }
+
+    /* Process deferred hypervisor timer AFTER the GIC loop exits,
+     * so schedule() doesn't re-arm the timer inside the loop. */
+    {
+        extern void static_htimer_deferred(void);
+        static_htimer_deferred();
     }
 }
 

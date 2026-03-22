@@ -195,6 +195,15 @@ void set_sched_pending(void) {
     info->cpu.irq_nesting_counter |= SCHED_PENDING;
 }
 
+prtos_u32_t prtos_check_and_clear_sched_pending(void) {
+    local_processor_t *info = GET_LOCAL_PROCESSOR();
+    if (info->cpu.irq_nesting_counter & SCHED_PENDING) {
+        info->cpu.irq_nesting_counter &= ~SCHED_PENDING;
+        return 1;
+    }
+    return 0;
+}
+
 void schedule(void) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     prtos_word_t hw_flags;

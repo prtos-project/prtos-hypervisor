@@ -21,6 +21,7 @@
 #include "conv.h"
 #include "common.h"
 #include "prtos_conf.h"
+#include <prtos_inc/arch/asm_offsets.h>
 
 #define _PHYS2VIRT(x) ((prtos_u32_t)(x) + CONFIG_PRTOS_OFFSET - CONFIG_PRTOS_LOAD_ADDR)
 
@@ -130,6 +131,17 @@ void arch_mmu_rsv_mem(FILE *out_file) {
         rsv_block(PAGE_SIZE, PAGE_SIZE, "s2 L2 table");
         for (j = 0; j < 8; j++)
             rsv_block(PAGE_SIZE, PAGE_SIZE, "s2 L3 table");
+
+        /* Reserve VGIC state for hw-virt partitions (mem >= 64MB heuristic,
+         * matching the allocation logic in core/kernel/kthread.c) */
+        {
+            prtos_u64_t total_mem = 0;
+            int ma;
+            for (ma = 0; ma < (int)prtos_conf_partition_table[i].num_of_physical_memory_areas; ma++)
+                total_mem += prtos_conf_mem_area_table[prtos_conf_partition_table[i].physical_memory_areas_offset + ma].size;
+            if (total_mem >= (64ULL * 1024 * 1024))
+                rsv_block(_PRTOS_VGIC_STATE_SIZEOF, ALIGNMENT, "VGIC state");
+        }
     }
 #else
     prtos_address_t end;

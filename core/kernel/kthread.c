@@ -24,6 +24,7 @@
 
 #ifdef CONFIG_AARCH64
 extern void setup_stage2_mmu(kthread_t *k);
+#include "aarch64/prtos_vgic.h"
 #endif
 
 static prtos_s32_t num_of_vcpus;
@@ -69,11 +70,28 @@ void start_up_guest(prtos_address_t entry) {
     set_kthread_flags(info->sched.current_kthread, KTHREAD_DCACHE_ENABLED_F | KTHREAD_ICACHE_ENABLED_F);
     set_cache_state(DCACHE | ICACHE);
     resume_vclock(&k->ctrl.g->vclock, &k->ctrl.g->vtimer);
-    switch_kthread_arch_post(k);
 
     // JMP_PARTITION must enable interrupts
 #ifdef CONFIG_AARCH64
     setup_stage2_mmu(k);
+
+    /*
+     * Call switch_kthread_arch_post AFTER setup_stage2_mmu so that
+     * vttbr is set and the VGIC (ICH_HCR_EL2, ICH_VMCR_EL2, timer
+     * virtualization) is properly configured before the first ERET
+     * to the partition.  Without this, the VGIC is not enabled during
+     * the first execution slot, preventing virtual interrupt delivery.
+     */
+    switch_kthread_arch_post(k);
+
+    /* PSCI secondary vCPU boot: jump to PSCI entry point instead of
+     * partition entry.  psci_entry is set by prtos_psci_cpu_on(). */
+    if (k->ctrl.g->karch.psci_entry != 0) {
+        JMP_PARTITION_PSCI(k);
+        /* unreachable */
+    }
+#else
+    switch_kthread_arch_post(k);
 #endif
     JMP_PARTITION(entry, k);
 
@@ -159,6 +177,27 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
             for (tbl = 0; tbl < 8; tbl++)
                 GET_MEMAZ(k->ctrl.g->karch.s2_l3[tbl], PAGE_SIZE, PAGE_SIZE);
             k->ctrl.g->karch.s2_l3_count = 0;
+
+            /* Allocate VGIC state for hw-virt (Linux) partitions only.
+             * Heuristic: partitions with memory >= 64MB are hw-virt Linux guests.
+             * Para-virt (FreeRTOS) partitions keep vgic=NULL and use PCT path. */
+            k->ctrl.g->karch.vgic = 0;
+            {
+                struct prtos_conf_memory_area *mem_areas =
+                    &prtos_conf_phys_mem_area_table[cfg->physical_memory_areas_offset];
+                prtos_u64_t total_mem = 0;
+                prtos_s32_t ma;
+                for (ma = 0; ma < (prtos_s32_t)cfg->num_of_physical_memory_areas; ma++)
+                    total_mem += mem_areas[ma].size;
+                if (total_mem >= (64ULL * 1024 * 1024)) {
+                    extern void prtos_vgic_init(struct prtos_vgic_state *vgic,
+                                                prtos_u32_t num_vcpus);
+                    struct prtos_vgic_state *vgic;
+                    GET_MEMAZ(vgic, sizeof(struct prtos_vgic_state), ALIGNMENT);
+                    prtos_vgic_init(vgic, cfg->num_of_vcpus);
+                    k->ctrl.g->karch.vgic = vgic;
+                }
+            }
         } else {
             prtos_s32_t tbl;
             k->ctrl.g->karch.s2_l1 = p->kthread[0]->ctrl.g->karch.s2_l1;
@@ -167,7 +206,12 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
             for (tbl = 0; tbl < 8; tbl++)
                 k->ctrl.g->karch.s2_l3[tbl] = p->kthread[0]->ctrl.g->karch.s2_l3[tbl];
             k->ctrl.g->karch.s2_l3_count = p->kthread[0]->ctrl.g->karch.s2_l3_count;
+            /* Share VGIC state with vCPU 0 */
+            k->ctrl.g->karch.vgic = p->kthread[0]->ctrl.g->karch.vgic;
         }
+        /* Initialize PSCI fields */
+        k->ctrl.g->karch.psci_entry = 0;
+        k->ctrl.g->karch.psci_context_id = 0;
 #endif
     }
 

@@ -44,6 +44,8 @@ void *prtos_ipa_to_va(prtos_u64_t ipa) {
  */
 #define S2_L1_ENTRIES 4
 #define S2_L2_ENTRIES 512
+#define S2_BLOCK_SIZE (2ULL * 1024 * 1024) /* 2MB */
+#define S2_BLOCK_MASK (S2_BLOCK_SIZE - 1)
 
 /* Stage-2 descriptor attribute bits (shared between block and page entries) */
 #define S2_AF (1ULL << 10)
@@ -167,7 +169,9 @@ void setup_stage2_mmu(kthread_t *k) {
     /* L1[1] → L2 table 1 (covers IPA 0x40000000 – 0x7FFFFFFF) */
     l1[1] = l2_pa_1 | S2_TABLE_VALID;
 
-    /* Map each partition memory area using 4KB pages via L3 tables */
+    /* Map each partition memory area.
+     * Use 2MB block descriptors in L2 for large, 2MB-aligned regions (RAM).
+     * Fall back to 4KB page descriptors via L3 for unaligned or small regions. */
     p = get_partition(k);
     cfg = p->cfg;
     areas = &prtos_conf_phys_mem_area_table[cfg->physical_memory_areas_offset];
@@ -176,15 +180,43 @@ void setup_stage2_mmu(kthread_t *k) {
         ipa = areas[area].start_addr;
         end_ipa = ipa + areas[area].size;
 
-        for (; ipa < end_ipa; ipa += PAGE_SIZE) {
-            pa = ipa + AARCH64_IPA_TO_PA_OFFSET;
-            l1_idx = (int)(ipa >> 30) & (S2_L1_ENTRIES - 1);
-            l2_idx = (int)((ipa >> 21) & (S2_L2_ENTRIES - 1));
-            l3_idx = (int)((ipa >> 12) & (S2_L3_ENTRIES - 1));
+        /* Fast path: if area is 2MB-aligned and >= 2MB, use L2 block entries */
+        if (!(ipa & S2_BLOCK_MASK) && (areas[area].size >= S2_BLOCK_SIZE)) {
+            prtos_u64_t block_end = end_ipa & ~S2_BLOCK_MASK;
+            prtos_u64_t block_ipa;
 
-            prtos_u64_t *l2 = (l1_idx == 0) ? l2_0 : l2_1;
-            prtos_u64_t *l3 = get_or_alloc_l3(k, l2, l2_idx);
-            l3[l3_idx] = (pa & ~((1ULL << 12) - 1)) | S2_PAGE_ATTRS;
+            for (block_ipa = ipa; block_ipa < block_end; block_ipa += S2_BLOCK_SIZE) {
+                pa = block_ipa + AARCH64_IPA_TO_PA_OFFSET;
+                l1_idx = (int)(block_ipa >> 30) & (S2_L1_ENTRIES - 1);
+                l2_idx = (int)((block_ipa >> 21) & (S2_L2_ENTRIES - 1));
+
+                prtos_u64_t *l2 = (l1_idx == 0) ? l2_0 : l2_1;
+                l2[l2_idx] = (pa & ~S2_BLOCK_MASK) | S2_BLOCK_ATTRS;
+            }
+
+            /* Map any remaining tail (< 2MB) using 4KB pages */
+            for (ipa = block_end; ipa < end_ipa; ipa += PAGE_SIZE) {
+                pa = ipa + AARCH64_IPA_TO_PA_OFFSET;
+                l1_idx = (int)(ipa >> 30) & (S2_L1_ENTRIES - 1);
+                l2_idx = (int)((ipa >> 21) & (S2_L2_ENTRIES - 1));
+                l3_idx = (int)((ipa >> 12) & (S2_L3_ENTRIES - 1));
+
+                prtos_u64_t *l2 = (l1_idx == 0) ? l2_0 : l2_1;
+                prtos_u64_t *l3 = get_or_alloc_l3(k, l2, l2_idx);
+                l3[l3_idx] = (pa & ~((1ULL << 12) - 1)) | S2_PAGE_ATTRS;
+            }
+        } else {
+            /* Small or unaligned area: use 4KB pages via L3 tables */
+            for (; ipa < end_ipa; ipa += PAGE_SIZE) {
+                pa = ipa + AARCH64_IPA_TO_PA_OFFSET;
+                l1_idx = (int)(ipa >> 30) & (S2_L1_ENTRIES - 1);
+                l2_idx = (int)((ipa >> 21) & (S2_L2_ENTRIES - 1));
+                l3_idx = (int)((ipa >> 12) & (S2_L3_ENTRIES - 1));
+
+                prtos_u64_t *l2 = (l1_idx == 0) ? l2_0 : l2_1;
+                prtos_u64_t *l3 = get_or_alloc_l3(k, l2, l2_idx);
+                l3[l3_idx] = (pa & ~((1ULL << 12) - 1)) | S2_PAGE_ATTRS;
+            }
         }
     }
 

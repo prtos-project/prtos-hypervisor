@@ -16,6 +16,8 @@
 
 #include <arch/processor.h>
 
+#include "prtos_vgic.h"
+
 /* Defined in the linker script: hypercalls_table[NR_HYPERCALLS] */
 extern prtos_s32_t (*hypercalls_table[])(prtos_word_t, ...);
 
@@ -99,11 +101,34 @@ int prtos_do_hvc(struct cpu_user_regs *regs) {
 }
 
 /*
- * prtos_timer_irq_dispatch - Bridge Xen timer IRQ to PRTOS do_hyp_irq
+ * prtos_timer_irq_dispatch - Bridge Xen timer IRQ to PRTOS
  *
  * Called from static_htimer_isr with the GIC IRQ number.
+ * For hw-virt partitions (Linux): inject timer as PPI 27 via VGIC ICH_LR.
+ * For para-virt partitions (FreeRTOS): use existing PCT-based delivery.
  */
 void prtos_timer_irq_dispatch(int irq_nr) {
+    local_processor_t *info = GET_LOCAL_PROCESSOR();
+    kthread_t *k = info->sched.current_kthread;
+
+    /* For hw-virt partitions, inject virtual timer (PPI 27) via VGIC
+     * and drive the PRTOS cyclic scheduler.  We cannot use do_hyp_irq()
+     * because the PRTOS IRQ handler table has no handler for the GICv3
+     * timer IRQ.  Instead, replicate the do_hyp_irq scheduler pattern:
+     * set SCHED_PENDING, then poll-and-schedule after the IRQ completes. */
+    /* For hw-virt partitions, inject virtual timer (PPI 27) via VGIC
+     * and trigger the scheduler via do_hyp_irq with the registered
+     * aarch64_htimer_irq_handler (set_sched_pending). */
+    if (k->ctrl.g && k->ctrl.g->karch.vgic) {
+        int vcpu_id = KID2VCPUID(k->ctrl.g->id);
+        struct prtos_vgic_state *vgic = k->ctrl.g->karch.vgic;
+        vgic->vcpu[vcpu_id].ppis[11].pending = 1;
+    }
+
+    /* All paths (para-virt, hw-virt, idle) use do_hyp_irq for the
+     * scheduler.  The registered aarch64_htimer_irq_handler calls
+     * set_sched_pending(), and do_hyp_irq's post-handler loop checks
+     * SCHED_PENDING and calls schedule(). */
     cpu_ctxt_t ctxt;
     memset(&ctxt, 0, sizeof(ctxt));
     ctxt.irq_nr = (prtos_u64_t)irq_nr;
@@ -128,6 +153,86 @@ void prtos_stage2_fault_dispatch(prtos_u64_t pc, prtos_u64_t cpsr, int is_data) 
     else
         ctxt.irq_nr = AARCH64_PREFETCH_ABORT;
     do_hyp_trap(&ctxt);
+}
+
+/*
+ * prtos_sysreg_dispatch - Handle trapped system register accesses for
+ * hw-virt (idle-domain) partitions.
+ *
+ * Xen's do_sysreg -> vgic_emulate path dereferences domain->arch.vgic
+ * which is NULL for idle domain.  This function intercepts GICv3 ICC_*
+ * system register traps and handles them via PRTOS's VGIC infrastructure.
+ *
+ * Returns 1 if handled (caller should advance_pc), 0 if unhandled.
+ */
+
+/* HSR_SYSREG encoding helpers (from Xen arm64/hsr.h) */
+#define _HSR_SYSREG(op0,op1,crn,crm,op2) \
+    (((op0)<<20)|((op2)<<17)|((op1)<<14)|((crn)<<10)|((crm)<<1))
+#define _HSR_SYSREG_MASK \
+    _HSR_SYSREG(0x3,0x7,0xf,0xf,0x7)
+
+/* ICC_SGI1R_EL1 = S3_0_C12_C11_5 */
+#define _HSR_ICC_SGI1R_EL1   _HSR_SYSREG(3,0,12,11,5)
+/* ICC_ASGI1R_EL1 = S3_1_C12_C11_6 */
+#define _HSR_ICC_ASGI1R_EL1  _HSR_SYSREG(3,1,12,11,6)
+/* ICC_SGI0R_EL1 = S3_2_C12_C11_7 */
+#define _HSR_ICC_SGI0R_EL1   _HSR_SYSREG(3,2,12,11,7)
+/* ICC_SRE_EL1 = S3_0_C12_C12_5 */
+#define _HSR_ICC_SRE_EL1     _HSR_SYSREG(3,0,12,12,5)
+
+int prtos_sysreg_dispatch(struct cpu_user_regs *regs,
+                           prtos_u64_t hsr_bits) {
+    local_processor_t *info = GET_LOCAL_PROCESSOR();
+    kthread_t *k = info->sched.current_kthread;
+    prtos_u32_t sysreg = (prtos_u32_t)hsr_bits & _HSR_SYSREG_MASK;
+    int rt = (hsr_bits >> 5) & 0x1F;     /* bits [9:5] = Rt */
+    int is_read = hsr_bits & 1;           /* bit 0 = direction (1=read) */
+
+    switch (sysreg) {
+    case _HSR_ICC_SGI1R_EL1:
+    case _HSR_ICC_ASGI1R_EL1:
+    case _HSR_ICC_SGI0R_EL1:
+        if (!is_read && k->ctrl.g && k->ctrl.g->karch.vgic) {
+            /* Decode SGI write: extract target list and INTID */
+            prtos_u64_t val = (rt == 31) ? 0 : (&regs->x0)[rt];
+            prtos_u32_t intid = (val >> 24) & 0xF;
+            prtos_u16_t target_list = val & 0xFFFF;
+            prtos_u32_t aff1 = (val >> 16) & 0xFF;
+            int irm = (val >> 40) & 1;
+            int vcpu_id = KID2VCPUID(k->ctrl.g->id);
+            struct prtos_vgic_state *vgic = k->ctrl.g->karch.vgic;
+            int i;
+
+            if (irm) {
+                /* IRM=1: send to all PEs except self */
+                for (i = 0; i < (int)vgic->num_vcpus; i++)
+                    if (i != vcpu_id)
+                        prtos_vgic_inject_sgi(vgic, i, intid);
+            } else {
+                /* IRM=0: send to target list (Aff1.TargetList) */
+                for (i = 0; i < 16 && i < (int)vgic->num_vcpus; i++)
+                    if (target_list & (1U << i))
+                        prtos_vgic_inject_sgi(vgic, (aff1 << 4) | i, intid);
+            }
+        }
+        return 1;
+
+    case _HSR_ICC_SRE_EL1:
+        if (is_read) {
+            /* Report SRE=1 (system register interface enabled) */
+            prtos_u64_t val = 0x7;  /* SRE | DIB | DFB */
+            if (rt < 31) (&regs->x0)[rt] = val;
+        }
+        /* Write to SRE: ignore (already enabled) */
+        return 1;
+
+    default:
+        /* Unhandled sysreg for idle domain: treat as RAZ/WI */
+        if (is_read && rt < 31)
+            (&regs->x0)[rt] = 0;
+        return 1;
+    }
 }
 
 /* Declared in irqs.c */

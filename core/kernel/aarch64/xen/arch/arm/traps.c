@@ -1604,10 +1604,24 @@ static void do_trap_stage2_abort_guest(struct cpu_user_regs *regs, const union h
     }
 
     /*
-     * PRTOS: For idle domain (PRTOS partitions), Xen's p2m cannot resolve
-     * stage-2 faults. Route through PRTOS Health Monitor to halt/propagate.
+     * PRTOS: For idle domain (PRTOS partitions), try MMIO emulation first
+     * (needed for VGIC GICD/GICR access from Linux guests), then fall back
+     * to Health Monitor for genuine faults.
      */
     if (is_idle_domain(current->domain)) {
+        /* Try VGIC MMIO emulation for data aborts with valid syndrome */
+        if (is_data && hsr.dabt.valid) {
+            extern int prtos_mmio_dispatch(struct cpu_user_regs *regs,
+                                           paddr_t gpa,
+                                           int is_write, int reg, int size);
+            if (prtos_mmio_dispatch(regs, gpa,
+                                    hsr.dabt.write, hsr.dabt.reg,
+                                    1 << hsr.dabt.size) == 0) {
+                advance_pc(regs, hsr);
+                return;
+            }
+        }
+        /* Not MMIO or unhandled — route to PRTOS Health Monitor */
         extern void prtos_stage2_fault_dispatch(uint64_t pc, uint64_t cpsr, int is_data);
         prtos_stage2_fault_dispatch(regs->pc, regs->cpsr, is_data);
         return;
@@ -1858,11 +1872,32 @@ void asmlinkage do_trap_guest_sync(struct cpu_user_regs *regs) {
              */
             GUEST_BUG_ON(regs_mode_is_32bit(regs));
             perfc_incr(trap_smc64);
+            /* PRTOS: handle PSCI SMC calls for idle-domain (PRTOS partitions) */
+            if (is_idle_domain(current->domain)) {
+                extern int prtos_psci_handle(struct cpu_user_regs *regs);
+                if (prtos_psci_handle(regs)) {
+                    advance_pc(regs, hsr);  /* SMC: must advance PC past the SMC insn */
+                    break;
+                }
+            }
             do_trap_smc(regs, hsr);
             break;
         case HSR_EC_SYSREG:
             GUEST_BUG_ON(regs_mode_is_32bit(regs));
             perfc_incr(trap_sysreg);
+            /*
+             * PRTOS: intercept sysreg traps for idle-domain (hw-virt partitions)
+             * before reaching Xen's do_sysreg/vgic_emulate which dereference
+             * domain->arch.vgic (NULL for idle domain).
+             */
+            if (is_idle_domain(current->domain)) {
+                extern int prtos_sysreg_dispatch(struct cpu_user_regs *regs,
+                                                  uint64_t hsr_bits);
+                if (prtos_sysreg_dispatch(regs, hsr.bits)) {
+                    advance_pc(regs, hsr);
+                    break;
+                }
+            }
             do_sysreg(regs, hsr);
             break;
         case HSR_EC_SVE:
@@ -2018,6 +2053,7 @@ struct cpu_user_regs *prtos_current_guest_regs_percpu[CONFIG_NO_CPUS];
 
 void asmlinkage leave_hypervisor_to_guest(struct cpu_user_regs *regs) {
     prtos_current_guest_regs_percpu[smp_processor_id()] = regs;
+
     local_irq_disable();
 
     /*
@@ -2028,10 +2064,17 @@ void asmlinkage leave_hypervisor_to_guest(struct cpu_user_regs *regs) {
     while (check_for_vcpu_work()) check_for_pcpu_work();
     check_for_pcpu_work();
 
+
     /* PRTOS: deliver pending virtual IRQs to partition before ERET */
     {
         extern void prtos_raise_pend_irqs_aarch64(void);
         prtos_raise_pend_irqs_aarch64();
+    }
+
+    /* PRTOS: flush pending hw-virt IRQs to ICH_LR registers (for Linux guests) */
+    {
+        extern void prtos_vgic_flush_lrs_current(void);
+        prtos_vgic_flush_lrs_current();
     }
 
     vgic_sync_to_lrs();

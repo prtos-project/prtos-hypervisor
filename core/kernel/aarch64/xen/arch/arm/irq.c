@@ -273,7 +273,6 @@ void do_IRQ(struct cpu_user_regs *regs, unsigned int irq, int is_fiq)
     const struct cpu_user_regs *old_regs = set_irq_regs(regs);
 
     unsigned int cpu = smp_processor_id();
-    printk("do_IRQ: irq %d, cpu %d\n", irq, cpu);
     perfc_incr(irqs);
 
     /* Statically assigned SGIs do not come down this path */
@@ -351,7 +350,6 @@ out_no_end:
         /* Reprogram the timer */
         void enable_timer_prtos(void);
         enable_timer_prtos();
-        printk("do_IRQ: irq %d done\n", irq);
     }
 }
 
@@ -835,16 +833,23 @@ struct static_irq_guest *static_irq_owner(uint32_t irq, enum static_irq_type *ty
 }
 
 void static_vgic_inject(struct static_irq_guest *g, uint32_t irq) {
-    /* stub: real version would program ICH_LR<n>_EL2 */
+    extern int prtos_vgic_inject_hw_spi(uint32_t intid);
     (void)g;
-    (void)irq;
+    if (irq >= 32) {
+        prtos_vgic_inject_hw_spi(irq);
+    }
 }
 
-void static_handle_spi(struct cpu_user_regs *regs, unsigned int irq) {
+/*
+ * Handle a physical SPI.
+ * Returns 0 — caller should do full EOI+DIR (prtos_gicv3_host_irq_end).
+ * The virtual interrupt is injected via software pending state and
+ * delivered to the guest through vgic_flush_lrs on next ERET.
+ */
+int static_handle_spi(struct cpu_user_regs *regs, unsigned int irq) {
     struct static_irq_guest *g;
     enum static_irq_type type;
 
-    printk("static_handle_spi: irq %u\n", irq);
     g = static_irq_owner(irq, &type);
 
     switch (type) {
@@ -858,12 +863,13 @@ void static_handle_spi(struct cpu_user_regs *regs, unsigned int irq) {
 
         case STATIC_IRQ_VIRTUAL:
             static_vgic_inject(g, irq);
-            break;
+            return 0;  /* Caller: full EOI+DIR, physical SPI is masked in inject */
 
         default:
             printk("static IRQ: bad type for irq %u\n", irq);
             break;
     }
+    return 0;
 }
 
 #endif

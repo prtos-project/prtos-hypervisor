@@ -103,21 +103,25 @@ static inline int local_fiq_is_enabled(void) {
                              : "x10", "x11", "x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28", "x29", "x30", "memory"); \
     } while (0)
 
+/* HCR_EL2 value for partitions:
+ * RW(31) | TSC(19) | AMO(5) | IMO(4) | FMO(3) | VM(0)
+ * TSC traps SMC to EL2 (needed for PSCI emulation for Linux). */
+#define PRTOS_HCR_EL2_VAL 0x80080039ULL
+
 /* Jump to partition at EL1 using ERET.
  * Passes the PCT physical address in x0 (same role as %ebx in x86).
- * Sets HCR_EL2: HCR_RW(EL1=AArch64) | HCR_AMO | HCR_IMO | HCR_FMO */
+ * Sets HCR_EL2: HCR_RW | HCR_TSC | HCR_AMO | HCR_IMO | HCR_FMO | HCR_VM */
 #define JMP_PARTITION(entry, k)                                                                                          \
     do {                                                                                                                 \
         prtos_u64_t _pct_paddr = (prtos_u64_t)_VIRT2PHYS((prtos_address_t)(k)->ctrl.g->part_ctrl_table);                 \
+        prtos_u64_t _hcr = PRTOS_HCR_EL2_VAL;                                                                           \
         /* IRQs must stay masked until ERET.  ERET atomically loads PSTATE from SPSR_EL2 (= 0x5 = EL1h,                 \
          * DAIF clear) so IRQs are enabled on arrival at EL1 — same semantics as x86 IRET.                              \
          * Enabling IRQs here would race with the timer: an IRQ between msr elr/spsr and eret                           \
          * corrupts the return state (the handler overwrites ELR/SPSR, and the final eret                               \
          * jumps to a stale address at EL2 instead of EL1). */                                                           \
-        __asm__ __volatile__(                             /* HCR_EL2: RW=1(EL1 is AArch64) | AMO|IMO|FMO | VM */         \
-                             "mov x10, #0x39\n\t"         /* AMO|IMO|FMO|VM = bits 5:3,0 */                              \
-                             "orr x10, x10, #(1<<31)\n\t" /* HCR_RW = bit 31 */                                          \
-                             "msr hcr_el2, x10\n\t"                                                                      \
+        __asm__ __volatile__(                                                                                            \
+                             "msr hcr_el2, %2\n\t"    /* HCR_EL2 value */                                               \
                              "msr elr_el2, %1\n\t"    /* entry point */                                                  \
                              "mov x10, #0x5\n\t"      /* SPSR_EL2: EL1h mode */                                          \
                              "msr spsr_el2, x10\n\t"  /* Disable EL1 stage-1 MMU so partition VA=IPA via stage-2 only */ \
@@ -129,7 +133,34 @@ static inline int local_fiq_is_enabled(void) {
                              "isb\n\t"                                                                                   \
                              "eret\n\t"                                                                                  \
                              :                                                                                           \
-                             : "r"(_pct_paddr), "r"((prtos_u64_t)(entry))                                                \
+                             : "r"(_pct_paddr), "r"((prtos_u64_t)(entry)),                                               \
+                               "r"(_hcr)                                                                                 \
+                             : "x0", "x10", "memory");                                                                   \
+    } while (0)
+
+/* Jump to partition at EL1 for PSCI secondary vCPU boot.
+ * Passes context_id in x0 (per PSCI spec) and jumps to psci_entry.
+ * SPSR = EL1h with DAIF masked (0x3c5). */
+#define JMP_PARTITION_PSCI(k)                                                                                            \
+    do {                                                                                                                 \
+        prtos_u64_t _entry = (k)->ctrl.g->karch.psci_entry;                                                              \
+        prtos_u64_t _ctx = (k)->ctrl.g->karch.psci_context_id;                                                           \
+        prtos_u64_t _hcr = PRTOS_HCR_EL2_VAL;                                                                           \
+        __asm__ __volatile__(                                                                                            \
+                             "msr hcr_el2, %2\n\t"    /* HCR_EL2 value */                                               \
+                             "msr elr_el2, %1\n\t"    /* PSCI entry point */                                             \
+                             "mov x10, #0x3c5\n\t"    /* SPSR_EL2: EL1h, DAIF masked */                                  \
+                             "msr spsr_el2, x10\n\t"                                                                     \
+                             "msr sctlr_el1, xzr\n\t"                                                                   \
+                             "mov x10, #(3 << 20)\n\t"                                                                   \
+                             "msr cpacr_el1, x10\n\t"                                                                    \
+                             "isb\n\t"                                                                                   \
+                             "mov x0, %0\n\t" /* x0 = context_id */                                                      \
+                             "isb\n\t"                                                                                   \
+                             "eret\n\t"                                                                                  \
+                             :                                                                                           \
+                             : "r"(_ctx), "r"(_entry),                                                                   \
+                               "r"(_hcr)                                                                                 \
                              : "x0", "x10", "memory");                                                                   \
     } while (0)
 #endif /*__ASSEMBLY__*/

@@ -19,6 +19,8 @@
 #error Kernel file, do not include.
 #endif
 
+struct prtos_vgic_state;  /* forward declaration, defined in prtos_vgic.h */
+
 /* ARM64 VFP instruction requires fpregs address to be 128-byte aligned */
 #define __vfp_aligned __attribute__((aligned(16)))
 
@@ -141,9 +143,17 @@ struct kthread_arch {
     prtos_u64_t *s2_l3[8];  /* L3 tables: 512 entries each, for 4KB page mappings */
     prtos_s32_t s2_l3_count; /* Number of L3 tables allocated so far */
 
-    // struct vtimer phys_timer;
-    // struct vtimer virt_timer;
-    // bool vtimer_initialized;
+    /* GICv3 virtual CPU interface state saved/restored across context switches */
+    prtos_u64_t ich_lr[4];    /* ICH_LR0_EL2 .. ICH_LR3_EL2 */
+    prtos_u64_t ich_hcr;      /* ICH_HCR_EL2 */
+    prtos_u64_t ich_vmcr;     /* ICH_VMCR_EL2 */
+
+    /* PRTOS VGIC state (shared across vCPUs of same partition, NULL for para-virt) */
+    struct prtos_vgic_state *vgic;
+
+    /* PSCI CPU_ON parameters for secondary vCPU boot */
+    prtos_u64_t psci_entry;
+    prtos_u64_t psci_context_id;
 };
 
 

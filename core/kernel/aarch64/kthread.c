@@ -22,8 +22,36 @@
 void switch_kthread_arch_pre(kthread_t *new, kthread_t *current) {
 #ifdef CONFIG_AARCH64
     if (!new->ctrl.g) {
-        /* Switching to idle kthread: disable stage-2 MMU to prevent
-         * stale VTTBR_EL2 from a previous partition causing translation faults. */
+        /* Switching away from a hw-virt partition to idle:
+         * 1) Save GICv3 virtual CPU interface state (ICH_LR + control regs)
+         * 2) Disable virtual interface & stage-2 MMU */
+        if (current->ctrl.g && current->ctrl.g->karch.vgic) {
+            prtos_u64_t v0, v1, v2, v3, vh, vm;
+            asm volatile("mrs %0, S3_4_C12_C12_0\n\t"  /* ICH_LR0_EL2 */
+                         "mrs %1, S3_4_C12_C12_1\n\t"  /* ICH_LR1_EL2 */
+                         "mrs %2, S3_4_C12_C12_2\n\t"  /* ICH_LR2_EL2 */
+                         "mrs %3, S3_4_C12_C12_3\n\t"  /* ICH_LR3_EL2 */
+                         "mrs %4, S3_4_C12_C11_0\n\t"  /* ICH_HCR_EL2 */
+                         "mrs %5, S3_4_C12_C11_7\n\t"  /* ICH_VMCR_EL2 */
+                         : "=r"(v0), "=r"(v1), "=r"(v2), "=r"(v3),
+                           "=r"(vh), "=r"(vm));
+            current->ctrl.g->karch.ich_lr[0] = v0;
+            current->ctrl.g->karch.ich_lr[1] = v1;
+            current->ctrl.g->karch.ich_lr[2] = v2;
+            current->ctrl.g->karch.ich_lr[3] = v3;
+            current->ctrl.g->karch.ich_hcr  = vh;
+            current->ctrl.g->karch.ich_vmcr = vm;
+            /* Disable virtual CPU interface and clear LRs so idle
+             * doesn't receive spurious maintenance interrupts. */
+            asm volatile("msr S3_4_C12_C11_0, xzr\n\t"  /* ICH_HCR_EL2 = 0 */
+                         "msr S3_4_C12_C12_0, xzr\n\t"
+                         "msr S3_4_C12_C12_1, xzr\n\t"
+                         "msr S3_4_C12_C12_2, xzr\n\t"
+                         "msr S3_4_C12_C12_3, xzr\n\t"
+                         "isb" ::: "memory");
+        }
+
+        /* Disable stage-2 MMU */
         asm volatile("msr vttbr_el2, xzr\n\t"
                      "mrs x10, hcr_el2\n\t"
                      "bic x10, x10, #1\n\t" /* clear VM bit */
@@ -51,7 +79,7 @@ void switch_kthread_arch_post(kthread_t *current) {
                 : "memory");
 
             /* Set HCR_EL2: RW | AMO | IMO | FMO | VM = 0x8000_0039 */
-            prtos_u64_t hcr = 0x80000039ULL;
+            prtos_u64_t hcr = PRTOS_HCR_EL2_VAL;
             __asm__ __volatile__(
                 "msr hcr_el2, %0\n\t"
                 "isb\n\t"
@@ -59,16 +87,55 @@ void switch_kthread_arch_post(kthread_t *current) {
                 : "r"(hcr)
                 : "memory");
 
-            /* Enable GICv3 virtual CPU interface for hw-virt partitions.
-             * ICH_HCR_EL2.En = 1: activates the virtual CPU interface.
-             * ICH_VMCR_EL2: VPMR=0xFF (unmask all), VENG1=1 (enable Group 1). */
-            __asm__ __volatile__(
-                "msr S3_4_C12_C11_0, %0\n\t"  /* ICH_HCR_EL2 */
-                "msr S3_4_C12_C11_7, %1\n\t"  /* ICH_VMCR_EL2 */
-                "isb\n\t"
-                :
-                : "r"((prtos_u64_t)0x1), "r"((prtos_u64_t)0xFF000002ULL)
-                : "memory");
+            /* Restore GICv3 virtual CPU interface state for hw-virt partitions.
+             * Restores ICH_LR0-3 saved in switch_kthread_arch_pre, then
+             * re-enables ICH_HCR_EL2 and ICH_VMCR_EL2. Finally flushes
+             * any newly pending VGIC IRQs (SGIs, timer) accumulated while
+             * this vCPU was preempted. */
+            if (current->ctrl.g->karch.vgic) {
+                prtos_u64_t lr0 = current->ctrl.g->karch.ich_lr[0];
+                prtos_u64_t lr1 = current->ctrl.g->karch.ich_lr[1];
+                prtos_u64_t lr2 = current->ctrl.g->karch.ich_lr[2];
+                prtos_u64_t lr3 = current->ctrl.g->karch.ich_lr[3];
+                prtos_u64_t hcr = current->ctrl.g->karch.ich_hcr;
+                prtos_u64_t vmcr = current->ctrl.g->karch.ich_vmcr;
+                /* Default values for first run (before any save) */
+                if (!hcr) hcr = 0x1;
+                if (!vmcr) vmcr = 0xFF000002ULL;
+                __asm__ __volatile__(
+                    "msr S3_4_C12_C12_0, %0\n\t"  /* ICH_LR0_EL2 */
+                    "msr S3_4_C12_C12_1, %1\n\t"
+                    "msr S3_4_C12_C12_2, %2\n\t"
+                    "msr S3_4_C12_C12_3, %3\n\t"
+                    "msr S3_4_C12_C11_0, %4\n\t"   /* ICH_HCR_EL2 */
+                    "msr S3_4_C12_C11_7, %5\n\t"   /* ICH_VMCR_EL2 */
+                    "isb\n\t"
+                    :
+                    : "r"(lr0), "r"(lr1), "r"(lr2), "r"(lr3),
+                      "r"(hcr), "r"(vmcr)
+                    : "memory");
+
+                /* Timer virtualization */
+                __asm__ __volatile__(
+                    "msr CNTVOFF_EL2, xzr\n\t"
+                    "mov x10, #1\n\t"           /* EL1PCTEN = 1 */
+                    "msr CNTHCTL_EL2, x10\n\t"
+                    "isb\n\t"
+                    ::: "x10", "memory");
+
+                /* Flush any newly pending VGIC IRQs into free LR slots */
+                extern void prtos_vgic_flush_lrs_current(void);
+                prtos_vgic_flush_lrs_current();
+            } else {
+                /* Para-virt partition: just enable virtual interface */
+                __asm__ __volatile__(
+                    "msr S3_4_C12_C11_0, %0\n\t"
+                    "msr S3_4_C12_C11_7, %1\n\t"
+                    "isb\n\t"
+                    :
+                    : "r"((prtos_u64_t)0x1), "r"((prtos_u64_t)0xFF000002ULL)
+                    : "memory");
+            }
         }
     }
 #endif

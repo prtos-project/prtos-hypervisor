@@ -230,21 +230,28 @@ static void htimer_interrupt(int irq, void *dev_id) {
 extern void enable_timer_prtos(void);
 void prtos_gicv3_host_irq_end(int irq);
 extern void prtos_timer_irq_dispatch(int irq_nr);
+static DEFINE_PER_CPU(int, htimer_pending);
+
 void static_htimer_isr(int irq) {
-    /* Disable timer FIRST to prevent level-triggered re-assertion after EOI+DIR.
-     * The ARM generic timer output is level-triggered: if still asserted when
-     * the GIC deactivates the IRQ, it immediately re-pends. */
+    /* Disable timer to prevent level-triggered re-assertion after EOI+DIR. */
     WRITE_SYSREG(0, CNTHP_CTL_EL2);
     isb();
-    /* Complete the GIC interrupt lifecycle BEFORE calling the handler.
-     * The handler calls do_hyp_irq → schedule() → CONTEXT_SWITCH, which
-     * may switch to a different kthread. If EOI+DIR is deferred until after
-     * the context switch, the resumed kthread would issue an unmatched EOI+DIR
-     * from its own stack frame, corrupting the GIC running priority. */
+    /* EOI the IRQ before the handler may context-switch. */
     prtos_gicv3_host_irq_end(irq);
-    /* Timer reprogramming is handled by PRTOS's ktimer subsystem
-     * via set_hw_timer() -> set_armv8_current_timer() -> reprogram_timer() */
-    prtos_timer_irq_dispatch(irq);
+    /* Defer the actual timer dispatch to after the GIC loop exits
+     * (via static_htimer_deferred).  This prevents schedule() from
+     * re-arming the timer inside the GIC loop, which would cause
+     * infinite re-entry. */
+    this_cpu(htimer_pending) = irq;
+}
+
+/* Called from static_gic_interrupt after the GIC loop exits. */
+void static_htimer_deferred(void) {
+    if (this_cpu(htimer_pending)) {
+        int irq = this_cpu(htimer_pending);
+        this_cpu(htimer_pending) = 0;
+        prtos_timer_irq_dispatch(irq);
+    }
 }
 
 int prtos_get_gpu_khz(void) {

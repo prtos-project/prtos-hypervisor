@@ -141,16 +141,18 @@ static inline void _set_trap_gate(prtos_s32_t e, void *hndl, prtos_u32_t dpl) {
 //     return 0;
 // }
 
+/* No-op handler for the hypervisor timer IRQ.  Registered so that
+ * do_hyp_irq() finds a valid handler instead of calling default_irq_handler
+ * (which crashes via HM unexpected-trap).  The actual scheduling work
+ * is done by the set_sched_pending() callback from the ktimer subsystem. */
+static void aarch64_htimer_irq_handler(cpu_ctxt_t *ctxt, void *data) {
+    set_sched_pending();
+}
+
 void arch_setup_irqs(void) {
-//     set_trap_handler(PAGE_FAULT, x86_trap_page_fault);
-//     set_trap_handler(DEVICE_NOT_AVAILABLE, x86_trap_device_not_available);
-// #ifdef CONFIG_SMP
-//     set_irq_handler(HALT_ALL_IPI_IRQ, smp_halt_all_handle, 0);
-//     set_irq_handler(SCHED_PENDING_IPI_IRQ, smp_sched_pending_ipi_handle, 0);
-// #endif
-// #ifdef CONFIG_SMI_DISABLE
-//     smi_disable();
-// #endif
+    /* Register no-op handler for GIC PPI 26 (EL2 hypervisor physical timer).
+     * This allows do_hyp_irq() to process the timer IRQ without crashing. */
+    set_irq_handler(26, aarch64_htimer_irq_handler, 0);
 }
 
 prtos_address_t irq_vector_to_address(prtos_s32_t vector) {

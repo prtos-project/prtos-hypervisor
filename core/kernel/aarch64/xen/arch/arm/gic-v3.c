@@ -519,6 +519,22 @@ void prtos_gicv3_host_irq_end(int irq)
     prtos_gicv3_dir_irq(irq);
 }
 
+void prtos_gicv3_enable_spi(int irq)
+{
+    if (irq < 32 || irq >= 1020)
+        return;
+    writel_relaxed(1U << (irq % 32), GICD + GICD_ISENABLER + (irq / 32) * 4);
+    gicv3_dist_wait_for_rwp();
+}
+
+void prtos_gicv3_mask_spi(int irq)
+{
+    if (irq < 32 || irq >= 1020)
+        return;
+    writel_relaxed(1U << (irq % 32), GICD + GICD_ICENABLER + (irq / 32) * 4);
+    gicv3_dist_wait_for_rwp();
+}
+
 
 // #endif // CONFIG_STATIC_IRQ_ROUTING
 
@@ -1985,6 +2001,10 @@ static int __init gicv3_init_prtos(void)
     spin_lock(&gicv3.lock);
 
     gicv3_dist_init();
+
+    /* Enable physical SPIs assigned to guest partitions via static IRQ
+     * routing (e.g. UART PL011 SPI 1 = INTID 33 for Linux hw-virt). */
+    prtos_gicv3_enable_spi(33);
 
     if ( gic_dist_supports_lpis() )
     {
