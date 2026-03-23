@@ -24,6 +24,7 @@ ALL_CASES=(
     "helloworld:1:15"
     "helloworld_smp:2:15"
     "freertos:1:20:aarch64"
+    "linux:0:180:aarch64"
 )
 
 # Colors for output
@@ -44,7 +45,8 @@ Options:
 Commands:
   check-<case>           Check a specific test case.
                          Available: helloworld, helloworld_smp,
-                         example.001 ~ example.009, freertos (aarch64 only)
+                         example.001 ~ example.009,
+                         freertos (aarch64 only), linux (aarch64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -152,11 +154,105 @@ function lookup_case() {
     return 1
 }
 
+# Run the Linux test case (aarch64 only)
+# Uses pexpect to boot, login (root/1234), and verify 2 vCPUs.
+# Returns: 0 on PASS, 1 on FAIL
+function run_test_linux() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/linux"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/linux [${ARCH}]"
+    cd "${test_dir}"
+
+    # Build the Linux partition
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check linux FAILED${NC} (build error)"
+        return 1
+    fi
+
+    # Create bootable image
+    aarch64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S \
+        resident_sw resident_sw.bin
+    mkimage -A arm64 -O linux -C none -a 0x40200000 -e 0x40200000 \
+        -d resident_sw.bin resident_sw_image > /dev/null 2>&1
+    mkdir -p u-boot
+    cp ../../bin/u-boot.bin ./u-boot/
+
+    # Run pexpect-based login test
+    python3 -u << 'PYTEST' 2>&1
+import pexpect, sys, time
+child = pexpect.spawn(
+    'qemu-system-aarch64 '
+    '-machine virt,gic_version=3 '
+    '-machine virtualization=true '
+    '-cpu cortex-a72 -machine type=virt '
+    '-m 4096 -smp 4 '
+    '-bios ./u-boot/u-boot.bin '
+    '-device loader,file=./resident_sw_image,addr=0x40200000,force-raw=on '
+    '-nographic -no-reboot',
+    timeout=200, encoding='utf-8', codec_errors='replace'
+)
+try:
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=180)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: login prompt not reached')
+        child.close(force=True); sys.exit(1)
+    time.sleep(2); child.sendline('root')
+    idx = child.expect(['Password:', 'assword:', pexpect.TIMEOUT], timeout=30)
+    if idx >= 2:
+        print('LINUX_TEST_FAIL: no password prompt')
+        child.close(force=True); sys.exit(1)
+    time.sleep(1); child.sendline('1234')
+    idx = child.expect(['#', 'Login incorrect', pexpect.TIMEOUT], timeout=30)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: login failed')
+        child.close(force=True); sys.exit(1)
+    time.sleep(1); child.sendline('nproc')
+    idx = child.expect(['2', pexpect.TIMEOUT], timeout=10)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: nproc did not return 2')
+        child.close(force=True); sys.exit(1)
+    child.expect(['#', pexpect.TIMEOUT], timeout=5)
+    child.sendline('which htop')
+    idx = child.expect(['htop', pexpect.TIMEOUT], timeout=10)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: htop not found')
+        child.close(force=True); sys.exit(1)
+    print('Verification Passed')
+    child.close(force=True)
+except Exception as e:
+    print(f'LINUX_TEST_FAIL: {e}')
+    try: child.close(force=True)
+    except: pass
+    sys.exit(1)
+PYTEST
+
+    local rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        echo -e "${GREEN}Check linux PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check linux FAILED${NC}"
+        return 1
+    fi
+}
+
 # Run a single test case
 # Arguments: case_name
 # Returns: 0 on PASS, 1 on FAIL
 function run_test() {
     local case_name="$1"
+
+    # Linux has its own test runner
+    if [[ "${case_name}" == "linux" ]]; then
+        run_test_linux
+        return $?
+    fi
 
     if ! lookup_case "${case_name}"; then
         echo -e "${RED}Unknown test case: ${case_name}${NC}"
@@ -237,6 +333,7 @@ function builder_to_case() {
         check-helloworld)     echo "helloworld" ;;
         check-helloworld_smp) echo "helloworld_smp" ;;
         check-freertos)       echo "freertos" ;;
+        check-linux)          echo "linux" ;;
         check-[0-9]*)         echo "example.${builder#check-}" ;;
         *)                    echo "" ;;
     esac
