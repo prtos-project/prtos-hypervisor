@@ -23,6 +23,8 @@
 /* GICv3 MMIO regions (QEMU virt standard addresses) */
 #define PRTOS_VGIC_GICD_BASE    0x08000000ULL
 #define PRTOS_VGIC_GICD_SIZE    0x10000ULL
+#define PRTOS_VGIC_GICC_BASE    0x08010000ULL   /* GICv2 CPU interface (emulated) */
+#define PRTOS_VGIC_GICC_SIZE    0x10000ULL
 #define PRTOS_VGIC_GICR_BASE   0x080A0000ULL
 #define PRTOS_VGIC_GICR_STRIDE 0x20000ULL   /* per-vCPU: RD_base(64KB) + SGI_base(64KB) */
 #define PRTOS_VGIC_GICR_SIZE   (PRTOS_VGIC_MAX_VCPUS * PRTOS_VGIC_GICR_STRIDE)
@@ -64,6 +66,7 @@ struct prtos_vgic_state {
     prtos_u32_t gicd_ctlr;       /* ARE_NS=1, EnableGrp1NS */
     prtos_u32_t num_irqs;        /* Total interrupt lines */
     prtos_u32_t num_vcpus;
+    prtos_u32_t gicc_bpr;        /* Shadow of GICC_BPR (hw clamps minimum) */
     struct prtos_vgic_irq spis[PRTOS_VGIC_NR_SPIS];  /* INTID 32-127 */
     struct prtos_vgic_vcpu vcpu[PRTOS_VGIC_MAX_VCPUS];
 };

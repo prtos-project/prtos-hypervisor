@@ -23,7 +23,8 @@ ALL_CASES=(
     "example.009:2:15"
     "helloworld:1:15"
     "helloworld_smp:2:15"
-    "freertos:1:20:aarch64"
+    "freertos_para_virt:1:20:aarch64"
+    "freertos_hw_virt:0:30:aarch64"
     "linux:0:180:aarch64"
 )
 
@@ -46,7 +47,9 @@ Commands:
   check-<case>           Check a specific test case.
                          Available: helloworld, helloworld_smp,
                          example.001 ~ example.009,
-                         freertos (aarch64 only), linux (aarch64 only)
+                         freertos_para_virt (aarch64 only),
+                         freertos_hw_virt (aarch64 only),
+                         linux (aarch64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -154,6 +157,44 @@ function lookup_case() {
     return 1
 }
 
+# Run the FreeRTOS hw_virt test case (aarch64 only)
+# Builds native (unmodified) FreeRTOS under PRTOS hw-virt, checks for timer output.
+# Returns: 0 on PASS, 1 on FAIL
+function run_test_freertos_hw_virt() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/freertos_hw_virt"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/freertos_hw_virt [${ARCH}]"
+    cd "${test_dir}"
+
+    local output_file="${test_dir}/freertos_hw_virt.output"
+    rm -f "${output_file}"
+
+    make ${MAKE_RUN_TARGET} > "${output_file}" 2>&1 &
+    local qemu_pid=$!
+
+    sleep 30
+
+    killall -9 "${QEMU}" 2>/dev/null
+    wait ${qemu_pid} 2>/dev/null
+
+    # Native FreeRTOS prints "Timer:XXXXX Stop" when each of 5 timers completes.
+    local stop_count
+    stop_count=$(grep -c "Stop$" "${output_file}" 2>/dev/null) || stop_count=0
+
+    if [[ ${stop_count} -ge 5 ]]; then
+        echo -e "${GREEN}Check freertos_hw_virt PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check freertos_hw_virt FAILED${NC} (expected >=5 'Stop' lines, got ${stop_count})"
+        cat "${output_file}" 2>/dev/null || true
+        return 1
+    fi
+}
+
 # Run the Linux test case (aarch64 only)
 # Uses pexpect to boot, login (root/1234), and verify 2 vCPUs.
 # Returns: 0 on PASS, 1 on FAIL
@@ -248,9 +289,13 @@ PYTEST
 function run_test() {
     local case_name="$1"
 
-    # Linux has its own test runner
+    # Custom test runners for special cases
     if [[ "${case_name}" == "linux" ]]; then
         run_test_linux
+        return $?
+    fi
+    if [[ "${case_name}" == "freertos_hw_virt" ]]; then
+        run_test_freertos_hw_virt
         return $?
     fi
 
@@ -332,7 +377,8 @@ function builder_to_case() {
     case "${builder}" in
         check-helloworld)     echo "helloworld" ;;
         check-helloworld_smp) echo "helloworld_smp" ;;
-        check-freertos)       echo "freertos" ;;
+        check-freertos_para_virt)       echo "freertos_para_virt" ;;
+        check-freertos_hw_virt) echo "freertos_hw_virt" ;;
         check-linux)          echo "linux" ;;
         check-[0-9]*)         echo "example.${builder#check-}" ;;
         *)                    echo "" ;;

@@ -36,8 +36,21 @@
 #define GICD_IPRIORITYR     0x0400  /* byte-accessible */
 #define GICD_ICFGR          0x0C00  /* 2 bits per IRQ */
 #define GICD_IGRPMODR       0x0D00
+#define GICD_ITARGETSR      0x0800  /* GICv2-compat: 1 byte per IRQ, 4 per reg */
 #define GICD_IROUTER        0x6000  /* 64-bit per SPI */
 #define GICD_PIDR2          0xFFE8
+
+/* ------------------------------------------------------------------ */
+/* GICC (GICv2 CPU interface) register offsets — for MMIO emulation    */
+/* ------------------------------------------------------------------ */
+#define GICC_CTLR           0x0000
+#define GICC_PMR            0x0004
+#define GICC_BPR            0x0008
+#define GICC_IAR            0x000C
+#define GICC_EOIR           0x0010
+#define GICC_RPR            0x0014
+#define GICC_HPIR           0x0018
+#define GICC_IIDR           0x00FC
 
 /* ------------------------------------------------------------------ */
 /* GICR register offsets within RD_base frame                          */
@@ -242,6 +255,20 @@ static int gicd_mmio_read(struct prtos_vgic_state *vgic, prtos_u64_t offset,
         return 0;
     }
 
+    /* GICD_ITARGETSR: GICv2-compat, 1 byte per IRQ, 4 IRQs per register */
+    if (offset >= GICD_ITARGETSR && offset < GICD_ITARGETSR + PRTOS_VGIC_NR_IRQS) {
+        int base_irq = (int)(offset - GICD_ITARGETSR);
+        reg = 0;
+        for (idx = 0; idx < size && (base_irq + idx) < (int)vgic->num_irqs; idx++) {
+            struct prtos_vgic_irq *irq = vgic_get_irq(vgic, 0, base_irq + idx);
+            prtos_u8_t mask = 0;
+            if (irq) mask = (prtos_u8_t)(1U << irq->target_vcpu);
+            reg |= ((prtos_u32_t)mask << (idx * 8));
+        }
+        *val = reg;
+        return 0;
+    }
+
     /* GICD_ISACTIVER / GICD_ICACTIVER */
     if ((offset >= GICD_ISACTIVER && offset < GICD_ISACTIVER + (PRTOS_VGIC_NR_IRQS / 8)) ||
         (offset >= GICD_ICACTIVER && offset < GICD_ICACTIVER + (PRTOS_VGIC_NR_IRQS / 8))) {
@@ -357,6 +384,22 @@ static int gicd_mmio_write(struct prtos_vgic_state *vgic, prtos_u64_t offset,
         int spi_idx = (int)((offset - GICD_IROUTER) / 8);
         if (spi_idx < PRTOS_VGIC_NR_SPIS)
             vgic->spis[spi_idx].target_vcpu = (prtos_u8_t)(val & 0xFF);
+        return 0;
+    }
+
+    /* GICD_ITARGETSR: GICv2-compat write, convert bitmask to vCPU index */
+    if (offset >= GICD_ITARGETSR && offset < GICD_ITARGETSR + PRTOS_VGIC_NR_IRQS) {
+        int base_irq = (int)(offset - GICD_ITARGETSR);
+        for (idx = 0; idx < size && (base_irq + idx) < (int)vgic->num_irqs; idx++) {
+            struct prtos_vgic_irq *irq = vgic_get_irq(vgic, 0, base_irq + idx);
+            if (irq) {
+                prtos_u8_t mask = (prtos_u8_t)((val >> (idx * 8)) & 0xFF);
+                /* Convert bitmask to vCPU index (lowest set bit) */
+                prtos_u8_t vcpu = 0;
+                if (mask) { while (!(mask & 1)) { mask >>= 1; vcpu++; } }
+                irq->target_vcpu = vcpu;
+            }
+        }
         return 0;
     }
 
@@ -580,6 +623,188 @@ static int gicr_mmio_write(struct prtos_vgic_state *vgic, int vcpu_id,
 }
 
 /* ------------------------------------------------------------------ */
+/* GICC (GICv2 CPU interface) MMIO emulation                           */
+/* ------------------------------------------------------------------ */
+
+/* Read ICH_VMCR_EL2 (virtual machine control register) */
+static inline prtos_u64_t read_ich_vmcr(void) {
+    prtos_u64_t val;
+    asm volatile("mrs %0, S3_4_C12_C11_7" : "=r"(val));
+    return val;
+}
+
+/* Write ICH_VMCR_EL2 */
+static inline void write_ich_vmcr(prtos_u64_t val) {
+    asm volatile("msr S3_4_C12_C11_7, %0" :: "r"(val));
+    asm volatile("isb" ::: "memory");
+}
+
+/*
+ * gicc_iar_read - Emulate GICC_IAR read (interrupt acknowledge).
+ *
+ * Scans ICH_LR[0-3] for the highest priority pending virtual IRQ,
+ * transitions it from pending to active, and returns its INTID.
+ * Returns 1023 (spurious) if no pending virtual IRQ found.
+ */
+static prtos_u32_t gicc_iar_read(void) {
+    int best_lr = -1;
+    prtos_u8_t best_prio = 0xFF;
+    prtos_u32_t best_intid = 1023;
+    int i;
+
+    for (i = 0; i < PRTOS_VGIC_NR_LRS; i++) {
+        prtos_u64_t lr = read_ich_lr(i);
+        if (lr & ICH_LR_STATE_PENDING) {
+            prtos_u8_t prio = (prtos_u8_t)((lr >> ICH_LR_PRIORITY_SHIFT) & 0xFF);
+            if (prio < best_prio) {
+                best_prio = prio;
+                best_lr = i;
+                best_intid = (prtos_u32_t)(lr & ICH_LR_VIRTUAL_MASK);
+            }
+        }
+    }
+
+    if (best_lr >= 0) {
+        prtos_u64_t lr = read_ich_lr(best_lr);
+        /* Transition: clear pending, set active */
+        lr = (lr & ~ICH_LR_STATE_PENDING) | ICH_LR_STATE_ACTIVE;
+        write_ich_lr(best_lr, lr);
+    }
+
+    return best_intid;
+}
+
+/*
+ * gicc_eoir_write - Emulate GICC_EOIR write (end of interrupt).
+ *
+ * Finds the active ICH_LR matching the given INTID and deactivates it.
+ */
+static void gicc_eoir_write(prtos_u32_t intid) {
+    int i;
+    for (i = 0; i < PRTOS_VGIC_NR_LRS; i++) {
+        prtos_u64_t lr = read_ich_lr(i);
+        if ((lr & ICH_LR_STATE_ACTIVE) &&
+            (lr & ICH_LR_VIRTUAL_MASK) == intid) {
+            /* Clear active bit; if also pending, keep pending */
+            lr &= ~ICH_LR_STATE_ACTIVE;
+            if (!(lr & ICH_LR_STATE_PENDING))
+                lr = 0;  /* Fully deactivate, free the LR slot */
+            write_ich_lr(i, lr);
+
+            /* Virtual timer PPI 27: unmask CNTV_CTL_EL0 so the timer
+             * can fire again.  The hypervisor's vtimer ISR masks it
+             * to prevent level-triggered re-assertion during injection. */
+            if (intid == 27) {
+                prtos_u32_t ctl;
+                __asm__ __volatile__("mrs %0, CNTV_CTL_EL0" : "=r"(ctl));
+                ctl &= ~(1U << 1);  /* clear IMASK */
+                __asm__ __volatile__("msr CNTV_CTL_EL0, %0\n\tisb" : : "r"(ctl) : "memory");
+            }
+            break;
+        }
+    }
+}
+
+static int gicc_mmio_read(struct prtos_vgic_state *vgic, prtos_u64_t offset,
+                          int size, prtos_u64_t *val) {
+    (void)size;
+
+    switch (offset) {
+    case GICC_CTLR: {
+        prtos_u64_t vmcr = read_ich_vmcr();
+        *val = (vmcr >> 1) & 1;
+        return 0;
+    }
+    case GICC_PMR: {
+        prtos_u64_t vmcr = read_ich_vmcr();
+        *val = (vmcr >> 24) & 0xFF;
+        return 0;
+    }
+    case GICC_BPR:
+        /* Return shadow value; hardware clamps VBPR1 to minimum 3 */
+        *val = vgic->gicc_bpr;
+        return 0;
+    case GICC_IAR:
+        *val = gicc_iar_read();
+        return 0;
+    case GICC_RPR: {
+        /* Return priority of highest active interrupt */
+        prtos_u8_t best_prio = 0xFF;
+        int i;
+        for (i = 0; i < PRTOS_VGIC_NR_LRS; i++) {
+            prtos_u64_t lr = read_ich_lr(i);
+            if (lr & ICH_LR_STATE_ACTIVE) {
+                prtos_u8_t p = (prtos_u8_t)((lr >> ICH_LR_PRIORITY_SHIFT) & 0xFF);
+                if (p < best_prio) best_prio = p;
+            }
+        }
+        *val = best_prio;
+        return 0;
+    }
+    case GICC_HPIR: {
+        /* Return INTID of highest pending interrupt (without acknowledging) */
+        prtos_u8_t best_prio = 0xFF;
+        prtos_u32_t best_intid = 1023;
+        int i;
+        for (i = 0; i < PRTOS_VGIC_NR_LRS; i++) {
+            prtos_u64_t lr = read_ich_lr(i);
+            if (lr & ICH_LR_STATE_PENDING) {
+                prtos_u8_t p = (prtos_u8_t)((lr >> ICH_LR_PRIORITY_SHIFT) & 0xFF);
+                if (p < best_prio) {
+                    best_prio = p;
+                    best_intid = (prtos_u32_t)(lr & ICH_LR_VIRTUAL_MASK);
+                }
+            }
+        }
+        *val = best_intid;
+        return 0;
+    }
+    case GICC_IIDR:
+        *val = 0x0200043B;  /* ARM, rev 2 */
+        return 0;
+    default:
+        *val = 0;
+        return 0;
+    }
+}
+
+static int gicc_mmio_write(struct prtos_vgic_state *vgic, prtos_u64_t offset,
+                           int size, prtos_u64_t val) {
+    (void)vgic; (void)size;
+
+    switch (offset) {
+    case GICC_CTLR: {
+        prtos_u64_t vmcr = read_ich_vmcr();
+        /* Map GICC_CTLR.EnableGrp1 (bit 0) to ICH_VMCR_EL2.VENG1 (bit 1) */
+        if (val & 1)
+            vmcr |= (1ULL << 1);
+        else
+            vmcr &= ~(1ULL << 1);
+        write_ich_vmcr(vmcr);
+        return 0;
+    }
+    case GICC_PMR: {
+        prtos_u64_t vmcr = read_ich_vmcr();
+        vmcr = (vmcr & ~(0xFFULL << 24)) | (((prtos_u64_t)val & 0xFF) << 24);
+        write_ich_vmcr(vmcr);
+        return 0;
+    }
+    case GICC_BPR: {
+        prtos_u64_t vmcr = read_ich_vmcr();
+        vgic->gicc_bpr = (prtos_u32_t)(val & 0x7);
+        vmcr = (vmcr & ~(0x7ULL << 18)) | (((prtos_u64_t)val & 0x7) << 18);
+        write_ich_vmcr(vmcr);
+        return 0;
+    }
+    case GICC_EOIR:
+        gicc_eoir_write((prtos_u32_t)(val & 0x3FF));
+        return 0;
+    default:
+        return 0;  /* WI */
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Top-level MMIO dispatch                                             */
 /* ------------------------------------------------------------------ */
 /* Read guest register, treating reg 31 (xzr) as zero */
@@ -634,6 +859,20 @@ int prtos_mmio_dispatch(struct cpu_user_regs *regs, prtos_u64_t gpa,
             ret = gicr_mmio_write(vgic, target_vcpu, offset, size, val);
         } else {
             ret = gicr_mmio_read(vgic, target_vcpu, offset, size, &val);
+            if (ret == 0) mmio_write_reg(regs, reg, val);
+        }
+        return ret;
+    }
+
+    /* GICC region (GICv2 CPU interface emulation) */
+    if (gpa >= PRTOS_VGIC_GICC_BASE &&
+        gpa < PRTOS_VGIC_GICC_BASE + PRTOS_VGIC_GICC_SIZE) {
+        prtos_u64_t offset = gpa - PRTOS_VGIC_GICC_BASE;
+        if (is_write) {
+            val = mmio_read_reg(regs, reg);
+            ret = gicc_mmio_write(vgic, offset, size, val);
+        } else {
+            ret = gicc_mmio_read(vgic, offset, size, &val);
             if (ret == 0) mmio_write_reg(regs, reg, val);
         }
         return ret;

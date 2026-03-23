@@ -178,9 +178,10 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
                 GET_MEMAZ(k->ctrl.g->karch.s2_l3[tbl], PAGE_SIZE, PAGE_SIZE);
             k->ctrl.g->karch.s2_l3_count = 0;
 
-            /* Allocate VGIC state for hw-virt (Linux) partitions only.
-             * Heuristic: partitions with memory >= 64MB are hw-virt Linux guests.
-             * Para-virt (FreeRTOS) partitions keep vgic=NULL and use PCT path. */
+            /* Allocate VGIC state for hw-virt partitions.
+             * Heuristic: partitions with memory >= 64MB are hw-virt guests
+             * that need full GIC emulation.  Para-virt (PCT-based) partitions
+             * keep vgic=NULL and use the PCT hypercall path. */
             k->ctrl.g->karch.vgic = 0;
             {
                 struct prtos_conf_memory_area *mem_areas =
