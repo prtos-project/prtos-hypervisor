@@ -27,7 +27,7 @@ PARTITIONS=partition.pef
 # ============================================================================
 # Linux Workspace Paths
 # ============================================================================
-LINUX_WORKSPACE=/home/chenweis/linux_os_workspace
+LINUX_WORKSPACE=../native_linux_run_on_qemu_a57_virt
 LINUX_IMAGE=$(LINUX_WORKSPACE)/linux-6.19.9/arch/arm64/boot/Image
 
 # ============================================================================
