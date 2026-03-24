@@ -27,7 +27,11 @@
 #define PRTOS_VGIC_GICC_SIZE    0x10000ULL
 #define PRTOS_VGIC_GICR_BASE   0x080A0000ULL
 #define PRTOS_VGIC_GICR_STRIDE 0x20000ULL   /* per-vCPU: RD_base(64KB) + SGI_base(64KB) */
-#define PRTOS_VGIC_GICR_SIZE   (PRTOS_VGIC_MAX_VCPUS * PRTOS_VGIC_GICR_STRIDE)
+/* Cover the full GICR region declared in the guest DTS (0x200000 bytes).
+ * Linux's GICv3 driver iterates through the entire region probing
+ * GICR_TYPER until it finds Last=1.  Out-of-range accesses return
+ * GICR_TYPER with Last=1 so the driver stops. */
+#define PRTOS_VGIC_GICR_SIZE   0x200000ULL
 
 /* GICv3 List Register constants */
 #define ICH_LR_VIRTUAL_MASK     0xFFFFFFFFULL

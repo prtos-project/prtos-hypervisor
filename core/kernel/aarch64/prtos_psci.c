@@ -106,10 +106,29 @@ static prtos_s64_t prtos_psci_cpu_on(prtos_u64_t target_mpidr,
     extern void start_up_guest(prtos_address_t entry);
     setup_kstack(target_k, start_up_guest, entry_point);
 
+    /* Ensure all memory writes (kstack, psci_entry, vgic, pct) are
+     * visible to the target pCPU before marking as ready. */
+    __asm__ __volatile__("dsb ish" ::: "memory");
+
     /* Mark target as ready for scheduling.  The cyclic scheduler on the
      * target pCPU will pick it up on its next slot. */
     set_kthread_flags(target_k, KTHREAD_READY_F);
     clear_kthread_flags(target_k, KTHREAD_HALTED_F);
+
+    __asm__ __volatile__("dsb ish\n\tsev" ::: "memory");
+
+    /* Send IPI to the target pCPU to trigger immediate rescheduling.
+     * Without this, the target pCPU won't notice the newly READY kthread
+     * until its next scheduler timer tick. */
+#ifdef CONFIG_SMP
+    {
+        extern struct prtos_conf_vcpu *prtos_conf_vcpu_table;
+        prtos_u8_t target_cpu = prtos_conf_vcpu_table[
+            (part_id * prtos_conf_table.hpv.num_of_cpus) + target_vcpu].cpu;
+        if (target_cpu != GET_CPU_ID())
+            send_ipi(target_cpu, NO_SHORTHAND_IPI, SCHED_PENDING_IPI_VECTOR);
+    }
+#endif
 
     return PSCI_SUCCESS;
 }

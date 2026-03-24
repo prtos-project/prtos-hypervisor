@@ -87,6 +87,7 @@ void start_up_guest(prtos_address_t entry) {
     /* PSCI secondary vCPU boot: jump to PSCI entry point instead of
      * partition entry.  psci_entry is set by prtos_psci_cpu_on(). */
     if (k->ctrl.g->karch.psci_entry != 0) {
+        /* PSCI secondary vCPU boot */
         JMP_PARTITION_PSCI(k);
         /* unreachable */
     }

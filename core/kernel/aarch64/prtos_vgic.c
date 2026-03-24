@@ -437,7 +437,15 @@ static int gicr_mmio_read(struct prtos_vgic_state *vgic, int vcpu_id,
              *   [39:32] Aff0 = vcpu_id  (must match MPIDR.Aff0 for Linux to
              *           find the correct redistributor for each CPU)
              */
-            *val = ((prtos_u64_t)vcpu_id) |
+            /*
+             * GICR_TYPER (64-bit):
+             *   [0]     PLPIS = 0 (no physical LPIs)
+             *   [1]     VLPIS = 0 (no virtual LPIs)
+             *   [4]     Last = 1 if this is the last redistributor
+             *   [23:8]  Processor_Number = vcpu_id
+             *   [39:32] Aff0 = vcpu_id
+             */
+            *val = ((prtos_u64_t)vcpu_id << 8) |
                    ((vcpu_id == (int)vgic->num_vcpus - 1) ? (1ULL << 4) : 0) |
                    ((prtos_u64_t)vcpu_id << 32);
             return 0;
@@ -851,8 +859,23 @@ int prtos_mmio_dispatch(struct cpu_user_regs *regs, prtos_u64_t gpa,
         int target_vcpu = (int)(gicr_offset / PRTOS_VGIC_GICR_STRIDE);
         prtos_u64_t offset = gicr_offset % PRTOS_VGIC_GICR_STRIDE;
 
-        if (target_vcpu >= (int)vgic->num_vcpus)
-            target_vcpu = 0;  /* Safety: clamp to vCPU 0 */
+        if (target_vcpu >= (int)vgic->num_vcpus) {
+            /* Out-of-range redistributor: Linux probes past the last valid
+             * redistributor.  Return GICR_TYPER with Last=1 so the driver
+             * stops iterating; return RAZ for all other registers. */
+            if (!is_write) {
+                prtos_u64_t raz = 0;
+                if (offset == GICR_TYPER || offset == GICR_TYPER + 4) {
+                    /* GICR_TYPER: Last=1 (bit 4), invalid Aff0 */
+                    if (offset == GICR_TYPER)
+                        raz = (1ULL << 4);  /* Last=1 */
+                    else
+                        raz = 0xFF;  /* Upper 32: invalid Aff0 */
+                }
+                mmio_write_reg(regs, reg, raz);
+            }
+            return 0;
+        }
 
         if (is_write) {
             val = mmio_read_reg(regs, reg);

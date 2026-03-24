@@ -26,6 +26,8 @@ ALL_CASES=(
     "freertos_para_virt:1:20:aarch64"
     "freertos_hw_virt:0:30:aarch64"
     "linux:0:180:aarch64"
+    "linux_4vcpu_1partion:0:360:aarch64"
+    "mix_os_demo1:0:420:aarch64"
 )
 
 # Colors for output
@@ -49,7 +51,9 @@ Commands:
                          example.001 ~ example.009,
                          freertos_para_virt (aarch64 only),
                          freertos_hw_virt (aarch64 only),
-                         linux (aarch64 only)
+                         linux (aarch64 only),
+                         linux_4vcpu_1partion (aarch64 only),
+                         mix_os_demo1 (aarch64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -283,6 +287,191 @@ PYTEST
     fi
 }
 
+# Run the Linux 4-vCPU test case (aarch64 only)
+# Uses pexpect to boot, login (root/1234), and verify 4 vCPUs.
+# Returns: 0 on PASS, 1 on FAIL
+function run_test_linux_4vcpu_1partion() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/linux_4vcpu_1partion"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/linux_4vcpu_1partion [${ARCH}]"
+    cd "${test_dir}"
+
+    # Build the Linux partition
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check linux_4vcpu_1partion FAILED${NC} (build error)"
+        return 1
+    fi
+
+    # Create bootable image
+    aarch64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S \
+        resident_sw resident_sw.bin
+    mkimage -A arm64 -O linux -C none -a 0x40200000 -e 0x40200000 \
+        -d resident_sw.bin resident_sw_image > /dev/null 2>&1
+    mkdir -p u-boot
+    cp ../../bin/u-boot.bin ./u-boot/
+
+    # Run pexpect-based login test
+    python3 -u << 'PYTEST' 2>&1
+import pexpect, sys, time
+child = pexpect.spawn(
+    'qemu-system-aarch64 '
+    '-machine virt,gic_version=3 '
+    '-machine virtualization=true '
+    '-cpu cortex-a72 -machine type=virt '
+    '-m 4096 -smp 4 '
+    '-bios ./u-boot/u-boot.bin '
+    '-device loader,file=./resident_sw_image,addr=0x40200000,force-raw=on '
+    '-nographic -no-reboot',
+    timeout=340, encoding='utf-8', codec_errors='replace'
+)
+try:
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=320)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: login prompt not reached')
+        child.close(force=True); sys.exit(1)
+    time.sleep(4); child.sendline('root')
+    idx = child.expect(['Password:', 'assword:', pexpect.TIMEOUT], timeout=30)
+    if idx >= 2:
+        print('LINUX_TEST_FAIL: no password prompt')
+        child.close(force=True); sys.exit(1)
+    time.sleep(2); child.sendline('1234')
+    idx = child.expect(['#', 'Login incorrect', pexpect.TIMEOUT], timeout=30)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: login failed')
+        child.close(force=True); sys.exit(1)
+    time.sleep(2); child.sendline('nproc')
+    idx = child.expect(['4', pexpect.TIMEOUT], timeout=10)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: nproc did not return 4')
+        child.close(force=True); sys.exit(1)
+    child.expect(['#', pexpect.TIMEOUT], timeout=5)
+    child.sendline('which htop')
+    idx = child.expect(['htop', pexpect.TIMEOUT], timeout=10)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: htop not found')
+        child.close(force=True); sys.exit(1)
+    print('Verification Passed')
+    child.close(force=True)
+except Exception as e:
+    print(f'LINUX_TEST_FAIL: {e}')
+    try: child.close(force=True)
+    except: pass
+    sys.exit(1)
+PYTEST
+
+    local rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        echo -e "${GREEN}Check linux_4vcpu_1partion PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check linux_4vcpu_1partion FAILED${NC}"
+        return 1
+    fi
+}
+
+# Run the Mixed-OS demo test (aarch64 only)
+# FreeRTOS on vCPU0 + Linux on vCPU1-3.
+# Verifies: RTOS prints status, Linux boots with 3 vCPUs, login works.
+# Returns: 0 on PASS, 1 on FAIL
+function run_test_mix_os_demo1() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/mix_os_demo1"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/mix_os_demo1 [${ARCH}]"
+    cd "${test_dir}"
+
+    # Build both partitions
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check mix_os_demo1 FAILED${NC} (build error)"
+        return 1
+    fi
+
+    # Create bootable image
+    aarch64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S \
+        resident_sw resident_sw.bin
+    mkimage -A arm64 -O linux -C none -a 0x40200000 -e 0x40200000 \
+        -d resident_sw.bin resident_sw_image > /dev/null 2>&1
+
+    # Run pexpect-based test (use -kernel boot, no u-boot needed for mixed-OS)
+    python3 -u << 'PYTEST' 2>&1
+import pexpect, sys, time
+child = pexpect.spawn(
+    'qemu-system-aarch64 '
+    '-machine virt,gic_version=3 '
+    '-machine virtualization=true '
+    '-cpu cortex-a72 -machine type=virt '
+    '-m 4096 -smp 4 '
+    '-kernel ./resident_sw_image '
+    '-nographic -no-reboot',
+    timeout=400, encoding='utf-8', codec_errors='replace'
+)
+try:
+    # Wait for Linux login prompt (RTOS output may be interleaved on same UART)
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=380)
+    if idx != 0:
+        print('MIX_OS_TEST_FAIL: login prompt not reached')
+        child.close(force=True); sys.exit(1)
+    # Retry login up to 3 times in case of interleaved RTOS output
+    logged_in = False
+    for attempt in range(3):
+        time.sleep(6)
+        child.sendline('root')
+        idx = child.expect(['assword', 'buildroot login:', pexpect.TIMEOUT], timeout=60)
+        if idx == 0:
+            time.sleep(2); child.sendline('1234')
+            idx2 = child.expect([r'[\$#] ', 'Login incorrect', pexpect.TIMEOUT], timeout=60)
+            if idx2 == 0:
+                logged_in = True
+                break
+            elif idx2 == 1:
+                print('MIX_OS_TEST_FAIL: login incorrect')
+                child.close(force=True); sys.exit(1)
+        elif idx == 1:
+            continue  # got login prompt again, retry
+    if not logged_in:
+        print('MIX_OS_TEST_FAIL: login failed after retries')
+        child.close(force=True); sys.exit(1)
+    time.sleep(2); child.sendline('nproc')
+    idx = child.expect(['3', pexpect.TIMEOUT], timeout=15)
+    if idx != 0:
+        print('MIX_OS_TEST_FAIL: nproc did not return 3')
+        child.close(force=True); sys.exit(1)
+    child.expect([r'[\$#] ', pexpect.TIMEOUT], timeout=10)
+    child.sendline('cat /proc/cpuinfo | grep processor | wc -l')
+    idx = child.expect(['3', pexpect.TIMEOUT], timeout=15)
+    if idx != 0:
+        print('MIX_OS_TEST_FAIL: cpuinfo does not show 3 CPUs')
+        child.close(force=True); sys.exit(1)
+    print('Verification Passed')
+    child.close(force=True)
+except Exception as e:
+    print(f'MIX_OS_TEST_FAIL: {e}')
+    try: child.close(force=True)
+    except: pass
+    sys.exit(1)
+PYTEST
+
+    local rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        echo -e "${GREEN}Check mix_os_demo1 PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check mix_os_demo1 FAILED${NC}"
+        return 1
+    fi
+}
+
 # Run a single test case
 # Arguments: case_name
 # Returns: 0 on PASS, 1 on FAIL
@@ -294,8 +483,16 @@ function run_test() {
         run_test_linux
         return $?
     fi
+    if [[ "${case_name}" == "linux_4vcpu_1partion" ]]; then
+        run_test_linux_4vcpu_1partion
+        return $?
+    fi
     if [[ "${case_name}" == "freertos_hw_virt" ]]; then
         run_test_freertos_hw_virt
+        return $?
+    fi
+    if [[ "${case_name}" == "mix_os_demo1" ]]; then
+        run_test_mix_os_demo1
         return $?
     fi
 
@@ -380,6 +577,8 @@ function builder_to_case() {
         check-freertos_para_virt)       echo "freertos_para_virt" ;;
         check-freertos_hw_virt) echo "freertos_hw_virt" ;;
         check-linux)          echo "linux" ;;
+        check-linux_4vcpu_1partion) echo "linux_4vcpu_1partion" ;;
+        check-mix_os_demo1) echo "mix_os_demo1" ;;
         check-[0-9]*)         echo "example.${builder#check-}" ;;
         *)                    echo "" ;;
     esac

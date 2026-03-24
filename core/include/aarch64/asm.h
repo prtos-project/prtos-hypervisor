@@ -156,12 +156,15 @@ static inline int local_fiq_is_enabled(void) {
                              "msr cpacr_el1, x10\n\t"                                                                    \
                              "isb\n\t"                                                                                   \
                              "mov x0, %0\n\t" /* x0 = context_id */                                                      \
+                             "mov x1, xzr\n\t"                                                                           \
+                             "mov x2, xzr\n\t"                                                                           \
+                             "mov x3, xzr\n\t"                                                                           \
                              "isb\n\t"                                                                                   \
                              "eret\n\t"                                                                                  \
                              :                                                                                           \
                              : "r"(_ctx), "r"(_entry),                                                                   \
                                "r"(_hcr)                                                                                 \
-                             : "x0", "x10", "memory");                                                                   \
+                             : "x0", "x1", "x2", "x3", "x10", "memory");                                                \
     } while (0)
 #endif /*__ASSEMBLY__*/
 
