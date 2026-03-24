@@ -9,7 +9,7 @@ include $(PRTOS_PATH)/core/rules.mk
 SRCS_ASM += start.S head.S entry.S
 SRCS_C-y += processor.c irqs.c panic.c hpet.c apic.c physmm.c vmmap.c setup.c
 SRCS_C-y += kthread.c lapic_timer.c smp.c traps.c mmu.c hypercalls.c
-SRCS_C-y += prtos_vgic.c prtos_psci.c
+SRCS_C-y += prtos_vgic.c prtos_psci.c prtos_virtio_console.c
 
 
 AS_ASM_FILES = \

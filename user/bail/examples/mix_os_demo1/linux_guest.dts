@@ -21,6 +21,18 @@
 		reg = <0x0 0x10000000 0x0 0x10000000>;  /* 256MB */
 	};
 
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		shmem@30000000 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x30000000 0x0 0x100000>;  /* 1MB shared memory */
+			no-map;
+		};
+	};
+
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -79,6 +91,13 @@
 		interrupts = <0 1 4>;
 		clock-names = "uartclk", "apb_pclk";
 		clocks = <&clk24mhz>, <&clk24mhz>;
+	};
+
+	virtio_mmio@a000000 {
+		compatible = "virtio,mmio";
+		reg = <0x0 0x0a000000 0x0 0x200>;
+		interrupts = <0 34 1>;
+		/* SPI 34 (INTID 66), edge-triggered */
 	};
 
 	clk24mhz: clk24mhz {

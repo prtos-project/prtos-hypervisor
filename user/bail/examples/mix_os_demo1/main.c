@@ -15,6 +15,11 @@
 #include "board.h"
 #include "gic_v3.h"
 #include "uart.h"
+#include "shared_ring.h"
+
+/* Shared memory ring buffer at IPA 0x30000000 */
+#define SHARED_MEM_BASE  0x30000000UL
+static volatile struct shared_ring *ring = (volatile struct shared_ring *)SHARED_MEM_BASE;
 
 /* Simulated sensor data (shared concept - output via UART for demo) */
 static volatile uint32_t motor_pwm_duty = 50;    /* 0-100% */
@@ -93,6 +98,26 @@ static void sensor_sample_task(void *p)
  * Status reporting task - prints periodic status to UART.
  * Runs every 2 seconds to show system is alive.
  */
+/* Simple decimal to string for ring buffer messages */
+static void u32_to_dec(uint32_t val, char *buf, int buflen)
+{
+    int i = 0;
+    char tmp[12];
+    if (val == 0) { tmp[i++] = '0'; }
+    else { while (val && i < 11) { tmp[i++] = '0' + (val % 10); val /= 10; } }
+    int j = 0;
+    while (i > 0 && j < buflen - 1) buf[j++] = tmp[--i];
+    buf[j] = '\0';
+}
+
+/* Append src to dst starting at *pos, update *pos */
+static void msg_append(char *dst, int *pos, int max, const char *src)
+{
+    while (*src && *pos < max - 1)
+        dst[(*pos)++] = *src++;
+    dst[*pos] = '\0';
+}
+
 static void status_report_task(void *p)
 {
     (void)p;
@@ -102,19 +127,43 @@ static void status_report_task(void *p)
         vTaskDelay(pdMS_TO_TICKS(2000));
         report_num++;
 
-        uart_puts("[RTOS] Report #");
-        uart_puthex(report_num);
-        uart_puts("  RPM=");
-        uart_puthex(sensor_rpm);
-        uart_puts("  Temp=");
-        uart_puthex(sensor_temp);
-        uart_puts("  PWM=");
-        uart_puthex(motor_pwm_duty);
-        uart_puts("  CtrlLoops=");
-        uart_puthex(control_loop_count);
-        uart_puts("  Samples=");
-        uart_puthex(sample_count);
-        uart_puts("\n");
+        // uart_puts("[RTOS] Report #");
+        // uart_puthex(report_num);
+        // uart_puts("  RPM=");
+        // uart_puthex(sensor_rpm);
+        // uart_puts("  Temp=");
+        // uart_puthex(sensor_temp);
+        // uart_puts("  PWM=");
+        // uart_puthex(motor_pwm_duty);
+        // uart_puts("  CtrlLoops=");
+        // uart_puthex(control_loop_count);
+        // uart_puts("  Samples=");
+        // uart_puthex(sample_count);
+        // uart_puts("\n");
+
+        /* Also write to shared memory ring buffer for Linux consumption */
+        if (ring->magic == SHARED_RING_MAGIC) {
+            char msg[128];
+            char num[12];
+            int pos = 0;
+            msg_append(msg, &pos, 128, "RTOS RPM=");
+            u32_to_dec(sensor_rpm, num, sizeof(num));
+            msg_append(msg, &pos, 128, num);
+            msg_append(msg, &pos, 128, " Temp=");
+            u32_to_dec(sensor_temp, num, sizeof(num));
+            msg_append(msg, &pos, 128, num);
+            msg_append(msg, &pos, 128, " PWM=");
+            u32_to_dec(motor_pwm_duty, num, sizeof(num));
+            msg_append(msg, &pos, 128, num);
+            msg_append(msg, &pos, 128, " Loops=");
+            u32_to_dec(control_loop_count, num, sizeof(num));
+            msg_append(msg, &pos, 128, num);
+            msg_append(msg, &pos, 128, " Samples=");
+            u32_to_dec(sample_count, num, sizeof(num));
+            msg_append(msg, &pos, 128, num);
+            msg_append(msg, &pos, 128, "\n");
+            shared_ring_puts(ring, msg);
+        }
     }
 }
 
@@ -149,6 +198,10 @@ int main(void)
     uart_puts("[RTOS] FreeRTOS Motor Controller Starting\n");
     uart_puts("[RTOS] Mixed-OS Demo - Partition 1\n");
     uart_puts("========================================\n");
+
+    /* Initialize shared memory ring buffer */
+    shared_ring_init(ring);
+    uart_puts("[RTOS] Shared ring buffer initialized at 0x30000000\n");
 
     /* Create real-time tasks */
     xTaskCreate(motor_control_task, "Motor", 512, NULL,

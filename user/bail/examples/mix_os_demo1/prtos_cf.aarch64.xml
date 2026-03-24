@@ -4,6 +4,11 @@
   Memory layout:
     Partition 0 (Linux):    IPA 0x10000000, 256MB, 3 vCPUs on pCPU 0-2
     Partition 1 (FreeRTOS): IPA 0x40000000, 64MB, 1 vCPU on pCPU 3
+    Shared memory:          IPA 0x30000000, 1MB (both partitions)
+
+  Shared memory is used for FreeRTOS → Linux inter-partition communication
+  via a ring buffer. The hypervisor exposes it to Linux as a virtio-console
+  device (/dev/hvc0) at MMIO address 0x0a000000.
 
   Scheduler: Each pCPU runs one vCPU of one partition.
     pCPU 0: Linux vCPU 0 (50ms slot)  — MPIDR 0 matches DTS cpu@0
@@ -62,11 +67,13 @@
         <Partition id="0" name="Linux_HMI" flags="system" console="Uart" noVCpus="3">
             <PhysicalMemoryAreas>
                 <Area start="0x10000000" size="256MB" />
+                <Area start="0x30000000" size="1MB" flags="shared"/>
             </PhysicalMemoryAreas>
         </Partition>
         <Partition id="1" name="FreeRTOS_RTOS" flags="system" console="Uart">
             <PhysicalMemoryAreas>
                 <Area start="0x40000000" size="64MB" />
+                <Area start="0x30000000" size="1MB" flags="shared"/>
             </PhysicalMemoryAreas>
         </Partition>
     </PartitionTable>

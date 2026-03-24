@@ -125,6 +125,8 @@ void switch_kthread_arch_post(kthread_t *current) {
 
                 /* Flush any newly pending VGIC IRQs into free LR slots */
                 extern void prtos_vgic_flush_lrs_current(void);
+                extern void prtos_virtio_console_poll(void);
+                prtos_virtio_console_poll();
                 prtos_vgic_flush_lrs_current();
             } else {
                 /* Para-virt partition: just enable virtual interface */

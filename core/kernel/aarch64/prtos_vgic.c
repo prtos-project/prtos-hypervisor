@@ -838,6 +838,15 @@ int prtos_mmio_dispatch(struct cpu_user_regs *regs, prtos_u64_t gpa,
     prtos_u64_t val = 0;
     int ret;
 
+    /* Virtio-console MMIO region (before VGIC check) */
+    {
+        extern int prtos_virtio_console_mmio(struct cpu_user_regs *regs,
+                                             prtos_u64_t gpa, int is_write,
+                                             int reg, int size);
+        if (prtos_virtio_console_mmio(regs, gpa, is_write, reg, size) == 0)
+            return 0;
+    }
+
     /* GICD region */
     if (gpa >= PRTOS_VGIC_GICD_BASE &&
         gpa < PRTOS_VGIC_GICD_BASE + PRTOS_VGIC_GICD_SIZE) {
