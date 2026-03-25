@@ -14,23 +14,10 @@
 #include <arch/irqs.h>
 #include <arch/paging.h>
 //#include <arch/processor.h>
-#include <arch/segments.h>
 #include <arch/prtos_def.h>
 //#include <arch/layout.h>
 
-#include <xen/xen_config.h>
-
-#include <asm/page.h>
-#include <asm/early_printk.h>
-
-#ifdef CONFIG_ARM_EFI
-#include <efi/efierr.h>
-#include <asm/arm64/efibind.h>
-#endif
-
-#define KB(_kb)     (_AC(_kb, ULL) << 10)
-#define MB(_mb)     (_AC(_mb, ULL) << 20)
-#define GB(_gb)     (_AC(_gb, ULL) << 30)
+#include <arch/arm_defs.h>
 
 
 #define __HEAD_FLAG_PAGE_SIZE   ((PAGE_SHIFT - 10) / 2)
@@ -354,109 +341,6 @@ FUNC(lookup_processor_type)
         ret
 END(lookup_processor_type)
 
-#ifdef CONFIG_ARM_EFI
-/*
- *  Function to transition from EFI loader in C, to PRTOS entry point.
- *  void noreturn efi_xen_start(void *fdt_ptr, uint32_t fdt_size);
- */
-FUNC(efi_xen_start)
-        /*
-         * Preserve x0 (fdt pointer) across call to __flush_dcache_area,
-         * restore for entry into PRTOS.
-         */
-        mov   x20, x0
-
-        /* flush dcache covering the FDT updated by EFI boot code */
-        // bl    __flush_dcache_area // FIXME: here just comment it to build pass
-
-        /*
-         * Flush dcache covering current runtime addresses
-         * of PRTOS text/data. Then flush all of icache.
-         */
-        // adr_l x1, _start //FIXME: just  comment it to build pass
-        mov   x0, x1
-        // adr_l x2, _end  //FIXME: just  comment it to build pass
-        sub   x1, x2, x1
-
-        // bl    __flush_dcache_area //FIXME: just  comment it to build pass
-        ic    ialluis
-        tlbi  alle2
-
-        /*
-         * Turn off cache and MMU as PRTOS expects. EFI enables them, but also
-         * mandates a 1:1 (unity) VA->PA mapping, so we can turn off the
-         * MMU while executing EFI code before entering PRTOS.
-         * The EFI loader calls this to start PRTOS.
-         */
-
-        /* Turn off Dcache and MMU */
-        mrs   x0, sctlr_el2
-        bic   x0, x0, #1 << 0        /* clear SCTLR.M */
-        bic   x0, x0, #1 << 2        /* clear SCTLR.C */
-        msr   sctlr_el2, x0
-        isb
-
-        /* Jump to PRTOS entry point */
-        mov   x0, x20
-        mov   x1, xzr
-        mov   x2, xzr
-        mov   x3, xzr
-        /*
-         * The EFI stub and PRTOS may share some information living in
-         * BSS. Don't zero BSS to avoid loosing them.
-         *
-         * Note that the EFI firmware has already zeroed BSS for us
-         * before jump into the stub.
-         */
-        mov   x26, #1               /* x26 := skip_zero_bss */
-
-        b     real_start_efi
-END(efi_xen_start)
-
-
-#endif /* CONFIG_ARM_EFI */
-
-
-
-
-
-
-
-
-
-
-        
-__boot_halt_system:
-
-#ifdef CONFIG_SMP
-	
-ENTRY(smp_start16)
-
-smp_gdt_descr:
-        .word EARLY_PRTOS_GDT_ENTRIES*8-1
-        .quad _VIRT2PHYS(early_gdt_table)
-
-smp_idt_descr:
-ENTRY(smp_start16_end)
-#endif        /*CONFIG_SMP*/
-        
-.section .boot.data, "ax"
-        .word 0
-_reset_addr:
-        .quad 0
-_gdt_desc:
-        .word EARLY_PRTOS_GDT_ENTRIES*8-1
-        .quad _VIRT2PHYS(early_gdt_table)
-_smp_stack:
-        .zero 64
-
-.bss
-.align 1024
-.globl _stack
-_stack:
-	.zero (1024)
-.globl _estack
-_estack:
 
 
 .section .kbuild_info, "a"

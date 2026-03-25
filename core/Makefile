@@ -18,7 +18,8 @@ $(if $(exists_config), $(if $(MM),, $(error "MM variable is not defined")))
 
 PEF=$(PRTOS_PATH)/user/bin/prtoseformat
 
-$(PEF):
+$(PEF): $(PRTOS_PATH)/core/include/autoconf.h
+	make -C $(PRTOS_PATH)/user/tools/pef clean
 	make -C $(PRTOS_PATH)/user/tools/pef install
 
 prtos.lds: kernel/$(ARCH)/prtos.lds.in include/config.h

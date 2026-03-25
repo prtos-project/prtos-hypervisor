@@ -16,7 +16,25 @@
  * GNU General Public License for more details.
  */
 
- #include <asm/pl011-uart.h>
+/*
+ * PL011 register definitions
+ */
+#define DR     (0x00)
+#define FR     (0x18)
+#define IBRD   (0x24)
+#define FBRD   (0x28)
+#define LCR_H  (0x2c)
+#define CR     (0x30)
+
+#define RXE    (1<<9)
+#define TXE    (1<<8)
+#define UARTEN (1<<0)
+#define BUSY   (1<<3)
+#define WLEN_8 (_AC(0x3, U) << 5)
+
+#define PL011_STRH strh
+#define PL011_STRB strb
+#define PL011_LDRH ldrh
 
 /*
  * PL011 UART initialization

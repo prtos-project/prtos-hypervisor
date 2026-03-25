@@ -14,18 +14,6 @@
 #include <processor.h>
 #include <sched.h>
 #include <stdc.h>
-#include <arch/segments.h>
-
-#ifdef CONFIG_SMI_DISABLE
-#include <arch/io.h>
-#include <arch/pci.h>
-#include <arch/smi.h>
-#endif
-#ifdef CONFIG_APIC
-#include <arch/apic.h>
-#else
-#include <arch/pic.h>
-#endif
 
 prtos_u32_t x86_hw_irqs_mask[CONFIG_NO_CPUS] = {[0 ...(CONFIG_NO_CPUS - 1)] = 0xffffffff};
 
@@ -44,9 +32,6 @@ prtos_s8_t *trap_to_str[] = {
 #endif
 
 #ifdef CONFIG_SMP
-RESERVE_HWIRQ(HALT_ALL_IPI_IRQ);
-RESERVE_HWIRQ(SCHED_PENDING_IPI_IRQ);
-
 static void smp_halt_all_handle(cpu_ctxt_t *ctxt, void *data) {
     halt_system();
 }
@@ -191,4 +176,8 @@ void fix_stack(cpu_ctxt_t *ctxt, partition_control_table_t *part_ctrl_table, prt
 
 prtos_u32_t hw_irq_get_mask(prtos_s32_t e) {
     // return x86_hw_irqs_mask[GET_CPU_ID()];
+}
+
+void hw_irq_set_mask(prtos_s32_t e, prtos_u32_t mask) {
+    /* No-op on aarch64: GIC masking is handled via VGIC for guests */
 }

@@ -30,16 +30,12 @@ TARGET_ASFLAGS = -Wall -D__ASSEMBLY__ -D_PRTOS_KERNEL_ -fno-builtin -D$(ARCH) -n
 TARGET_ASFLAGS += -I$(PRTOS_CORE_PATH)/include --include config.h
 
 ifdef CONFIG_AARCH64
-TARGET_CFLAGS +=  -I$(PRTOS_CORE_PATH)/include/asm/ -I$(PRTOS_CORE_PATH)/include/asm/generated 
-TARGET_CFLAGS +=  -I$(PRTOS_CORE_PATH)/include/asm/xen/libfdt 
-TARGET_CFLAGS +=  -I$(PRTOS_CORE_PATH)/kernel/aarch64/xen/common/efi
-TARGET_CFLAGS +=  -I$(PRTOS_CORE_PATH)/kernel/aarch64/xen/arch/arm/efi
-TARGET_CFLAGS +=  -I$(PRTOS_CORE_PATH)/kernel/aarch64/xen/xsm/flask/include
+# Xen-originated headers now live under include/aarch64/xen_inc/ (flattened)
+TARGET_CFLAGS +=  -I$(PRTOS_CORE_PATH)/include/aarch64/xen_inc/
 TARGET_CFLAGS += -D__XEN__
 
-TARGET_ASFLAGS += -I$(PRTOS_CORE_PATH)/include/asm/ -I$(PRTOS_CORE_PATH)/include/asm/generated
+TARGET_ASFLAGS += -I$(PRTOS_CORE_PATH)/include/aarch64/xen_inc/
 TARGET_ASFLAGS += -D__XEN__
-
 endif
 
 

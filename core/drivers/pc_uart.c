@@ -13,8 +13,10 @@
 #include <arch/io.h>
 #include <drivers/pc_uart.h>
 
+#ifdef CONFIG_x86
 RESERVE_HWIRQ(UART_IRQ0);
 RESERVE_IOPORTS(DEFAULT_PORT, 5);
+#endif
 
 #if defined(CONFIG_AARCH64)
 #include <arch/layout.h>

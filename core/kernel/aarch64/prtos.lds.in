@@ -67,7 +67,6 @@ SECTIONS
 
     .rsv_hwirqs ALIGN(8) : {
         rsv_hw_irqs = .;
-        *(.rsv_hwirqs)
         end_rsv_hw_irqs = .;
     }
 

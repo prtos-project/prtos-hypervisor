@@ -14,7 +14,6 @@
 #include <stdarg.h>
 #include <prtos_inc/arch/paging.h>
 #include <prtos_inc/guest.h>
-#include <prtos_inc/arch/segments.h>
 #include <prtos_inc/arch/ginfo.h>
 
 #include "parser.h"

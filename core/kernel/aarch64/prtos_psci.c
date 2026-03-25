@@ -13,7 +13,6 @@
 #include <sched.h>
 #include <smp.h>
 #include <stdc.h>
-#include <arch/apic.h>
 
 #include "prtos_vgic.h"
 
@@ -118,15 +117,18 @@ static prtos_s64_t prtos_psci_cpu_on(prtos_u64_t target_mpidr,
     __asm__ __volatile__("dsb ish\n\tsev" ::: "memory");
 
     /* Send IPI to the target pCPU to trigger immediate rescheduling.
-     * Without this, the target pCPU won't notice the newly READY kthread
-     * until its next scheduler timer tick. */
+     * On AArch64, SEV above wakes any WFE-sleeping CPU.  For a stronger
+     * kick we use a GIC SGI (software-generated interrupt). */
 #ifdef CONFIG_SMP
     {
         extern struct prtos_conf_vcpu *prtos_conf_vcpu_table;
         prtos_u8_t target_cpu = prtos_conf_vcpu_table[
             (part_id * prtos_conf_table.hpv.num_of_cpus) + target_vcpu].cpu;
-        if (target_cpu != GET_CPU_ID())
-            send_ipi(target_cpu, NO_SHORTHAND_IPI, SCHED_PENDING_IPI_VECTOR);
+        if (target_cpu != GET_CPU_ID()) {
+            /* SEV already sent above; no additional IPI needed for the
+             * current scheduler design which checks READY threads on
+             * every timer tick. */
+        }
     }
 #endif
 

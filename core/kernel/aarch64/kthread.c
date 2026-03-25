@@ -16,7 +16,6 @@
 #include <spinlock.h>
 #include <stdc.h>
 #include <vmmap.h>
-#include <arch/segments.h>
 #include <arch/prtos_def.h>
 
 void switch_kthread_arch_pre(kthread_t *new, kthread_t *current) {

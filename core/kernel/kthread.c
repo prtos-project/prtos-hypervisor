@@ -300,7 +300,7 @@ void reset_kthread(kthread_t *k, prtos_address_t ptd_level_1, prtos_address_t en
         if (k->ctrl.g) {
             prtos_u8_t cpu = prtos_conf_vcpu_table[(KID2PARTID(k->ctrl.g->id) * prtos_conf_table.hpv.num_of_cpus) + KID2VCPUID(k->ctrl.g->id)].cpu;
             if (cpu != GET_CPU_ID())
-                send_ipi(cpu, NO_SHORTHAND_IPI, SCHED_PENDING_IPI_VECTOR);
+                CROSS_CPU_SCHED_NOTIFY(cpu);
             else
                 schedule();
         }

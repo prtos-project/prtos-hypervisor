@@ -16,7 +16,6 @@
 #include <prtos_inc/config.h>
 #include <prtos_inc/arch/prtos_def.h>
 #include <prtos_inc/arch/processor.h>
-#include <prtos_inc/arch/segments.h>
 
 #include <prtos_inc/linkage.h>
 

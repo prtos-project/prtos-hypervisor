@@ -1,7 +1,7 @@
 /*
  * FILE: io.h
  *
- * Port's related functions
+ * I/O port stubs for aarch64 (x86 port I/O not applicable)
  *
  * www.prtos.org
  */
@@ -13,27 +13,15 @@
 #error Kernel file, do not include.
 #endif
 
-#define io_delay() // __asm__ __volatile__("pushl %eax; inb $0x80,%al; inb $0x80,%al; popl %eax")
+/* aarch64 has no x86-style port I/O; all macros are no-ops */
+#define io_delay()
+#define out_byte(val, port)
+#define out_word(val, port)
+#define out_line(val, port)
+#define out_byte_port(val, port)
+#define in_byte(port) 0
+#define in_word(port) 0
+#define in_line(port) 0
+#define in_byte_port(port) 0
 
-#define out_byte(val, port) // __asm__ __volatile__("outb %0, %%dx\n\t" ::"a"((prtos_u8_t)(val)), "d"((prtos_u16_t)(port)))
-
-#define out_word(val, port) // __asm__ __volatile__("outw %0, %%dx\n\t" ::"a"((prtos_u16_t)(val)), "d"((prtos_u16_t)(port)))
-
-#define out_line(val, port) // __asm__ __volatile__("outl %0, %%dx\n\t" ::"a"((prtos_u32_t)(val)), "d"((prtos_u16_t)(port)))
-
-#define out_byte_port(val, port) \
-    ({                           \
-        out_byte(val, port);     \
-        io_delay();              \
-        io_delay();              \
-        io_delay();              \
-    })
-
-#define in_byte(port)  
-
-#define in_word(port)  
-
-#define in_line(port)   
-
-#define in_byte_port(port)  
 #endif

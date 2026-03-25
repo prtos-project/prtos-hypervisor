@@ -13,7 +13,23 @@
 #error Kernel file, do not include.
 #endif
 
+#include <arch/prtos_def.h>
+#include <arch/asm.h>
+
+#ifdef CONFIG_AARCH64
+#define __arch_g_param
+#define __arch_check_gp_param(__param, __size, __align)                                     \
+    ({                                                                                      \
+        prtos_s32_t __r = -1;                                                               \
+        if (__param < CONFIG_PRTOS_OFFSET && __param + size < CONFIG_PRTOS_OFFSET) __r = 0; \
+        __r;                                                                                \
+    })
+
+extern void *prtos_ipa_to_va(prtos_u64_t ipa);
+#define __arch_gp_to_va(ptr) prtos_ipa_to_va((prtos_u64_t)(prtos_address_t)(ptr))
+#else
 #include <arch/gaccess.h>
+#endif
 
 #define __g_param __arch_g_param
 

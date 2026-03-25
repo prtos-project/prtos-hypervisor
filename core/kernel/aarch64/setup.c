@@ -11,7 +11,6 @@
 #include <smp.h>
 #include <stdc.h>
 #include <physmm.h>
-#include <arch/pic.h>
 
 volatile prtos_s8_t local_info_init = 0;
 

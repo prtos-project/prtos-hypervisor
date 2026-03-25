@@ -90,8 +90,26 @@ static int parse_elf_image(int fd_elf) {
     lseek(fd_elf, 0, SEEK_SET);
     DO_READ(fd_elf, &e_hdr, sizeof(ELF(Ehdr)));
 
+    /* Validate ELF class matches what this tool was compiled for */
+    {
+        unsigned char elf_class = ((unsigned char *)&e_hdr)[EI_CLASS];
+#if defined(CONFIG_x86)
+        if (elf_class != ELFCLASS32)
+            error_printf("ELF class mismatch: expected 32-bit (ELFCLASS32) but got %s. "
+                         "Rebuild prtoseformat for the correct architecture (make distclean && make)",
+                         elf_class == ELFCLASS64 ? "64-bit (ELFCLASS64)" : "unknown");
+#elif defined(CONFIG_AARCH64)
+        if (elf_class != ELFCLASS64)
+            error_printf("ELF class mismatch: expected 64-bit (ELFCLASS64) but got %s. "
+                         "Rebuild prtoseformat for the correct architecture (make distclean && make)",
+                         elf_class == ELFCLASS32 ? "32-bit (ELFCLASS32)" : "unknown");
+#endif
+    }
+
     if ((RHALF(e_hdr.e_type) != ET_EXEC) || (e_hdr.e_machine != RHALF(EM_ARCH)) || (e_hdr.e_phentsize != RHALF(sizeof(ELF(Phdr)))))
-        error_printf("Malformed ELF header");
+        error_printf("Malformed ELF header (e_type=%d, e_machine=%d expected=%d, e_phentsize=%d expected=%d)",
+                     RHALF(e_hdr.e_type), RHALF(e_hdr.e_machine), EM_ARCH,
+                     RHALF(e_hdr.e_phentsize), (int)sizeof(ELF(Phdr)));
 
     // Looking for .prtos_hdr/.prtos_image_hdr sections
     shdr = malloc(sizeof(ELF(Shdr)) * RHALF(e_hdr.e_shnum));

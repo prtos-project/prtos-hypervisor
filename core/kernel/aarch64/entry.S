@@ -1,9 +1,4 @@
-#include <xen/xen_config.h>
-#include <asm/current.h>
-#include <asm/regs.h>
-#include <asm/alternative.h>
-#include <asm/smccc.h>
-#include <public/xen.h>
+#include <arch/arm_defs.h>
 
 #define IFLAGS_D_BIT    8
 #define IFLAGS_A_BIT    4

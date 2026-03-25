@@ -13,8 +13,6 @@
 #error Kernel file, do not include.
 #endif
 
-#include <arch/mpspec.h>
-#include <arch/apic.h>
 #include <linkage.h>
 
 #ifdef CONFIG_APIC

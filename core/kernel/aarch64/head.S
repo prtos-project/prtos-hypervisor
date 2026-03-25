@@ -9,25 +9,12 @@
 #include <linkage.h>
 #include <arch/irqs.h>
 #include <arch/asm_offsets.h>
-#include <arch/segments.h>
 #include <arch/prtos_def.h>
 
-#include <xen/xen_config.h>
+#include <arch/arm_defs.h>
 
-#include <asm/page.h>
-#include <asm/early_printk.h>
-
-
-#define KB(_kb)     (_AC(_kb, ULL) << 10)
-#define MB(_mb)     (_AC(_mb, ULL) << 20)
-#define GB(_gb)     (_AC(_gb, ULL) << 30)
-
-
-#define FIX_CONSOLE  0  /* The primary UART */
 
 /* need to add the uart address offset in page to the fixmap address */
-#define EARLY_UART_VIRTUAL_ADDRESS \
-    (FIXMAP_ADDR(FIX_CONSOLE) + (CONFIG_EARLY_UART_BASE_ADDRESS & ~PAGE_MASK))
 
 
 #define PT_PT     0xf7f /* nG=1 AF=1 SH=11 AP=01 NS=1 ATTR=111 T=1 P=1 */
@@ -496,14 +483,6 @@ END(switch_ttbr_id)
 
 
 
-
-
-
-
-
-
-ENTRY(start_prtos)
-
 .text
 /*
  * kthread_startup_wrapper - trampoline from CONTEXT_SWITCH into kthread startup
@@ -519,31 +498,8 @@ ENTRY(__halt_system)
     b   1b
 
 .data
-        .word 0
-ENTRY(idt_desc)
-        .word IDT_ENTRIES*8-1
-        .quad _VIRT2PHYS(hyp_idt_table)
-        
-
-.section .vboot.data, "ax"
-ENTRY(ap_ready)
-ENTRY(_sstack)
-.data
 ENTRY(early_gdt_table)
         .quad 0x0000000000000000 /* NULL  descriptor */
         .quad 0x00cf9b000000ffff /* 1<<3 PRTOS's code segment R0 */
         .quad 0x00cf93000000ffff /* 2<<3 PRTOS's data segment R0 */
 
-
-.bss
-ENTRY(_page_tables)
-        .zero 2*PAGE_SIZE
-
-ENTRY(prtos_reserve_one_phys_page)
-        .zero PAGE_SIZE
-
-ENTRY(hyp_idt_table)
-        .zero IDT_ENTRIES*8
-        
-ENTRY(__idle_kthread)
-        .zero CONFIG_KSTACK_SIZE*CONFIG_NO_CPUS
