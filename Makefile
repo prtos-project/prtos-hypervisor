@@ -85,7 +85,9 @@ distclean: clean
 	@find -type f -name "partition?" -exec rm '{}' \;
 	@find -type f -name "resident_sw" -exec rm '{}' \;
 	@find -type f -name "*.c.prtos_conf" -exec rm '{}' \;
-	@find -type f -name "*.bin.prtos_conf" -exec rm '{}' \;
+	@find -type f -name "resident_sw_image" -exec rm '{}' \;
+	@find -type f -name "obj_exc_elf" -exec rm '{}' \;
+	@find -type f -name "*.pef.prtos_conf" -exec rm '{}' \;
 	@find -type f -name "*.pef.prtos_conf" -exec rm '{}' \;
 	@find -type f -name "*.pef" -exec rm '{}' \;
 	@find -type f -name "prtos_cf" -exec rm '{}' \;
@@ -106,7 +108,7 @@ clean:
 	@exec echo -e "  - Removing *.o *.a *~ files";
 	@find \( -name "*~" -o -name "*.o" -o -name "*.a" -o -name "*.xo" \) -exec rm '{}' \;
 	@find -name "*.gcno" -exec rm '{}' \;
-	@find -name "*.bin" -exec rm '{}' \;
+	@find . -name "*.bin" -not -path "*/user/bail/bin/u-boot.bin" -exec rm '{}' \;
 	@$(RM) -f $(PRTOS_PATH)/core/build.info $(PRTOS_PATH)/user/tools/prtoscparser/prtos_conf.xsd $(PRTOS_PATH)/$(DISTRO).run
 	@exec echo -e "> Done";
 

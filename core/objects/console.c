@@ -53,12 +53,14 @@ static prtos_s32_t write_console_obj(prtos_obj_desc_t desc, prtos_u8_t *__g_para
     con = (part_id == PRTOS_HYPERVISOR_ID) ? &prtos_console : &partition_console_table[part_id];
 
     spin_lock(&console_lock);
-    for (e = 0; e < length; e++) {
-        preemption_on();
-        preemption_off();
-        if (!write_mod(con, &buffer[e])) {
-            spin_unlock(&console_lock);
-            return e;
+    {
+        for (e = 0; e < length; e++) {
+            preemption_on();
+            preemption_off();
+            if (!write_mod(con, &buffer[e])) {
+                spin_unlock(&console_lock);
+                return e;
+            }
         }
     }
     spin_unlock(&console_lock);

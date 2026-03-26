@@ -234,10 +234,18 @@ void setup_phys_mm(void) {
 
     dyn_list_init(&cache_lru);
     GET_MEMZ(phys_page_table, sizeof(struct phys_page *) * prtos_conf_table.num_of_regions);
+     eprintf("phys_page_table:0x%llx\n", (prtos_address_t)phys_page_table);
     for (e = 0; e < prtos_conf_table.num_of_regions; e++) {
+#if 1
+        eprintf("prtos_conf_mem_reg_table[%d].start_addr: 0x%llx, size: 0x%llx\n", e, prtos_conf_mem_reg_table[e].start_addr, prtos_conf_mem_reg_table[e].size);
+        eprintf("prtos_conf_mem_reg_table[%d].flags: 0x%llx\n", e, prtos_conf_mem_reg_table[e].flags);
+#endif
         ASSERT(!(prtos_conf_mem_reg_table[e].size & (PAGE_SIZE - 1)) && !(prtos_conf_mem_reg_table[e].start_addr & (PAGE_SIZE - 1)));
         if (prtos_conf_mem_reg_table[e].flags & PRTOSC_REG_FLAG_PGTAB) {
+            eprintf("Creating phys_page_table[%d] with size of pages: 0x%llx\n", e, prtos_conf_mem_reg_table[e].size / PAGE_SIZE);
+            eprintf("Creating phys_page_table[%d] with size of bytes %llu\n", e, sizeof(struct phys_page) * (prtos_conf_mem_reg_table[e].size / PAGE_SIZE));
             GET_MEMZ(phys_page_table[e], sizeof(struct phys_page) * (prtos_conf_mem_reg_table[e].size / PAGE_SIZE));
+            eprintf("phys_page_table[%d]:0x%llx\n", e, (prtos_address_t)phys_page_table[e]);
             for (i = 0; i < prtos_conf_mem_reg_table[e].size / PAGE_SIZE; i++) phys_page_table[e][i].lock = SPINLOCK_INIT;
         } else {
             phys_page_table[e] = 0;

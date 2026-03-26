@@ -81,6 +81,11 @@ extern __stdcall prtos_s32_t prtos_switch_sched_plan(prtos_u32_t new_plan_id, pr
 // Deferred hypercalls
 extern __stdcall prtos_s32_t prtos_multicall(void *start_addr, void *end_addr);
 
+#ifdef CONFIG_AARCH64
+// AArch64: para-virtualized trap raise (EL1 faults don't trap to EL2)
+extern __stdcall prtos_s32_t prtos_raise_partition_trap(prtos_u32_t trap_nr);
+#endif
+
 #endif
 
 #endif

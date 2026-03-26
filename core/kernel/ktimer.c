@@ -22,7 +22,6 @@ static prtos_s32_t timer_handler(void);
 inline void set_hw_timer(prtos_time_t next_act) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     prtos_time_t next_time, current_time;
-
     ASSERT(!hw_is_sti());
     ASSERT(next_act >= 0);
     if (!next_act) return;
@@ -39,8 +38,9 @@ inline void set_hw_timer(prtos_time_t next_act) {
         if (next_time > info->time.sys_hw_timer->get_max_interval()) next_time = info->time.sys_hw_timer->get_max_interval();
         info->time.next_act = next_time + current_time;
         info->time.sys_hw_timer->set_hw_timer(next_time);
-    } else
+    } else {
         timer_handler();
+    }
 }
 
 prtos_time_t traverse_ktimer_queue(struct dyn_list *l, prtos_time_t current_time) {
@@ -73,14 +73,15 @@ prtos_time_t traverse_ktimer_queue(struct dyn_list *l, prtos_time_t current_time
 static prtos_s32_t timer_handler(void) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     prtos_time_t current_time, next_act, next_local_act;
-
     ASSERT(!hw_is_sti());
     info->time.flags &= ~NEXT_ACT_IS_VALID;
     current_time = get_sys_clock_usec();
     next_act = traverse_ktimer_queue(&info->time.global_active_ktimers, current_time);
-    if (info->sched.current_kthread->ctrl.g)
-        if ((next_local_act = traverse_ktimer_queue(&info->sched.current_kthread->ctrl.local_active_ktimers, current_time)) && (next_local_act < next_act))
+    if (info->sched.current_kthread->ctrl.g) {
+        next_local_act = traverse_ktimer_queue(&info->sched.current_kthread->ctrl.local_active_ktimers, current_time);
+        if (next_local_act && (next_local_act < next_act))
             next_act = next_local_act;
+    }
     set_hw_timer(next_act);
 
     return 0;

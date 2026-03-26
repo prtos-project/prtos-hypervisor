@@ -45,21 +45,31 @@ void rsv_block(unsigned int size, int align, char *comment) {
         }                                                           \
     } while (0)
 #elif defined(CONFIG_AARCH64)
-#define MEM_BLOCK(size, align, comment)                             \
-    do {                                                            \
-        if (size) {                                                 \
-            fprintf(out_file,                                       \
-                    "\n__asm__ (/* %s */ \\\n"                      \
-                    "         \".section .data.memobj\\n\\t\" \\\n" \
-                    "         \".quad 1f\\n\\t\" \\\n"              \
-                    "         \".long %d\\n\\t\" \\\n"              \
-                    "         \".long %d\\n\\t\" \\\n"              \
-                    "         \".section .bss.mempool\\n\\t\" \\\n" \
-                    "         \".align %d\\n\\t\" \\\n"             \
-                    "         \"1:.zero %d\\n\\t\" \\\n"            \
-                    "         \".previous\\n\\t\");\n",             \
-                    comment, align, size, align, size);             \
-        }                                                           \
+/* On AArch64 GAS, .align n means align to 2^n bytes (not n bytes).
+ * Convert byte-alignment to log2 for the .align directive. */
+static int aarch64_log2_align(int align) {
+    int n = 0;
+    while (align > 1) {
+        align >>= 1;
+        n++;
+    }
+    return n;
+}
+#define MEM_BLOCK(size, align, comment)                                     \
+    do {                                                                    \
+        if (size) {                                                         \
+            fprintf(out_file,                                               \
+                    "\n__asm__ (/* %s */ \\\n"                              \
+                    "         \".section .data.memobj\\n\\t\" \\\n"         \
+                    "         \".quad 1f\\n\\t\" \\\n"                      \
+                    "         \".long %d\\n\\t\" \\\n"                      \
+                    "         \".long %d\\n\\t\" \\\n"                      \
+                    "         \".section .bss.mempool\\n\\t\" \\\n"         \
+                    "         \".align %d\\n\\t\" \\\n"                     \
+                    "         \"1:.zero %d\\n\\t\" \\\n"                    \
+                    "         \".previous\\n\\t\");\n",                     \
+                    comment, align, size, aarch64_log2_align(align), size); \
+        }                                                                   \
     } while (0)
 #else
 #error "Unsupported architecture"

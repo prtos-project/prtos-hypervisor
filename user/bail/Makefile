@@ -27,9 +27,8 @@ KCONFIG_AUTOCONFIG=$(BAIL_PATH)/include/config/auto.conf
 $(KCONFIG_AUTOHEADER): silentoldconfig
 
 links: $(KCONFIG_AUTOHEADER)
-	@if [ ! -d $(BAIL_PATH)/include/arch ] ; then \
-		ln -sf $(BAIL_PATH)/include/$(ARCH) $(BAIL_PATH)/include/arch; \
-	fi
+	@rm -f $(BAIL_PATH)/include/arch; \
+	ln -sf $(BAIL_PATH)/include/$(ARCH) $(BAIL_PATH)/include/arch
 
 KCONFIG=$(BAIL_PATH)/$(ARCH)/Kconfig
 DEFCONFIG=$(BAIL_PATH)/$(ARCH)/defconfig

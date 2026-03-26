@@ -69,6 +69,7 @@ void set_trap_pending(cpu_ctxt_t *ctxt) {
 }
 
 static inline prtos_address_t is_in_part_exception_table(prtos_address_t addr) {
+#ifndef CONFIG_AARCH64
     extern struct exception_table {
         prtos_address_t a;
         prtos_address_t b;
@@ -79,7 +80,7 @@ static inline prtos_address_t is_in_part_exception_table(prtos_address_t addr) {
     for (e = 0; exception_table_ptr[e].a; e++) {
         if (addr == exception_table_ptr[e].a) return exception_table_ptr[e].b;
     }
-
+#endif
     return 0;
 }
 
@@ -118,9 +119,10 @@ void do_hyp_trap(cpu_ctxt_t *ctxt) {
 
     /*Fast propagation of partition events not logged.*/
     if (!is_hpv_irq_ctxt(ctxt)) {
+        partition_t *part = get_partition(info->sched.current_kthread);
         ASSERT(hm_event < PRTOS_HM_MAX_EVENTS);
-        if ((get_partition(info->sched.current_kthread)->cfg->hm_table[hm_event].action == PRTOS_HM_AC_PROPAGATE) &&
-            (!get_partition(info->sched.current_kthread)->cfg->hm_table[hm_event].log)) {
+        if ((part->cfg->hm_table[hm_event].action == PRTOS_HM_AC_PROPAGATE) &&
+            (!part->cfg->hm_table[hm_event].log)) {
 #ifdef CONFIG_VERBOSE_TRAP
             kprintf("[TRAP] %s(0x%x)\n", trap_to_str[ctxt->irq_nr], ctxt->irq_nr);
             dump_state(ctxt);
@@ -183,7 +185,9 @@ void do_unrecover_exception(cpu_ctxt_t *ctxt) {
 
 void do_hyp_irq(cpu_ctxt_t *ctxt) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
+#ifndef CONFIG_AARCH64
     ASSERT(!hw_is_sti());
+#endif
 #ifdef CONFIG_AUDIT_EVENTS
     if (is_audit_event_masked(TRACE_IRQ_MODULE)) raise_audit_event(TRACE_IRQ_MODULE, AUDIT_IRQ_RAISED, 1, &ctxt->irq_nr);
 #endif
@@ -203,13 +207,14 @@ void do_hyp_irq(cpu_ctxt_t *ctxt) {
     do {
         schedule();
     } while (info->cpu.irq_nesting_counter == SCHED_PENDING);
+#ifndef CONFIG_AARCH64
     ASSERT(!hw_is_sti());
     ASSERT(!(info->cpu.irq_nesting_counter & SCHED_PENDING));
+#endif
 }
 
 void __VBOOT setup_irqs(void) {
     prtos_s32_t irq_nr;
-
     for (irq_nr = 0; irq_nr < CONFIG_NO_HWIRQS; irq_nr++) {
         if (prtos_conf_table.hpv.hw_irq_table[irq_nr].owner != PRTOS_IRQ_NO_OWNER) {
             irq_handler_table[irq_nr] = (struct irq_table_entry){
@@ -317,8 +322,9 @@ prtos_s32_t raise_pend_irqs(cpu_ctxt_t *ctxt) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     partition_control_table_t *part_ctrl_table;
     prtos_s32_t entry_irq, emul;
-
-    if (!info->sched.current_kthread->ctrl.g || is_hpv_irq_ctxt(ctxt)) return ~0;
+    if (!info->sched.current_kthread->ctrl.g || is_hpv_irq_ctxt(ctxt)) {
+        return ~0;
+    }
 
     // Software trap
     if (info->sched.current_kthread->ctrl.g->sw_trap & 0x1) {

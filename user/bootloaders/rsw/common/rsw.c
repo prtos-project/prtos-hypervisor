@@ -32,6 +32,22 @@ static int prots_conf_vaddr_to_paddr(struct prtos_conf_memory_area *memory_areas
     return -1;
 }
 
+#ifdef CONFIG_AARCH64
+/* On QEMU virt, RAM starts at 0x40000000; partition IPA is offset from that */
+#define AARCH64_IPA_TO_PA_OFFSET 0x40000000UL
+
+static int aarch64_vaddr_to_paddr(struct prtos_conf_memory_area *memory_areas, prtos_s32_t num_of_areas, prtos_address_t v_addr, prtos_address_t *p_addr) {
+    prtos_s32_t e;
+    for (e = 0; e < num_of_areas; e++) {
+        if ((memory_areas[e].mapped_at <= v_addr) && (((memory_areas[e].mapped_at + memory_areas[e].size) - 1) >= v_addr)) {
+            *p_addr = v_addr - memory_areas[e].mapped_at + memory_areas[e].start_addr + AARCH64_IPA_TO_PA_OFFSET;
+            return 0;
+        }
+    }
+    return -1;
+}
+#endif
+
 extern prtos_address_t hpv_entry_point[];
 
 void rsw_main(void) {
@@ -113,7 +129,12 @@ void rsw_main(void) {
             xprintf("[RSW] Error %d when parsing PEF file\n", ret);
             halt_system();
         }
-        part_hdr = load_pef_file(&pef_file, (int (*)(void *, prtos_s32_t, prtos_address_t, prtos_address_t *))prots_conf_vaddr_to_paddr,
+        part_hdr = load_pef_file(&pef_file,
+#ifdef CONFIG_AARCH64
+                                 (int (*)(void *, prtos_s32_t, prtos_address_t, prtos_address_t *))aarch64_vaddr_to_paddr,
+#else
+                                 (int (*)(void *, prtos_s32_t, prtos_address_t, prtos_address_t *))prots_conf_vaddr_to_paddr,
+#endif
                                  &prtos_conf_mem_area[prtos_conf_parts[container.partition_table[e].id].physical_memory_areas_offset],
                                  prtos_conf_parts[container.partition_table[e].id].num_of_physical_memory_areas);
         if ((part_hdr->start_signature != PRTOS_EXEC_PARTITION_MAGIC) && (part_hdr->end_signature != PRTOS_EXEC_PARTITION_MAGIC)) {
@@ -144,7 +165,17 @@ void rsw_main(void) {
             }
             prtos_conf_boot_partition_table[container.partition_table[e].id].custom_file_table[i].start_addr = (prtos_address_t)pef_custom_file.hdr;
             prtos_conf_boot_partition_table[container.partition_table[e].id].custom_file_table[i].size = pef_custom_file.hdr->image_length;
+#ifdef CONFIG_AARCH64
+            {
+                /* On AArch64, custom_file start_addr is a partition IPA;
+                   translate to PA for the memcpy in load_pef_custom_file */
+                struct pef_custom_file cf_translated = pef_file.custom_file_table[i];
+                cf_translated.start_addr += AARCH64_IPA_TO_PA_OFFSET;
+                load_pef_custom_file(&pef_custom_file, &cf_translated);
+            }
+#else
             load_pef_custom_file(&pef_custom_file, &pef_file.custom_file_table[i]);
+#endif
         }
     }
 

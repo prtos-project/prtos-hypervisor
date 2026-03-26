@@ -59,11 +59,7 @@ extern kdev_table_t get_kdev_table[NO_KDEV];
 extern void setup_kdev(void);
 extern const kdevice_t *find_kdev(const prtos_dev_t *dev);
 
-#define REGISTER_KDEV_SETUP(_init)           \
-    __asm__(".section .kdevsetup, \"a\"\n\t" \
-            ".align 4\n\t"                   \
-            ".long " #_init "\n\t"           \
-            ".previous\n\t")
+#define REGISTER_KDEV_SETUP(_init) static void *__kdevsetup_##_init __attribute__((section(".kdevsetup"), used)) = (void *)_init;
 
 #define RESERVE_HWIRQ(_irq)                   \
     __asm__(".section .rsv_hwirqs, \"a\"\n\t" \
