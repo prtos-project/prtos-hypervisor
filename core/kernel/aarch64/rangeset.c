@@ -1,4 +1,4 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /******************************************************************************
  * rangeset.c
  * 
@@ -8,10 +8,10 @@
  * Copyright (c) 2005, K A Fraser
  */
 
-#include <xen_sched.h>
-#include <xen_errno.h>
-#include <xen_rangeset.h>
-#include <xsm_xsm.h>
+#include <prtos_sched.h>
+#include <prtos_errno.h>
+#include <prtos_rangeset.h>
+#include <prtos_xsm_xsm.h>
 
 /* An inclusive range [s,e] and pointer to next range in ascending order. */
 struct range {

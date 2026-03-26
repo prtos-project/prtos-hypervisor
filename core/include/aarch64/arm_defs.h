@@ -184,9 +184,9 @@
 #define LPAE_ENTRIES            (_AC(1,U) << LPAE_SHIFT) /* 512 */
 #define LPAE_ENTRY_MASK         (LPAE_ENTRIES - 1)      /* 0x1FF */
 
-#define XEN_PT_LPAE_SHIFT       LPAE_SHIFT
-#define XEN_PT_LPAE_ENTRIES     LPAE_ENTRIES
-#define XEN_PT_LPAE_ENTRY_MASK  LPAE_ENTRY_MASK
+#define PRTOS_PT_LPAE_SHIFT       LPAE_SHIFT
+#define PRTOS_PT_LPAE_ENTRIES     LPAE_ENTRIES
+#define PRTOS_PT_LPAE_ENTRY_MASK  LPAE_ENTRY_MASK
 
 /*
  * Page table level shift: for 4K pages with 3-level paging:
@@ -195,25 +195,25 @@
  *   Level 1 (block):   shift = 30
  *   Level 0 (table):   shift = 39
  */
-#define XEN_PT_LEVEL_SHIFT(lvl) ((3 - (lvl)) * LPAE_SHIFT + PAGE_SHIFT)
-#define XEN_PT_LEVEL_SIZE(lvl)  (_AT(unsigned long, 1) << XEN_PT_LEVEL_SHIFT(lvl))
-#define XEN_PT_LEVEL_MASK(lvl)  (~(XEN_PT_LEVEL_SIZE(lvl) - 1))
+#define PRTOS_PT_LEVEL_SHIFT(lvl) ((3 - (lvl)) * LPAE_SHIFT + PAGE_SHIFT)
+#define PRTOS_PT_LEVEL_SIZE(lvl)  (_AT(unsigned long, 1) << PRTOS_PT_LEVEL_SHIFT(lvl))
+#define PRTOS_PT_LEVEL_MASK(lvl)  (~(PRTOS_PT_LEVEL_SIZE(lvl) - 1))
 
-#define THIRD_SHIFT         XEN_PT_LEVEL_SHIFT(3)   /* 12 */
-#define THIRD_SIZE          XEN_PT_LEVEL_SIZE(3)     /* 4096 */
-#define THIRD_MASK          XEN_PT_LEVEL_MASK(3)     /* ~0xFFF */
+#define THIRD_SHIFT         PRTOS_PT_LEVEL_SHIFT(3)   /* 12 */
+#define THIRD_SIZE          PRTOS_PT_LEVEL_SIZE(3)     /* 4096 */
+#define THIRD_MASK          PRTOS_PT_LEVEL_MASK(3)     /* ~0xFFF */
 
-#define SECOND_SHIFT        XEN_PT_LEVEL_SHIFT(2)    /* 21 */
-#define SECOND_SIZE         XEN_PT_LEVEL_SIZE(2)     /* 2MB */
-#define SECOND_MASK         XEN_PT_LEVEL_MASK(2)
+#define SECOND_SHIFT        PRTOS_PT_LEVEL_SHIFT(2)    /* 21 */
+#define SECOND_SIZE         PRTOS_PT_LEVEL_SIZE(2)     /* 2MB */
+#define SECOND_MASK         PRTOS_PT_LEVEL_MASK(2)
 
-#define FIRST_SHIFT         XEN_PT_LEVEL_SHIFT(1)    /* 30 */
-#define FIRST_SIZE          XEN_PT_LEVEL_SIZE(1)     /* 1GB */
-#define FIRST_MASK          XEN_PT_LEVEL_MASK(1)
+#define FIRST_SHIFT         PRTOS_PT_LEVEL_SHIFT(1)    /* 30 */
+#define FIRST_SIZE          PRTOS_PT_LEVEL_SIZE(1)     /* 1GB */
+#define FIRST_MASK          PRTOS_PT_LEVEL_MASK(1)
 
-#define ZEROETH_SHIFT       XEN_PT_LEVEL_SHIFT(0)    /* 39 */
-#define ZEROETH_SIZE        XEN_PT_LEVEL_SIZE(0)     /* 512GB */
-#define ZEROETH_MASK        XEN_PT_LEVEL_MASK(0)
+#define ZEROETH_SHIFT       PRTOS_PT_LEVEL_SHIFT(0)    /* 39 */
+#define ZEROETH_SIZE        PRTOS_PT_LEVEL_SIZE(0)     /* 512GB */
+#define ZEROETH_MASK        PRTOS_PT_LEVEL_MASK(0)
 
 /* Table offset extraction macros */
 #define zeroeth_linear_offset(va)  ((va) >> ZEROETH_SHIFT)
@@ -221,7 +221,7 @@
 #define second_linear_offset(va)   ((va) >> SECOND_SHIFT)
 #define third_linear_offset(va)    ((va) >> THIRD_SHIFT)
 
-#define TABLE_OFFSET(offs)          (_AT(unsigned int, offs) & XEN_PT_LPAE_ENTRY_MASK)
+#define TABLE_OFFSET(offs)          (_AT(unsigned int, offs) & PRTOS_PT_LPAE_ENTRY_MASK)
 #define zeroeth_table_offset(va)    TABLE_OFFSET(zeroeth_linear_offset(va))
 #define first_table_offset(va)      TABLE_OFFSET(first_linear_offset(va))
 #define second_table_offset(va)     TABLE_OFFSET(second_linear_offset(va))
@@ -232,7 +232,7 @@
 #define SLOT0(slot)         (_AT(unsigned long, slot) << SLOT0_ENTRY_BITS)
 
 #define IDENTITY_MAPPING_AREA_NR_L0  20
-#define XEN_VM_MAPPING      SLOT0(IDENTITY_MAPPING_AREA_NR_L0)
+#define PRTOS_VM_MAPPING      SLOT0(IDENTITY_MAPPING_AREA_NR_L0)
 
 #ifndef __ASSEMBLY__
 typedef unsigned long vaddr_t;
@@ -243,11 +243,11 @@ typedef unsigned long paddr_t;
 #define GB(_gb)     (_AC(_gb, ULL) << 30)
 #define KB(_kb)     (_AC(_kb, ULL) << 10)
 
-#define XEN_VIRT_START      (XEN_VM_MAPPING + MB(2))
-#define XEN_VIRT_SIZE       MB(32)
-#define XEN_NR_ENTRIES(lvl) (XEN_VIRT_SIZE / XEN_PT_LEVEL_SIZE(lvl))
+#define PRTOS_VIRT_START      (PRTOS_VM_MAPPING + MB(2))
+#define PRTOS_VIRT_SIZE       MB(32)
+#define PRTOS_NR_ENTRIES(lvl) (PRTOS_VIRT_SIZE / PRTOS_PT_LEVEL_SIZE(lvl))
 
-#define FIXMAP_VIRT_START   (XEN_VIRT_START + XEN_VIRT_SIZE)
+#define FIXMAP_VIRT_START   (PRTOS_VIRT_START + PRTOS_VIRT_SIZE)
 #define FIXMAP_VIRT_SIZE    MB(2)
 #define FIXMAP_ADDR(n)      (FIXMAP_VIRT_START + (n) * PAGE_SIZE)
 

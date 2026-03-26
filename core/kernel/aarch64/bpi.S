@@ -1,4 +1,4 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /*
  * Contains CPU specific branch predictor invalidation sequences
  *

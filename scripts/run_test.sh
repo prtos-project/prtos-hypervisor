@@ -422,6 +422,13 @@ try:
     if idx != 0:
         print('MIX_OS_TEST_FAIL: login prompt not reached')
         child.close(force=True); sys.exit(1)
+    # Check FreeRTOS output appeared during boot (interleaved with Linux boot)
+    boot_output = child.before if child.before else ''
+    rtos_found = 'RTOS' in boot_output
+    if not rtos_found:
+        print('MIX_OS_TEST_FAIL: no FreeRTOS output on serial')
+        child.close(force=True); sys.exit(1)
+    print('FreeRTOS serial output detected')
     # Retry login up to 3 times in case of interleaved RTOS output
     logged_in = False
     for attempt in range(3):

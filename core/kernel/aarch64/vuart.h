@@ -1,5 +1,5 @@
 /*
- * xen/arch/arm/vuart.h
+ * prtos/arch/arm/vuart.h
  *
  * Virtual UART Emulation Support
  *

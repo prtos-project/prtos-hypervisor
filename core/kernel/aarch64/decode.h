@@ -1,5 +1,5 @@
 /*
- * xen/arch/arm/decode.h
+ * prtos/arch/arm/decode.h
  *
  * Instruction decoder
  *

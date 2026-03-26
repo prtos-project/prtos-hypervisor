@@ -5,13 +5,13 @@
  * Portions by Mark Williamson are (C) 2004 Intel Research Cambridge
  */
 
-#ifndef __XEN_SCHED_IF_H__
-#define __XEN_SCHED_IF_H__
+#ifndef __PRTOS_SCHED_IF_H__
+#define __PRTOS_SCHED_IF_H__
 
-#include <xen_err.h>
-#include <xen_list.h>
-#include <xen_percpu.h>
-#include <xen_rcupdate.h>
+#include <prtos_err.h>
+#include <prtos_list.h>
+#include <prtos_percpu.h>
+#include <prtos_rcupdate.h>
 
 /* cpus currently in no cpupool */
 extern cpumask_t cpupool_free_cpus;
@@ -351,13 +351,13 @@ struct scheduler {
                                     unsigned int new_cpu);
     int          (*adjust)         (const struct scheduler *ops,
                                     struct domain *d,
-                                    struct xen_domctl_scheduler_op *op);
+                                    struct prtos_domctl_scheduler_op *op);
     void         (*adjust_affinity)(const struct scheduler *ops,
                                     struct sched_unit *unit,
                                     const struct cpumask *hard,
                                     const struct cpumask *soft);
     int          (*adjust_global)  (const struct scheduler *ops,
-                                    struct xen_sysctl_scheduler_op *sc);
+                                    struct prtos_sysctl_scheduler_op *sc);
     void         (*dump_settings)  (const struct scheduler *ops);
     void         (*dump_cpu_state) (const struct scheduler *ops, int cpu);
     void         (*move_timers)    (const struct scheduler *ops,
@@ -505,13 +505,13 @@ static inline void sched_adjust_affinity(const struct scheduler *s,
 }
 
 static inline int sched_adjust_dom(const struct scheduler *s, struct domain *d,
-                                   struct xen_domctl_scheduler_op *op)
+                                   struct prtos_domctl_scheduler_op *op)
 {
     return s->adjust ? s->adjust(s, d, op) : 0;
 }
 
 static inline int sched_adjust_cpupool(const struct scheduler *s,
-                                       struct xen_sysctl_scheduler_op *op)
+                                       struct prtos_sysctl_scheduler_op *op)
 {
     return s->adjust_global ? s->adjust_global(s, op) : 0;
 }
@@ -666,4 +666,4 @@ void cpupool_put(struct cpupool *pool);
 int cpupool_add_domain(struct domain *d, unsigned int poolid);
 void cpupool_rm_domain(struct domain *d);
 
-#endif /* __XEN_SCHED_IF_H__ */
+#endif /* __PRTOS_SCHED_IF_H__ */

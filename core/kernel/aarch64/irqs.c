@@ -156,7 +156,7 @@ static inline prtos_s32_t test_sp(prtos_address_t *sp, prtos_u32_t size) {
  * Guest regs pointer set by leave_hypervisor_to_guest() (entry.S passes
  * sp in x0 which points to the saved cpu_user_regs frame on the current
  * kthread's stack).  This replaces the old STACK_SIZE-aligned calculation
- * which assumed Xen's 32 KB per-CPU stack layout.
+ * which assumed PRTOS's 32 KB per-CPU stack layout.
  */
 extern struct cpu_user_regs *prtos_current_guest_regs_percpu[];
 

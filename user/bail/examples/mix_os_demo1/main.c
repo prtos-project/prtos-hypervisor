@@ -127,19 +127,19 @@ static void status_report_task(void *p)
         vTaskDelay(pdMS_TO_TICKS(2000));
         report_num++;
 
-        // uart_puts("[RTOS] Report #");
-        // uart_puthex(report_num);
-        // uart_puts("  RPM=");
-        // uart_puthex(sensor_rpm);
-        // uart_puts("  Temp=");
-        // uart_puthex(sensor_temp);
-        // uart_puts("  PWM=");
-        // uart_puthex(motor_pwm_duty);
-        // uart_puts("  CtrlLoops=");
-        // uart_puthex(control_loop_count);
-        // uart_puts("  Samples=");
-        // uart_puthex(sample_count);
-        // uart_puts("\n");
+        uart_puts("[RTOS] Report #");
+        uart_puthex(report_num);
+        uart_puts("  RPM=");
+        uart_puthex(sensor_rpm);
+        uart_puts("  Temp=");
+        uart_puthex(sensor_temp);
+        uart_puts("  PWM=");
+        uart_puthex(motor_pwm_duty);
+        uart_puts("  CtrlLoops=");
+        uart_puthex(control_loop_count);
+        uart_puts("  Samples=");
+        uart_puthex(sample_count);
+        uart_puts("\n");
 
         /* Also write to shared memory ring buffer for Linux consumption */
         if (ring->magic == SHARED_RING_MAGIC) {

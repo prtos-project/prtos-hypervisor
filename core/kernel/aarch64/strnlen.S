@@ -1,4 +1,4 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /*
  * Copyright (C) 2013 ARM Ltd.
  * Copyright (C) 2013 Linaro.

@@ -1,6 +1,6 @@
 #ifndef __LAYOUT_H__
 #define __LAYOUT_H__
-// #include <asm/xen_autoconf.h>
+// #include <asm/prtos_autoconf.h>
 
 #define NCPU 4
 /* 4K size */
@@ -14,7 +14,7 @@
 #define PHYEND (PHYBASE + PHYSIZE)
 
 /* PL011设备寄存器的基地址
- * Must match FIXMAP_ADDR(FIX_CONSOLE) = FIXMAP_VIRT_START = XEN_VIRT_START + XEN_VIRT_SIZE
+ * Must match FIXMAP_ADDR(FIX_CONSOLE) = FIXMAP_VIRT_START = PRTOS_VIRT_START + PRTOS_VIRT_SIZE
  * = 0xA0000200000 + MB(32) = 0xA0002200000
  * prtos_map_uart_mmio() maps PA 0x09000000 into this fixmap slot at PRTOS boot. */
 #define PL011BASE 0xA0002200000ULL

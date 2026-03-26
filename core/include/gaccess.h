@@ -35,7 +35,7 @@ extern void *prtos_ipa_to_va(prtos_u64_t ipa);
 
 /*
  * gp_to_va(ptr) - translate a guest parameter pointer to a hypervisor VA.
- * On x86 (VA==PA): identity.  On AArch64: IPA → Xen directmap EL2 VA.
+ * On x86 (VA==PA): identity.  On AArch64: IPA → PRTOS directmap EL2 VA.
  */
 #define gp_to_va(ptr) __arch_gp_to_va(ptr)
 

@@ -2,7 +2,7 @@
  * FILE: prtos_vgic.h
  *
  * Standalone GICv3 virtual distributor/redistributor emulation for PRTOS
- * hw-virt partitions (Linux guests).  Separate from Xen's VGIC which
+ * hw-virt partitions (Linux guests).  Separate from PRTOS's VGIC which
  * requires full domain/vcpu infrastructure.
  *
  * www.prtos.org

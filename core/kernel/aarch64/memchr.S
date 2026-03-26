@@ -1,4 +1,4 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /*
  * Based on arch/arm/lib/memchr.S
  *

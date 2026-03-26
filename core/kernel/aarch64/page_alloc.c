@@ -1,8 +1,8 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /******************************************************************************
  * page_alloc.c
  *
- * Simple buddy heap allocator for Xen.
+ * Simple buddy heap allocator for PRTOS.
  *
  * Copyright (c) 2002-2004 K A Fraser
  * Copyright (c) 2006 IBM Ryan Harper <ryanh@us.ibm.com>
@@ -22,15 +22,15 @@
  */
 
 /*
- * In general Xen maintains two pools of memory:
+ * In general PRTOS maintains two pools of memory:
  *
- * - Xen heap: Memory which is always mapped (i.e accessible by
+ * - PRTOS heap: Memory which is always mapped (i.e accessible by
  *             virtual address), via a permanent and contiguous
  *             "direct mapping". Macros like va() and pa() are valid
  *             for such memory and it is always permissible to stash
- *             pointers to Xen heap memory in data structures etc.
+ *             pointers to PRTOS heap memory in data structures etc.
  *
- *             Xen heap pages are always anonymous (that is, not tied
+ *             PRTOS heap pages are always anonymous (that is, not tied
  *             or accounted to any particular domain).
  *
  * - Dom heap: Memory which must be explicitly mapped, usually
@@ -48,47 +48,47 @@
  * The exact nature of this split is a (sub)arch decision which can
  * select one of three main variants:
  *
- * CONFIG_SEPARATE_XENHEAP=y
+ * CONFIG_SEPARATE_PRTOSHEAP=y
  *
- *   The xen heap is maintained as an entirely separate heap.
+ *   The prtos heap is maintained as an entirely separate heap.
  *
  *   Arch code arranges for some (perhaps small) amount of physical
  *   memory to be covered by a direct mapping and registers that
- *   memory as the Xen heap (via init_xenheap_pages()) and the
+ *   memory as the PRTOS heap (via init_prtosheap_pages()) and the
  *   remainder as the dom heap.
  *
  *   This mode of operation is most commonly used by 32-bit arches
  *   where the virtual address space is insufficient to map all RAM.
  *
- * CONFIG_SEPARATE_XENHEAP=n W/ DIRECT MAP OF ALL RAM
+ * CONFIG_SEPARATE_PRTOSHEAP=n W/ DIRECT MAP OF ALL RAM
  *
  *   All of RAM is covered by a permanent contiguous mapping and there
  *   is only a single heap.
  *
- *   Memory allocated from the Xen heap is flagged (in
- *   page_info.count_info) with PGC_xen_heap. Memory allocated from
+ *   Memory allocated from the PRTOS heap is flagged (in
+ *   page_info.count_info) with PGC_prtos_heap. Memory allocated from
  *   the Dom heap must still be explicitly mapped before use
  *   (e.g. with map_domain_page) in particular in common code.
  *
- *   xenheap_max_mfn() should not be called by arch code.
+ *   prtosheap_max_mfn() should not be called by arch code.
  *
  *   This mode of operation is most commonly used by 64-bit arches
  *   which have sufficient free virtual address space to permanently
  *   map the largest practical amount RAM currently expected on that
  *   arch.
  *
- * CONFIG_SEPARATE_XENHEAP=n W/ DIRECT MAP OF ONLY PARTIAL RAM
+ * CONFIG_SEPARATE_PRTOSHEAP=n W/ DIRECT MAP OF ONLY PARTIAL RAM
  *
  *   There is a single heap, but only the beginning (up to some
  *   threshold) is covered by a permanent contiguous mapping.
  *
- *   Memory allocated from the Xen heap is allocated from below the
- *   threshold and flagged with PGC_xen_heap. Memory allocated from
+ *   Memory allocated from the PRTOS heap is allocated from below the
+ *   threshold and flagged with PGC_prtos_heap. Memory allocated from
  *   the dom heap is allocated from anywhere in the heap (although it
  *   will prefer to allocate from as high as possible to try and keep
- *   Xen heap suitable memory available).
+ *   PRTOS heap suitable memory available).
  *
- *   Arch code must call xenheap_max_mfn() to signal the limit of the
+ *   Arch code must call prtosheap_max_mfn() to signal the limit of the
  *   direct mapping.
  *
  *   This mode of operation is most commonly used by 64-bit arches
@@ -100,12 +100,12 @@
  *
  * Boot Allocator
  *
- *   In addition to the two primary pools (xen heap and dom heap) a
+ *   In addition to the two primary pools (prtos heap and dom heap) a
  *   third "boot allocator" is used at start of day. This is a
  *   simplified allocator which can be used.
  *
  *   Typically all memory which is destined to be dom heap memory
- *   (which is everything in the CONFIG_SEPARATE_XENHEAP=n
+ *   (which is everything in the CONFIG_SEPARATE_PRTOSHEAP=n
  *   configurations) is first allocated to the boot allocator (with
  *   init_boot_pages()) and is then handed over to the main dom heap in
  *   end_boot_allocator().
@@ -121,22 +121,22 @@
  *   regions within it.
  */
 
-#include <xen_domain_page.h>
-#include <xen_event.h>
-#include <xen_init.h>
-#include <xen_irq.h>
-#include <xen_keyhandler.h>
-#include <xen_lib.h>
-#include <xen_mm.h>
-#include <xen_nodemask.h>
-#include <xen_numa.h>
-#include <xen_param.h>
-#include <xen_perfc.h>
-#include <xen_pfn.h>
-#include <xen_types.h>
-#include <xen_sched.h>
-#include <xen_softirq.h>
-#include <xen_spinlock.h>
+#include <prtos_domain_page.h>
+#include <prtos_event.h>
+#include <prtos_init.h>
+#include <prtos_irq.h>
+#include <prtos_keyhandler.h>
+#include <prtos_lib.h>
+#include <prtos_mm.h>
+#include <prtos_nodemask.h>
+#include <prtos_numa.h>
+#include <prtos_param.h>
+#include <prtos_perfc.h>
+#include <prtos_pfn.h>
+#include <prtos_types.h>
+#include <prtos_sched.h>
+#include <prtos_softirq.h>
+#include <prtos_spinlock.h>
 
 #include <asm_flushtlb.h>
 #include <asm_page.h>
@@ -455,11 +455,11 @@ mfn_t __init alloc_boot_pages(unsigned long nr_pfns, unsigned long pfn_align)
  * BINARY BUDDY ALLOCATOR
  */
 
-#define MEMZONE_XEN 0
+#define MEMZONE_PRTOS 0
 #define NR_ZONES    (PADDR_BITS - PAGE_SHIFT + 1)
 
 #define bits_to_zone(b) (((b) < (PAGE_SHIFT + 1)) ? 1U : ((b) - PAGE_SHIFT))
-#define page_to_zone(pg) (is_xen_heap_page(pg) ? MEMZONE_XEN :  \
+#define page_to_zone(pg) (is_prtos_heap_page(pg) ? MEMZONE_PRTOS :  \
                           (flsl(mfn_x(page_to_mfn(pg))) ? : 1))
 
 typedef struct page_list_head heap_by_zone_and_order_t[NR_ZONES][MAX_ORDER+1];
@@ -576,10 +576,10 @@ void get_outstanding_claims(uint64_t *free_pages, uint64_t *outstanding_pages)
 }
 
 static bool __read_mostly first_node_initialised;
-#ifndef CONFIG_SEPARATE_XENHEAP
-static unsigned int __read_mostly xenheap_bits;
+#ifndef CONFIG_SEPARATE_PRTOSHEAP
+static unsigned int __read_mostly prtosheap_bits;
 #else
-#define xenheap_bits 0
+#define prtosheap_bits 0
 #endif
 
 static unsigned long init_node_heap(int node, unsigned long mfn,
@@ -602,8 +602,8 @@ static unsigned long init_node_heap(int node, unsigned long mfn,
     }
     else if ( *use_tail && nr >= needed &&
               arch_mfns_in_directmap(mfn + nr - needed, needed) &&
-              (!xenheap_bits ||
-               !((mfn + nr - 1) >> (xenheap_bits - PAGE_SHIFT))) )
+              (!prtosheap_bits ||
+               !((mfn + nr - 1) >> (prtosheap_bits - PAGE_SHIFT))) )
     {
         _heap[node] = mfn_to_virt(mfn + nr - needed);
         avail[node] = mfn_to_virt(mfn + nr - 1) +
@@ -611,8 +611,8 @@ static unsigned long init_node_heap(int node, unsigned long mfn,
     }
     else if ( nr >= needed &&
               arch_mfns_in_directmap(mfn, needed) &&
-              (!xenheap_bits ||
-               !((mfn + needed - 1) >> (xenheap_bits - PAGE_SHIFT))) )
+              (!prtosheap_bits ||
+               !((mfn + needed - 1) >> (prtosheap_bits - PAGE_SHIFT))) )
     {
         _heap[node] = mfn_to_virt(mfn);
         avail[node] = mfn_to_virt(mfn + needed - 1) +
@@ -622,7 +622,7 @@ static unsigned long init_node_heap(int node, unsigned long mfn,
     else if ( get_order_from_bytes(sizeof(**_heap)) ==
               get_order_from_pages(needed) )
     {
-        _heap[node] = alloc_xenheap_pages(get_order_from_pages(needed), 0);
+        _heap[node] = alloc_prtosheap_pages(get_order_from_pages(needed), 0);
         BUG_ON(!_heap[node]);
         avail[node] = (void *)_heap[node] + (needed << PAGE_SHIFT) -
                       sizeof(**avail) * NR_ZONES;
@@ -1025,7 +1025,7 @@ static struct page_info *alloc_heap_pages(
         /* Reference count must continuously be zero for free pages. */
         if ( (pg[i].count_info & ~PGC_need_scrub) != PGC_state_free )
         {
-            printk(XENLOG_ERR
+            printk(PRTOSLOG_ERR
                    "pg[%u] MFN %"PRI_mfn" c=%#lx o=%u v=%#lx t=%#x\n",
                    i, mfn_x(page_to_mfn(pg + i)),
                    pg[i].count_info, pg[i].v.free.order,
@@ -1438,7 +1438,7 @@ static bool mark_page_free(struct page_info *pg, mfn_t mfn)
         break;
 
     default:
-        printk(XENLOG_ERR
+        printk(PRTOSLOG_ERR
                "pg MFN %"PRI_mfn" c=%#lx o=%u v=%#lx t=%#x\n",
                mfn_x(mfn),
                pg->count_info, pg->v.free.order,
@@ -1625,7 +1625,7 @@ int offline_page(mfn_t mfn, int broken, uint32_t *status)
 
     if ( !mfn_valid(mfn) )
     {
-        dprintk(XENLOG_WARNING,
+        dprintk(PRTOSLOG_WARNING,
                 "try to offline out of range page %"PRI_mfn"\n", mfn_x(mfn));
         return -EINVAL;
     }
@@ -1633,15 +1633,15 @@ int offline_page(mfn_t mfn, int broken, uint32_t *status)
     *status = 0;
     pg = mfn_to_page(mfn);
 
-    if ( is_xen_fixed_mfn(mfn) )
+    if ( is_prtos_fixed_mfn(mfn) )
     {
-        *status = PG_OFFLINE_XENPAGE | PG_OFFLINE_FAILED |
-          (DOMID_XEN << PG_OFFLINE_OWNER_SHIFT);
+        *status = PG_OFFLINE_PRTOSPAGE | PG_OFFLINE_FAILED |
+          (DOMID_PRTOS << PG_OFFLINE_OWNER_SHIFT);
         return -EPERM;
     }
 
     /*
-     * N.B. xen's txt in x86_64 is marked reserved and handled already.
+     * N.B. prtos's txt in x86_64 is marked reserved and handled already.
      * Also kexec range is reserved.
      */
     if ( !page_is_ram_type(mfn_x(mfn), RAM_TYPE_CONVENTIONAL) )
@@ -1696,10 +1696,10 @@ int offline_page(mfn_t mfn, int broken, uint32_t *status)
             put_page(pg);
         }
     }
-    else if ( old_info & PGC_xen_heap )
+    else if ( old_info & PGC_prtos_heap )
     {
-        *status = PG_OFFLINE_XENPAGE | PG_OFFLINE_PENDING |
-                  (DOMID_XEN << PG_OFFLINE_OWNER_SHIFT);
+        *status = PG_OFFLINE_PRTOSPAGE | PG_OFFLINE_PENDING |
+                  (DOMID_PRTOS << PG_OFFLINE_OWNER_SHIFT);
     }
     else
     {
@@ -1734,7 +1734,7 @@ unsigned int online_page(mfn_t mfn, uint32_t *status)
 
     if ( !mfn_valid(mfn) )
     {
-        dprintk(XENLOG_WARNING, "call expand_pages() first\n");
+        dprintk(PRTOSLOG_WARNING, "call expand_pages() first\n");
         return -EINVAL;
     }
 
@@ -1785,7 +1785,7 @@ int query_page_offline(mfn_t mfn, uint32_t *status)
 
     if ( !mfn_valid(mfn) || !page_is_ram_type(mfn_x(mfn), RAM_TYPE_CONVENTIONAL) )
     {
-        dprintk(XENLOG_WARNING, "call expand_pages() first\n");
+        dprintk(PRTOSLOG_WARNING, "call expand_pages() first\n");
         return -EINVAL;
     }
 
@@ -1887,7 +1887,7 @@ static void init_heap_pages(
 
     for ( i = 0; i < nr_pages; )
     {
-#ifdef CONFIG_SEPARATE_XENHEAP
+#ifdef CONFIG_SEPARATE_PRTOSHEAP
         unsigned int zone = page_to_zone(pg);
 #endif
         unsigned int nid = page_to_nid(pg);
@@ -1903,13 +1903,13 @@ static void init_heap_pages(
         for ( contig_pages = 1; contig_pages < left; contig_pages++ )
         {
             /*
-             * No need to check for the zone when !CONFIG_SEPARATE_XENHEAP
+             * No need to check for the zone when !CONFIG_SEPARATE_PRTOSHEAP
              * because free_heap_pages() can only take power-of-two ranges
-             * which never cross zone boundaries. But for separate xenheap
+             * which never cross zone boundaries. But for separate prtosheap
              * which is manually defined, it is possible for power-of-two
              * range to cross zones.
              */
-#ifdef CONFIG_SEPARATE_XENHEAP
+#ifdef CONFIG_SEPARATE_PRTOSHEAP
             if ( zone != page_to_zone(pg + contig_pages) )
                 break;
 #endif
@@ -2216,12 +2216,12 @@ void __init heap_init_late(void)
 
 
 /*************************
- * XEN-HEAP SUB-ALLOCATOR
+ * PRTOS-HEAP SUB-ALLOCATOR
  */
 
-#if defined(CONFIG_SEPARATE_XENHEAP)
+#if defined(CONFIG_SEPARATE_PRTOSHEAP)
 
-void init_xenheap_pages(paddr_t ps, paddr_t pe)
+void init_prtosheap_pages(paddr_t ps, paddr_t pe)
 {
     ps = round_pgup(ps);
     pe = round_pgdown(pe);
@@ -2229,25 +2229,25 @@ void init_xenheap_pages(paddr_t ps, paddr_t pe)
         return;
 
     /*
-     * Yuk! Ensure there is a one-page buffer between Xen and Dom zones, to
+     * Yuk! Ensure there is a one-page buffer between PRTOS and Dom zones, to
      * prevent merging of power-of-two blocks across the zone boundary.
      */
-    if ( ps && !is_xen_heap_mfn(mfn_add(maddr_to_mfn(ps), -1)) )
+    if ( ps && !is_prtos_heap_mfn(mfn_add(maddr_to_mfn(ps), -1)) )
         ps += PAGE_SIZE;
-    if ( !is_xen_heap_mfn(maddr_to_mfn(pe)) )
+    if ( !is_prtos_heap_mfn(maddr_to_mfn(pe)) )
         pe -= PAGE_SIZE;
 
     init_heap_pages(maddr_to_page(ps), (pe - ps) >> PAGE_SHIFT);
 }
 
 
-void *alloc_xenheap_pages(unsigned int order, unsigned int memflags)
+void *alloc_prtosheap_pages(unsigned int order, unsigned int memflags)
 {
     struct page_info *pg;
 
     ASSERT_ALLOC_CONTEXT();
 
-    pg = alloc_heap_pages(MEMZONE_XEN, MEMZONE_XEN,
+    pg = alloc_heap_pages(MEMZONE_PRTOS, MEMZONE_PRTOS,
                           order, memflags | MEMF_no_scrub, NULL);
     if ( unlikely(pg == NULL) )
         return NULL;
@@ -2256,7 +2256,7 @@ void *alloc_xenheap_pages(unsigned int order, unsigned int memflags)
 }
 
 
-void free_xenheap_pages(void *v, unsigned int order)
+void free_prtosheap_pages(void *v, unsigned int order)
 {
     ASSERT_ALLOC_CONTEXT();
 
@@ -2266,45 +2266,45 @@ void free_xenheap_pages(void *v, unsigned int order)
     free_heap_pages(virt_to_page(v), order, false);
 }
 
-#else  /* !CONFIG_SEPARATE_XENHEAP */
+#else  /* !CONFIG_SEPARATE_PRTOSHEAP */
 
-void __init xenheap_max_mfn(unsigned long mfn)
+void __init prtosheap_max_mfn(unsigned long mfn)
 {
     ASSERT(!first_node_initialised);
-    ASSERT(!xenheap_bits);
+    ASSERT(!prtosheap_bits);
     BUILD_BUG_ON((PADDR_BITS - PAGE_SHIFT) >= BITS_PER_LONG);
-    xenheap_bits = min(flsl(mfn + 1) - 1U + PAGE_SHIFT, PADDR_BITS + 0U);
-    printk(XENLOG_INFO "Xen heap: %u bits\n", xenheap_bits);
+    prtosheap_bits = min(flsl(mfn + 1) - 1U + PAGE_SHIFT, PADDR_BITS + 0U);
+    printk(PRTOSLOG_INFO "PRTOS heap: %u bits\n", prtosheap_bits);
 }
 
-void init_xenheap_pages(paddr_t ps, paddr_t pe)
+void init_prtosheap_pages(paddr_t ps, paddr_t pe)
 {
     init_domheap_pages(ps, pe);
 }
 
-void *alloc_xenheap_pages(unsigned int order, unsigned int memflags)
+void *alloc_prtosheap_pages(unsigned int order, unsigned int memflags)
 {
     struct page_info *pg;
     unsigned int i;
 
     ASSERT_ALLOC_CONTEXT();
 
-    if ( xenheap_bits && (memflags >> _MEMF_bits) > xenheap_bits )
+    if ( prtosheap_bits && (memflags >> _MEMF_bits) > prtosheap_bits )
         memflags &= ~MEMF_bits(~0U);
     if ( !(memflags >> _MEMF_bits) )
-        memflags |= MEMF_bits(xenheap_bits);
+        memflags |= MEMF_bits(prtosheap_bits);
 
     pg = alloc_domheap_pages(NULL, order, memflags | MEMF_no_scrub);
     if ( unlikely(pg == NULL) )
         return NULL;
 
     for ( i = 0; i < (1u << order); i++ )
-        pg[i].count_info |= PGC_xen_heap;
+        pg[i].count_info |= PGC_prtos_heap;
 
     return page_to_virt(pg);
 }
 
-void free_xenheap_pages(void *v, unsigned int order)
+void free_prtosheap_pages(void *v, unsigned int order)
 {
     struct page_info *pg;
     unsigned int i;
@@ -2317,12 +2317,12 @@ void free_xenheap_pages(void *v, unsigned int order)
     pg = virt_to_page(v);
 
     for ( i = 0; i < (1u << order); i++ )
-        pg[i].count_info &= ~PGC_xen_heap;
+        pg[i].count_info &= ~PGC_prtos_heap;
 
     free_heap_pages(pg, order, true);
 }
 
-#endif  /* CONFIG_SEPARATE_XENHEAP */
+#endif  /* CONFIG_SEPARATE_PRTOSHEAP */
 
 
 
@@ -2359,7 +2359,7 @@ int assign_pages(
 
     if ( unlikely(d->is_dying) )
     {
-        gdprintk(XENLOG_INFO, "Cannot assign page to domain%d -- dying.\n",
+        gdprintk(PRTOSLOG_INFO, "Cannot assign page to domain%d -- dying.\n",
                 d->domain_id);
         rc = -EINVAL;
         goto out;
@@ -2393,7 +2393,7 @@ int assign_pages(
 
         if ( unlikely(tot_pages > d->max_pages) )
         {
-            gprintk(XENLOG_INFO, "Inconsistent allocation for %pd: %u > %u\n",
+            gprintk(PRTOSLOG_INFO, "Inconsistent allocation for %pd: %u > %u\n",
                     d, tot_pages, d->max_pages);
             rc = -EPERM;
             goto out;
@@ -2401,7 +2401,7 @@ int assign_pages(
 
         if ( unlikely(nr > d->max_pages - tot_pages) )
         {
-            gprintk(XENLOG_INFO, "Over-allocation for %pd: %Lu > %u\n",
+            gprintk(PRTOSLOG_INFO, "Over-allocation for %pd: %Lu > %u\n",
                     d, tot_pages + 0ULL + nr, d->max_pages);
             rc = -E2BIG;
             goto out;
@@ -2412,7 +2412,7 @@ int assign_pages(
     {
         if ( unlikely(d->tot_pages + nr < nr) )
         {
-            gprintk(XENLOG_INFO,
+            gprintk(PRTOSLOG_INFO,
                     "Excess allocation for %pd: %Lu (%u extra)\n",
                     d, d->tot_pages + 0ULL + nr, d->extra_pages);
             if ( pg[0].count_info & PGC_extra )
@@ -2472,7 +2472,7 @@ struct page_info *alloc_domheap_pages(
 
     if ( (pg == NULL) &&
          ((memflags & MEMF_no_dma) ||
-          ((pg = alloc_heap_pages(MEMZONE_XEN + 1, zone_hi, order,
+          ((pg = alloc_heap_pages(MEMZONE_PRTOS + 1, zone_hi, order,
                                   memflags, d)) == NULL)) )
          return NULL;
 
@@ -2506,7 +2506,7 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
 
     ASSERT_ALLOC_CONTEXT();
 
-    if ( unlikely(is_xen_heap_page(pg)) )
+    if ( unlikely(is_prtos_heap_page(pg)) )
     {
         /* NB. May recursively lock from relinquish_memory(). */
         rspin_lock(&d->page_alloc_lock);
@@ -2514,8 +2514,8 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
         for ( i = 0; i < (1 << order); i++ )
             arch_free_heap_page(d, &pg[i]);
 
-        d->xenheap_pages -= 1 << order;
-        drop_dom_ref = (d->xenheap_pages == 0);
+        d->prtosheap_pages -= 1 << order;
+        drop_dom_ref = (d->prtosheap_pages == 0);
 
         rspin_unlock(&d->page_alloc_lock);
     }
@@ -2532,7 +2532,7 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
             {
                 if ( pg[i].u.inuse.type_info & PGT_count_mask )
                 {
-                    printk(XENLOG_ERR
+                    printk(PRTOSLOG_ERR
                            "pg[%u] MFN %"PRI_mfn" c=%#lx o=%u v=%#lx t=%#x\n",
                            i, mfn_x(page_to_mfn(pg + i)),
                            pg[i].count_info, pg[i].v.free.order,
@@ -2585,35 +2585,35 @@ unsigned long avail_domheap_pages_region(
 {
     int zone_lo, zone_hi;
 
-    zone_lo = min_width ? bits_to_zone(min_width) : (MEMZONE_XEN + 1);
-    zone_lo = max_t(int, MEMZONE_XEN + 1, min_t(int, NR_ZONES - 1, zone_lo));
+    zone_lo = min_width ? bits_to_zone(min_width) : (MEMZONE_PRTOS + 1);
+    zone_lo = max_t(int, MEMZONE_PRTOS + 1, min_t(int, NR_ZONES - 1, zone_lo));
 
     zone_hi = max_width ? bits_to_zone(max_width) : (NR_ZONES - 1);
-    zone_hi = max_t(int, MEMZONE_XEN + 1, min_t(int, NR_ZONES - 1, zone_hi));
+    zone_hi = max_t(int, MEMZONE_PRTOS + 1, min_t(int, NR_ZONES - 1, zone_hi));
 
     return avail_heap_pages(zone_lo, zone_hi, node);
 }
 
 unsigned long avail_domheap_pages(void)
 {
-    return avail_heap_pages(MEMZONE_XEN + 1,
+    return avail_heap_pages(MEMZONE_PRTOS + 1,
                             NR_ZONES - 1,
                             -1);
 }
 
 unsigned long avail_node_heap_pages(unsigned int nodeid)
 {
-    return avail_heap_pages(MEMZONE_XEN, NR_ZONES -1, nodeid);
+    return avail_heap_pages(MEMZONE_PRTOS, NR_ZONES -1, nodeid);
 }
 
 
 static void cf_check pagealloc_info(unsigned char key)
 {
-    unsigned int zone = MEMZONE_XEN;
+    unsigned int zone = MEMZONE_PRTOS;
     unsigned long n, total = 0;
 
     printk("Physical memory information:\n");
-    printk("    Xen heap: %lukB free\n",
+    printk("    PRTOS heap: %lukB free\n",
            avail_heap_pages(zone, zone, -1) << (PAGE_SHIFT-10));
 
     while ( ++zone < NR_ZONES )
@@ -2695,7 +2695,7 @@ struct domain *get_pg_owner(domid_t domid)
 
     if ( unlikely(domid == curr->domain_id) )
     {
-        gdprintk(XENLOG_WARNING, "Cannot specify itself as foreign domain\n");
+        gdprintk(PRTOSLOG_WARNING, "Cannot specify itself as foreign domain\n");
         goto out;
     }
 
@@ -2705,13 +2705,13 @@ struct domain *get_pg_owner(domid_t domid)
         pg_owner = rcu_lock_domain(dom_io);
         break;
 
-    case DOMID_XEN:
-        pg_owner = rcu_lock_domain(dom_xen);
+    case DOMID_PRTOS:
+        pg_owner = rcu_lock_domain(dom_prtos);
         break;
 
     default:
         if ( (pg_owner = rcu_lock_domain_by_any_id(domid)) == NULL )
-            gdprintk(XENLOG_WARNING, "Unknown domain d%d\n", domid);
+            gdprintk(PRTOSLOG_WARNING, "Unknown domain d%d\n", domid);
         break;
     }
 
@@ -2755,7 +2755,7 @@ void free_domstatic_page(struct page_info *page)
 
     if ( unlikely(!d) )
     {
-        printk(XENLOG_G_ERR
+        printk(PRTOSLOG_G_ERR
                "The about-to-free static page %"PRI_mfn" must be owned by a domain\n",
                mfn_x(page_to_mfn(page)));
         ASSERT_UNREACHABLE();
@@ -2796,7 +2796,7 @@ static bool prepare_staticmem_pages(struct page_info *pg, unsigned long nr_mfns,
         /* The page should be static and not yet allocated. */
         if ( pg[i].count_info != (PGC_state_free | PGC_static) )
         {
-            printk(XENLOG_ERR
+            printk(PRTOSLOG_ERR
                    "pg[%lu] Static MFN %"PRI_mfn" c=%#lx t=%#x\n",
                    i, mfn_x(page_to_mfn(pg)) + i,
                    pg[i].count_info, pg[i].tlbflush_timestamp);

@@ -18,8 +18,8 @@
 #define AARCH64_IPA_TO_PA_OFFSET 0x40000000ULL
 
 /*
- * Xen directmap runtime variables (defined in xen/arch/arm/arm64/mmu/mm.c
- * and xen/arch/arm/mmu/setup.c).  On AArch64 without PDX compression:
+ * PRTOS directmap runtime variables (defined in prtos/arch/arm/arm64/mmu/mm.c
+ * and prtos/arch/arm/mmu/setup.c).  On AArch64 without PDX compression:
  *   EL2 VA = directmap_virt_start - (directmap_base_pdx << PAGE_SHIFT) + PA
  */
 extern prtos_u64_t directmap_virt_start;
@@ -28,7 +28,7 @@ extern prtos_u64_t directmap_base_pdx;
 /*
  * prtos_ipa_to_va - translate a partition IPA to an EL2 hypervisor VA.
  *
- * Uses Xen's directmap which covers all QEMU physical RAM.
+ * Uses PRTOS's directmap which covers all QEMU physical RAM.
  * Called by the generic gp_to_va() macro in gaccess.h so that hypercall
  * handlers can dereference guest-supplied buffer pointers from EL2.
  */

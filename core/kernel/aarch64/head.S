@@ -24,9 +24,9 @@
 #define PT_DEV_L3 0xe73 /* nG=1 AF=1 SH=10 AP=01 NS=1 ATTR=100 T=1 P=1 */
 
 /* Convenience defines to get slot used by PRTOS mapping. */
-#define XEN_ZEROETH_SLOT    zeroeth_table_offset(XEN_VIRT_START)
-#define XEN_FIRST_SLOT      first_table_offset(XEN_VIRT_START)
-#define XEN_SECOND_SLOT     second_table_offset(XEN_VIRT_START)
+#define PRTOS_ZEROETH_SLOT    zeroeth_table_offset(PRTOS_VIRT_START)
+#define PRTOS_FIRST_SLOT      first_table_offset(PRTOS_VIRT_START)
+#define PRTOS_SECOND_SLOT     second_table_offset(PRTOS_VIRT_START)
 
 
 .section .vboot.text, "ax"
@@ -44,7 +44,7 @@
  *
  * See asm/arm64/flushtlb.h for the explanation of the sequence.
  */
-.macro flush_xen_tlb_local
+.macro flush_prtos_tlb_local
         dsb   nshst
         tlbi  alle2
         dsb   nsh
@@ -59,7 +59,7 @@
  * lvl:      page-table level
  */
 .macro get_table_slot, slot, virt, lvl
-        ubfx  \slot, \virt, #XEN_PT_LEVEL_SHIFT(\lvl), #XEN_PT_LPAE_SHIFT
+        ubfx  \slot, \virt, #PRTOS_PT_LEVEL_SHIFT(\lvl), #PRTOS_PT_LPAE_SHIFT
 .endm
 
 /*
@@ -154,7 +154,7 @@
  */
 FUNC_LOCAL(create_page_tables)
         /* Prepare the page-tables for mapping PRTOS */
-        ldr   x0, =XEN_VIRT_START
+        ldr   x0, =PRTOS_VIRT_START
         create_table_entry boot_pgtable, boot_first, x0, 0, x1, x2, x3
         create_table_entry boot_first, boot_second, x0, 1, x1, x2, x3
 
@@ -164,11 +164,11 @@ FUNC_LOCAL(create_page_tables)
          * the physical address of the table to point to.
          */
         load_paddr x4, boot_third
-        ldr   x1, =XEN_VIRT_START
-.rept XEN_NR_ENTRIES(2)
+        ldr   x1, =PRTOS_VIRT_START
+.rept PRTOS_NR_ENTRIES(2)
         mov   x0, x4                            /* x0 := paddr(l3 table) */
         create_table_entry_from_paddr boot_second, x0, x1, 2, x2, x3
-        add   x1, x1, #XEN_PT_LEVEL_SIZE(2)     /* x1 := Next vaddr */
+        add   x1, x1, #PRTOS_PT_LEVEL_SIZE(2)     /* x1 := Next vaddr */
         add   x4, x4, #PAGE_SIZE                /* x4 := Next table */
 .endr
 
@@ -179,7 +179,7 @@ FUNC_LOCAL(create_page_tables)
          * Note the multiplication is just to avoid using an extra
          * register/instruction per iteration.
          */
-        ldr   x0, =XEN_VIRT_SIZE      /* x0 := effective size of PRTOS */
+        ldr   x0, =PRTOS_VIRT_SIZE      /* x0 := effective size of PRTOS */
         lsr   x0, x0, #PAGE_SHIFT    /* x0 := Number of pages for PRTOS */
         lsl   x0, x0, #3             /* x0 := Number of pages * PTE size */
 
@@ -200,11 +200,11 @@ FUNC_LOCAL(create_page_tables)
         b.lt  1b
 
         /*
-         * If PRTOS is loaded at exactly XEN_VIRT_START then we don't
+         * If PRTOS is loaded at exactly PRTOS_VIRT_START then we don't
          * need an additional 1:1 mapping, the virtual mapping will
          * suffice.
          */
-        ldr   x0, =XEN_VIRT_START
+        ldr   x0, =PRTOS_VIRT_START
         cmp   x19, x0
         bne   1f
         ret
@@ -216,36 +216,36 @@ FUNC_LOCAL(create_page_tables)
 
         /*
          * Find the zeroeth slot used. If the slot is not
-         * XEN_ZEROETH_SLOT, then the 1:1 mapping will use its own set of
+         * PRTOS_ZEROETH_SLOT, then the 1:1 mapping will use its own set of
          * page-tables from the first level.
          */
         get_table_slot x0, x19, 0       /* x0 := zeroeth slot */
-        cmp   x0, #XEN_ZEROETH_SLOT
+        cmp   x0, #PRTOS_ZEROETH_SLOT
         beq   1f
         create_table_entry boot_pgtable, boot_first_id, x19, 0, x0, x1, x2
         b     link_from_first_id
 
 1:
         /*
-         * Find the first slot used. If the slot is not XEN_FIRST_SLOT,
+         * Find the first slot used. If the slot is not PRTOS_FIRST_SLOT,
          * then the 1:1 mapping will use its own set of page-tables from
          * the second level.
          */
         get_table_slot x0, x19, 1      /* x0 := first slot */
-        cmp   x0, #XEN_FIRST_SLOT
+        cmp   x0, #PRTOS_FIRST_SLOT
         beq   1f
         create_table_entry boot_first, boot_second_id, x19, 1, x0, x1, x2
         b     link_from_second_id
 
 1:
         /*
-         * Find the second slot used. If the slot is XEN_SECOND_SLOT, then the
+         * Find the second slot used. If the slot is PRTOS_SECOND_SLOT, then the
          * 1:1 mapping will use its own set of page-tables from the
-         * third level. For slot XEN_SECOND_SLOT, PRTOS is not yet able to handle
+         * third level. For slot PRTOS_SECOND_SLOT, PRTOS is not yet able to handle
          * it.
          */
         get_table_slot x0, x19, 2     /* x0 := second slot */
-        cmp   x0, #XEN_SECOND_SLOT
+        cmp   x0, #PRTOS_SECOND_SLOT
         beq   virtphys_clash
         create_table_entry boot_second, boot_third_id, x19, 2, x0, x1, x2
         b     link_from_third_id
@@ -261,11 +261,11 @@ link_from_third_id:
         /* Add UART to the fixmap table */
         ldr   x0, =EARLY_UART_VIRTUAL_ADDRESS
         /* x23: Early UART base physical address */
-        create_mapping_entry xen_fixmap, x0, x23, x1, x2, x3, type=PT_DEV_L3
+        create_mapping_entry prtos_fixmap, x0, x23, x1, x2, x3, type=PT_DEV_L3
 #endif
         /* Map fixmap into boot_second */
         ldr   x0, =FIXMAP_ADDR(0)
-        create_table_entry boot_second, xen_fixmap, x0, 2, x1, x2, x3
+        create_table_entry boot_second, prtos_fixmap, x0, 2, x1, x2, x3
         ret
 
 virtphys_clash:
@@ -294,7 +294,7 @@ FUNC_LOCAL(enable_mmu)
          * The state of the TLBs is unknown before turning on the MMU.
          * Flush them to avoid stale one.
          */
-        flush_xen_tlb_local
+        flush_prtos_tlb_local
 
         /* Write PRTOS's PT's paddr into TTBR0_EL2 */
         msr   TTBR0_EL2, x4
@@ -335,7 +335,7 @@ FUNC(enable_secondary_cpu_mm)
         load_paddr x0, init_ttbr // FIXME: Just  comment for build pass
         ldr   x0, [x0]
 
-        mov   x1, #0        /* No WXN - matches boot CPU (xen_pt_enforce_wnx disabled for PRTOS) */
+        mov   x1, #0        /* No WXN - matches boot CPU (prtos_pt_enforce_wnx disabled for PRTOS) */
         bl    enable_mmu
         mov   lr, x6
 
@@ -393,12 +393,12 @@ END(enable_boot_cpu_mm)
 FUNC_LOCAL(remove_identity_mapping)
         /*
          * Find the zeroeth slot used. Remove the entry from zeroeth
-         * table if the slot is not XEN_ZEROETH_SLOT.
+         * table if the slot is not PRTOS_ZEROETH_SLOT.
          */
         get_table_slot x1, x19, 0       /* x1 := zeroeth slot */
-        cmp   x1, #XEN_ZEROETH_SLOT
+        cmp   x1, #PRTOS_ZEROETH_SLOT
         beq   1f
-        /* It is not in slot XEN_ZEROETH_SLOT, remove the entry. */
+        /* It is not in slot PRTOS_ZEROETH_SLOT, remove the entry. */
         ldr   x0, =boot_pgtable         /* x0 := root table */
         str   xzr, [x0, x1, lsl #3]
         b     identity_mapping_removed
@@ -406,12 +406,12 @@ FUNC_LOCAL(remove_identity_mapping)
 1:
         /*
          * Find the first slot used. Remove the entry for the first
-         * table if the slot is not XEN_FIRST_SLOT.
+         * table if the slot is not PRTOS_FIRST_SLOT.
          */
         get_table_slot x1, x19, 1       /* x1 := first slot */
-        cmp   x1, #XEN_FIRST_SLOT
+        cmp   x1, #PRTOS_FIRST_SLOT
         beq   1f
-        /* It is not in slot XEN_FIRST_SLOT, remove the entry. */
+        /* It is not in slot PRTOS_FIRST_SLOT, remove the entry. */
         ldr   x0, =boot_first           /* x0 := first table */
         str   xzr, [x0, x1, lsl #3]
         b     identity_mapping_removed
@@ -419,17 +419,17 @@ FUNC_LOCAL(remove_identity_mapping)
 1:
         /*
          * Find the second slot used. Remove the entry for the first
-         * table if the slot is not XEN_SECOND_SLOT.
+         * table if the slot is not PRTOS_SECOND_SLOT.
          */
         get_table_slot x1, x19, 2       /* x1 := second slot */
-        cmp   x1, #XEN_SECOND_SLOT
+        cmp   x1, #PRTOS_SECOND_SLOT
         beq   identity_mapping_removed
         /* It is not in slot 1, remove the entry */
         ldr   x0, =boot_second          /* x0 := second table */
         str   xzr, [x0, x1, lsl #3]
 
 identity_mapping_removed:
-        flush_xen_tlb_local
+        flush_prtos_tlb_local
 
         ret
 END(remove_identity_mapping)
@@ -458,7 +458,7 @@ FUNC(switch_ttbr_id)
         isb
 
         /* 3) Flush the TLBs */
-        flush_xen_tlb_local
+        flush_prtos_tlb_local
 
         /* 4) Update the TTBR */
         msr   TTBR0_EL2, x0

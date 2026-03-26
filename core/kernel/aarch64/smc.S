@@ -1,6 +1,6 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /*
- * xen/arch/arm/arm64/smc.S
+ * prtos aarch64 smc.S
  *
  * Wrapper for Secure Monitors Calls
  *

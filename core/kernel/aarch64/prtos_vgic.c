@@ -77,7 +77,7 @@
 #define GICR_IGRPMODR0      (GICR_SGI_OFFSET + 0x0D00)
 
 /*
- * Direct guest register access — avoids Xen's get_user_reg / set_user_reg
+ * Direct guest register access — avoids PRTOS's get_user_reg / set_user_reg
  * which contain BUG_ON(!guest_mode(regs)) checks that fail for PRTOS idle-
  * domain partitions.  The cpu_user_regs layout has x0..x30 contiguous.
  */

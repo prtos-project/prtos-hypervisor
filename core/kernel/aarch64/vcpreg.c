@@ -1,14 +1,14 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * xen/arch/arm/arm64/vcpreg.c
+ * prtos/arch/arm/arm64/vcpreg.c
  *
  * Emulate co-processor registers trapped.
  *
  * Copyright (c) 2011 Citrix Systems.
  */
 
-#include <xen_sched.h>
+#include <prtos_sched.h>
 
 #include <asm_cpufeature.h>
 #include <asm_cpregs.h>
@@ -392,11 +392,11 @@ void do_cp15_32(struct cpu_user_regs *regs, const union hsr hsr)
      * And all other unknown registers.
      */
     default:
-        gdprintk(XENLOG_ERR,
+        gdprintk(PRTOSLOG_ERR,
                  "%s p15, %d, r%d, cr%d, cr%d, %d @ 0x%"PRIregister"\n",
                  cp32.read ? "mrc" : "mcr",
                  cp32.op1, cp32.reg, cp32.crn, cp32.crm, cp32.op2, regs->pc);
-        gdprintk(XENLOG_ERR, "unhandled 32-bit CP15 access %#"PRIregister"\n",
+        gdprintk(PRTOSLOG_ERR, "unhandled 32-bit CP15 access %#"PRIregister"\n",
                  hsr.bits & HSR_CP32_REGS_MASK);
         inject_undef_exception(regs, hsr);
         return;
@@ -461,11 +461,11 @@ void do_cp15_64(struct cpu_user_regs *regs, const union hsr hsr)
         {
             const struct hsr_cp64 cp64 = hsr.cp64;
 
-            gdprintk(XENLOG_ERR,
+            gdprintk(PRTOSLOG_ERR,
                      "%s p15, %d, r%d, r%d, cr%d @ 0x%"PRIregister"\n",
                      cp64.read ? "mrrc" : "mcrr",
                      cp64.op1, cp64.reg1, cp64.reg2, cp64.crm, regs->pc);
-            gdprintk(XENLOG_ERR,
+            gdprintk(PRTOSLOG_ERR,
                      "unhandled 64-bit CP15 access %#"PRIregister"\n",
                      hsr.bits & HSR_CP64_REGS_MASK);
             inject_undef_exception(regs, hsr);
@@ -550,7 +550,7 @@ void do_cp14_32(struct cpu_user_regs *regs, const union hsr hsr)
     }
 
     /*
-     * Xen doesn't expose a real (or emulated) Debug Communications Channel
+     * PRTOS doesn't expose a real (or emulated) Debug Communications Channel
      * (DCC) to a domain. Yet the Arm ARM implies this is not an optional
      * feature. So some domains may start to probe it. For instance, the
      * HVC_DCC driver in Linux (since f377775dc083 and at least up to v6.7),
@@ -626,11 +626,11 @@ void do_cp14_32(struct cpu_user_regs *regs, const union hsr hsr)
     return;
 
  fail:
-    gdprintk(XENLOG_ERR,
+    gdprintk(PRTOSLOG_ERR,
              "%s p14, %d, r%d, cr%d, cr%d, %d @ 0x%"PRIregister"\n",
              cp32.read ? "mrc" : "mcr",
              cp32.op1, cp32.reg, cp32.crn, cp32.crm, cp32.op2, regs->pc);
-    gdprintk(XENLOG_ERR, "unhandled 32-bit cp14 access %#"PRIregister"\n",
+    gdprintk(PRTOSLOG_ERR, "unhandled 32-bit cp14 access %#"PRIregister"\n",
              hsr.bits & HSR_CP32_REGS_MASK);
     inject_undef_exception(regs, hsr);
 }
@@ -664,11 +664,11 @@ void do_cp14_64(struct cpu_user_regs *regs, const union hsr hsr)
      *
      * And all other unknown registers.
      */
-    gdprintk(XENLOG_ERR,
+    gdprintk(PRTOSLOG_ERR,
              "%s p14, %d, r%d, r%d, cr%d @ 0x%"PRIregister"\n",
              cp64.read ? "mrrc" : "mcrr",
              cp64.op1, cp64.reg1, cp64.reg2, cp64.crm, regs->pc);
-    gdprintk(XENLOG_ERR, "unhandled 64-bit CP14 access %#"PRIregister"\n",
+    gdprintk(PRTOSLOG_ERR, "unhandled 64-bit CP14 access %#"PRIregister"\n",
              hsr.bits & HSR_CP64_REGS_MASK);
     inject_undef_exception(regs, hsr);
 }
@@ -692,11 +692,11 @@ void do_cp14_dbg(struct cpu_user_regs *regs, const union hsr hsr)
      * Unhandled:
      * All unknown registers.
      */
-    gdprintk(XENLOG_ERR,
+    gdprintk(PRTOSLOG_ERR,
              "%s p14, %d, r%d, r%d, cr%d @ 0x%"PRIregister"\n",
              cp64.read ? "mrrc" : "mcrr",
              cp64.op1, cp64.reg1, cp64.reg2, cp64.crm, regs->pc);
-    gdprintk(XENLOG_ERR, "unhandled 64-bit CP14 DBG access %#"PRIregister"\n",
+    gdprintk(PRTOSLOG_ERR, "unhandled 64-bit CP14 DBG access %#"PRIregister"\n",
              hsr.bits & HSR_CP64_REGS_MASK);
 
     inject_undef_exception(regs, hsr);
@@ -726,11 +726,11 @@ void do_cp10(struct cpu_user_regs *regs, const union hsr hsr)
     GENERATE_TID3_INFO(MVFR2, mvfr, 2)
 
     default:
-        gdprintk(XENLOG_ERR,
+        gdprintk(PRTOSLOG_ERR,
                  "%s p10, %d, r%d, cr%d, cr%d, %d @ 0x%"PRIregister"\n",
                  cp32.read ? "mrc" : "mcr",
                  cp32.op1, cp32.reg, cp32.crn, cp32.crm, cp32.op2, regs->pc);
-        gdprintk(XENLOG_ERR, "unhandled 32-bit CP10 access %#"PRIregister"\n",
+        gdprintk(PRTOSLOG_ERR, "unhandled 32-bit CP10 access %#"PRIregister"\n",
                  hsr.bits & HSR_CP32_REGS_MASK);
         inject_undef_exception(regs, hsr);
         return;
@@ -756,7 +756,7 @@ void do_cp(struct cpu_user_regs *regs, const union hsr hsr)
     }
 
     ASSERT(!cp.tas); /* We don't trap SIMD instruction */
-    gdprintk(XENLOG_ERR, "unhandled CP%d access\n", cp.coproc);
+    gdprintk(PRTOSLOG_ERR, "unhandled CP%d access\n", cp.coproc);
     inject_undef_exception(regs, hsr);
 }
 

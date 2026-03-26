@@ -1,4 +1,4 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * arch/arm/vpl011.c
@@ -6,20 +6,20 @@
  * Virtual PL011 UART
  */
 
-#define XEN_WANT_FLEX_CONSOLE_RING 1
+#define PRTOS_WANT_FLEX_CONSOLE_RING 1
 
 /* We assume the PL011 default of "1/2 way" for the FIFO trigger level. */
 #define SBSA_UART_FIFO_LEVEL (SBSA_UART_FIFO_SIZE / 2)
 
-#include <xen_errno.h>
-#include <xen_event.h>
-#include <xen_guest_access.h>
-#include <xen_init.h>
-#include <xen_lib.h>
-#include <xen_mm.h>
-#include <xen_sched.h>
-#include <xen_console.h>
-#include <xen_serial.h>
+#include <prtos_errno.h>
+#include <prtos_event.h>
+#include <prtos_guest_access.h>
+#include <prtos_init.h>
+#include <prtos_lib.h>
+#include <prtos_mm.h>
+#include <prtos_sched.h>
+#include <prtos_console.h>
+#include <prtos_serial.h>
 #include <public_domctl.h>
 #include <public_io_console.h>
 #include <asm_pl011-uart.h>
@@ -71,14 +71,14 @@ static void vpl011_update_interrupt_status(struct domain *d)
 }
 
 /*
- * vpl011_write_data_xen writes chars from the vpl011 out buffer to the
- * console. Only to be used when the backend is Xen.
+ * vpl011_write_data_prtos writes chars from the vpl011 out buffer to the
+ * console. Only to be used when the backend is PRTOS.
  */
-static void vpl011_write_data_xen(struct domain *d, uint8_t data)
+static void vpl011_write_data_prtos(struct domain *d, uint8_t data)
 {
     unsigned long flags;
     struct vpl011 *vpl011 = &d->arch.vpl011;
-    struct vpl011_xen_backend *intf = vpl011->backend.xen;
+    struct vpl011_prtos_backend *intf = vpl011->backend.prtos;
     struct domain *input = console_input_domain();
 
     VPL011_LOCK(d, flags);
@@ -114,7 +114,7 @@ static void vpl011_write_data_xen(struct domain *d, uint8_t data)
     }
 
     /*
-     * When backend is in Xen, we tell guest we are always ready for new data
+     * When backend is in PRTOS, we tell guest we are always ready for new data
      * to be written. This is fulfilled by having:
      * - TXI/TXFE -> always set,
      * - TXFF/BUSY -> never set.
@@ -129,16 +129,16 @@ static void vpl011_write_data_xen(struct domain *d, uint8_t data)
 }
 
 /*
- * vpl011_read_data_xen reads data when the backend is xen. Characters
- * are added to the vpl011 receive buffer by vpl011_rx_char_xen.
+ * vpl011_read_data_prtos reads data when the backend is prtos. Characters
+ * are added to the vpl011 receive buffer by vpl011_rx_char_prtos.
  */
-static uint8_t vpl011_read_data_xen(struct domain *d)
+static uint8_t vpl011_read_data_prtos(struct domain *d)
 {
     unsigned long flags;
     uint8_t data = 0;
     struct vpl011 *vpl011 = &d->arch.vpl011;
-    struct vpl011_xen_backend *intf = vpl011->backend.xen;
-    XENCONS_RING_IDX in_cons, in_prod;
+    struct vpl011_prtos_backend *intf = vpl011->backend.prtos;
+    PRTOSCONS_RING_IDX in_cons, in_prod;
 
     VPL011_LOCK(d, flags);
 
@@ -153,16 +153,16 @@ static uint8_t vpl011_read_data_xen(struct domain *d)
      * only if the RXFE flag is not set.
      * If the guest still does read when RXFE bit is set then 0 will be returned.
      */
-    if ( xencons_queued(in_prod, in_cons, sizeof(intf->in)) > 0 )
+    if ( prtoscons_queued(in_prod, in_cons, sizeof(intf->in)) > 0 )
     {
         unsigned int fifo_level;
 
-        data = intf->in[xencons_mask(in_cons, sizeof(intf->in))];
+        data = intf->in[prtoscons_mask(in_cons, sizeof(intf->in))];
         in_cons += 1;
         smp_mb();
         intf->in_cons = in_cons;
 
-        fifo_level = xencons_queued(in_prod, in_cons, sizeof(intf->in));
+        fifo_level = prtoscons_queued(in_prod, in_cons, sizeof(intf->in));
 
         /* If the FIFO is now empty, we clear the receive timeout interrupt. */
         if ( fifo_level == 0 )
@@ -178,7 +178,7 @@ static uint8_t vpl011_read_data_xen(struct domain *d)
         vpl011_update_interrupt_status(d);
     }
     else
-        gprintk(XENLOG_ERR, "vpl011: Unexpected IN ring buffer empty\n");
+        gprintk(PRTOSLOG_ERR, "vpl011: Unexpected IN ring buffer empty\n");
 
     /*
      * We have consumed a character or the FIFO was empty, so clear the
@@ -196,8 +196,8 @@ static uint8_t vpl011_read_data(struct domain *d)
     unsigned long flags;
     uint8_t data = 0;
     struct vpl011 *vpl011 = &d->arch.vpl011;
-    struct xencons_interface *intf = vpl011->backend.dom.ring_buf;
-    XENCONS_RING_IDX in_cons, in_prod;
+    struct prtoscons_interface *intf = vpl011->backend.dom.ring_buf;
+    PRTOSCONS_RING_IDX in_cons, in_prod;
 
     VPL011_LOCK(d, flags);
 
@@ -212,16 +212,16 @@ static uint8_t vpl011_read_data(struct domain *d)
      * only if the RXFE flag is not set.
      * If the guest still does read when RXFE bit is set then 0 will be returned.
      */
-    if ( xencons_queued(in_prod, in_cons, sizeof(intf->in)) > 0 )
+    if ( prtoscons_queued(in_prod, in_cons, sizeof(intf->in)) > 0 )
     {
         unsigned int fifo_level;
 
-        data = intf->in[xencons_mask(in_cons, sizeof(intf->in))];
+        data = intf->in[prtoscons_mask(in_cons, sizeof(intf->in))];
         in_cons += 1;
         smp_mb();
         intf->in_cons = in_cons;
 
-        fifo_level = xencons_queued(in_prod, in_cons, sizeof(intf->in));
+        fifo_level = prtoscons_queued(in_prod, in_cons, sizeof(intf->in));
 
         /* If the FIFO is now empty, we clear the receive timeout interrupt. */
         if ( fifo_level == 0 )
@@ -237,7 +237,7 @@ static uint8_t vpl011_read_data(struct domain *d)
         vpl011_update_interrupt_status(d);
     }
     else
-        gprintk(XENLOG_ERR, "vpl011: Unexpected IN ring buffer empty\n");
+        gprintk(PRTOSLOG_ERR, "vpl011: Unexpected IN ring buffer empty\n");
 
     /*
      * We have consumed a character or the FIFO was empty, so clear the
@@ -251,7 +251,7 @@ static uint8_t vpl011_read_data(struct domain *d)
      * Send an event to console backend to indicate that data has been
      * read from the IN ring buffer.
      */
-    notify_via_xen_event_channel(d, vpl011->evtchn);
+    notify_via_prtos_event_channel(d, vpl011->evtchn);
 
     return data;
 }
@@ -259,10 +259,10 @@ static uint8_t vpl011_read_data(struct domain *d)
 static void vpl011_update_tx_fifo_status(struct vpl011 *vpl011,
                                          unsigned int fifo_level)
 {
-    struct xencons_interface *intf = vpl011->backend.dom.ring_buf;
+    struct prtoscons_interface *intf = vpl011->backend.dom.ring_buf;
     unsigned int fifo_threshold = sizeof(intf->out) - SBSA_UART_FIFO_LEVEL;
 
-    /* No TX FIFO handling when backend is in Xen */
+    /* No TX FIFO handling when backend is in PRTOS */
     ASSERT(vpl011->backend_in_domain);
 
     BUILD_BUG_ON(sizeof(intf->out) < SBSA_UART_FIFO_SIZE);
@@ -281,8 +281,8 @@ static void vpl011_write_data(struct domain *d, uint8_t data)
 {
     unsigned long flags;
     struct vpl011 *vpl011 = &d->arch.vpl011;
-    struct xencons_interface *intf = vpl011->backend.dom.ring_buf;
-    XENCONS_RING_IDX out_cons, out_prod;
+    struct prtoscons_interface *intf = vpl011->backend.dom.ring_buf;
+    PRTOSCONS_RING_IDX out_cons, out_prod;
 
     VPL011_LOCK(d, flags);
 
@@ -298,17 +298,17 @@ static void vpl011_write_data(struct domain *d, uint8_t data)
      * In case the guest does write even when the TXFF flag is set then the
      * data will be silently dropped.
      */
-    if ( xencons_queued(out_prod, out_cons, sizeof(intf->out)) !=
+    if ( prtoscons_queued(out_prod, out_cons, sizeof(intf->out)) !=
          sizeof (intf->out) )
     {
         unsigned int fifo_level;
 
-        intf->out[xencons_mask(out_prod, sizeof(intf->out))] = data;
+        intf->out[prtoscons_mask(out_prod, sizeof(intf->out))] = data;
         out_prod += 1;
         smp_wmb();
         intf->out_prod = out_prod;
 
-        fifo_level = xencons_queued(out_prod, out_cons, sizeof(intf->out));
+        fifo_level = prtoscons_queued(out_prod, out_cons, sizeof(intf->out));
 
         if ( fifo_level == sizeof(intf->out) )
         {
@@ -328,7 +328,7 @@ static void vpl011_write_data(struct domain *d, uint8_t data)
         vpl011_update_interrupt_status(d);
     }
     else
-        gprintk(XENLOG_ERR, "vpl011: Unexpected OUT ring buffer full\n");
+        gprintk(PRTOSLOG_ERR, "vpl011: Unexpected OUT ring buffer full\n");
 
     vpl011->uartfr &= ~TXFE;
 
@@ -338,7 +338,7 @@ static void vpl011_write_data(struct domain *d, uint8_t data)
      * Send an event to console backend to indicate that there is
      * data in the OUT ring buffer.
      */
-    notify_via_xen_event_channel(d, vpl011->evtchn);
+    notify_via_prtos_event_channel(d, vpl011->evtchn);
 }
 
 static int vpl011_mmio_read(struct vcpu *v,
@@ -361,7 +361,7 @@ static int vpl011_mmio_read(struct vcpu *v,
         if ( vpl011->backend_in_domain )
             *r = vreg_reg32_extract(vpl011_read_data(d), info);
         else
-            *r = vreg_reg32_extract(vpl011_read_data_xen(d), info);
+            *r = vreg_reg32_extract(vpl011_read_data_prtos(d), info);
         return 1;
 
     case RSR:
@@ -411,7 +411,7 @@ static int vpl011_mmio_read(struct vcpu *v,
         return 0;
 
     default:
-        gprintk(XENLOG_ERR, "vpl011: unhandled read r%d offset %#08x\n",
+        gprintk(PRTOSLOG_ERR, "vpl011: unhandled read r%d offset %#08x\n",
                 dabt.reg, vpl011_reg);
         goto read_as_zero;
     }
@@ -424,7 +424,7 @@ read_as_zero:
     return 1;
 
 bad_width:
-    gprintk(XENLOG_ERR, "vpl011: bad read width %d r%d offset %#08x\n",
+    gprintk(PRTOSLOG_ERR, "vpl011: bad read width %d r%d offset %#08x\n",
             dabt.size, dabt.reg, vpl011_reg);
     return 0;
 
@@ -455,7 +455,7 @@ static int vpl011_mmio_write(struct vcpu *v,
         if ( vpl011->backend_in_domain )
             vpl011_write_data(v->domain, data);
         else
-            vpl011_write_data_xen(v->domain, data);
+            vpl011_write_data_prtos(v->domain, data);
         return 1;
     }
 
@@ -488,7 +488,7 @@ static int vpl011_mmio_write(struct vcpu *v,
         return 1;
 
     default:
-        gprintk(XENLOG_ERR, "vpl011: unhandled write r%d offset %#08x\n",
+        gprintk(PRTOSLOG_ERR, "vpl011: unhandled write r%d offset %#08x\n",
                 dabt.reg, vpl011_reg);
         goto write_ignore;
     }
@@ -497,7 +497,7 @@ write_ignore:
     return 1;
 
 bad_width:
-    gprintk(XENLOG_ERR, "vpl011: bad write width %d r%d offset %#08x\n",
+    gprintk(PRTOSLOG_ERR, "vpl011: bad write width %d r%d offset %#08x\n",
             dabt.size, dabt.reg, vpl011_reg);
     return 0;
 
@@ -509,10 +509,10 @@ static const struct mmio_handler_ops vpl011_mmio_handler = {
 };
 
 static void vpl011_data_avail(struct domain *d,
-                              XENCONS_RING_IDX in_fifo_level,
-                              XENCONS_RING_IDX in_size,
-                              XENCONS_RING_IDX out_fifo_level,
-                              XENCONS_RING_IDX out_size)
+                              PRTOSCONS_RING_IDX in_fifo_level,
+                              PRTOSCONS_RING_IDX in_size,
+                              PRTOSCONS_RING_IDX out_fifo_level,
+                              PRTOSCONS_RING_IDX out_size)
 {
     struct vpl011 *vpl011 = &d->arch.vpl011;
 
@@ -522,7 +522,7 @@ static void vpl011_data_avail(struct domain *d,
     if ( in_fifo_level > 0 )
         vpl011->uartfr &= ~RXFE;
 
-    /* Set the FIFO_FULL bit if the Xen buffer is full. */
+    /* Set the FIFO_FULL bit if the PRTOS buffer is full. */
     if ( in_fifo_level == in_size )
         vpl011->uartfr |= RXFF;
 
@@ -552,7 +552,7 @@ static void vpl011_data_avail(struct domain *d,
         vpl011->uartfr &= ~BUSY;
 
         /*
-         * When backend is in Xen, we are always ready for new data to be
+         * When backend is in PRTOS, we are always ready for new data to be
          * written (i.e. no TX FIFO handling), therefore we do not want
          * to change the TX FIFO status in such case.
          */
@@ -567,31 +567,31 @@ static void vpl011_data_avail(struct domain *d,
 }
 
 /*
- * vpl011_rx_char_xen adds a char to a domain's vpl011 receive buffer.
- * It is only used when the vpl011 backend is in Xen.
+ * vpl011_rx_char_prtos adds a char to a domain's vpl011 receive buffer.
+ * It is only used when the vpl011 backend is in PRTOS.
  */
-void vpl011_rx_char_xen(struct domain *d, char c)
+void vpl011_rx_char_prtos(struct domain *d, char c)
 {
     unsigned long flags;
     struct vpl011 *vpl011 = &d->arch.vpl011;
-    struct vpl011_xen_backend *intf = vpl011->backend.xen;
-    XENCONS_RING_IDX in_cons, in_prod, in_fifo_level;
+    struct vpl011_prtos_backend *intf = vpl011->backend.prtos;
+    PRTOSCONS_RING_IDX in_cons, in_prod, in_fifo_level;
 
     ASSERT(!vpl011->backend_in_domain);
     VPL011_LOCK(d, flags);
 
     in_cons = intf->in_cons;
     in_prod = intf->in_prod;
-    if ( xencons_queued(in_prod, in_cons, sizeof(intf->in)) == sizeof(intf->in) )
+    if ( prtoscons_queued(in_prod, in_cons, sizeof(intf->in)) == sizeof(intf->in) )
     {
         VPL011_UNLOCK(d, flags);
         return;
     }
 
-    intf->in[xencons_mask(in_prod, sizeof(intf->in))] = c;
+    intf->in[prtoscons_mask(in_prod, sizeof(intf->in))] = c;
     intf->in_prod = ++in_prod;
 
-    in_fifo_level = xencons_queued(in_prod,
+    in_fifo_level = prtoscons_queued(in_prod,
                                    in_cons,
                                    sizeof(intf->in));
 
@@ -604,9 +604,9 @@ static void vpl011_notification(struct vcpu *v, unsigned int port)
     unsigned long flags;
     struct domain *d = v->domain;
     struct vpl011 *vpl011 = &d->arch.vpl011;
-    struct xencons_interface *intf = vpl011->backend.dom.ring_buf;
-    XENCONS_RING_IDX in_cons, in_prod, out_cons, out_prod;
-    XENCONS_RING_IDX in_fifo_level, out_fifo_level;
+    struct prtoscons_interface *intf = vpl011->backend.dom.ring_buf;
+    PRTOSCONS_RING_IDX in_cons, in_prod, out_cons, out_prod;
+    PRTOSCONS_RING_IDX in_fifo_level, out_fifo_level;
 
     VPL011_LOCK(d, flags);
 
@@ -617,11 +617,11 @@ static void vpl011_notification(struct vcpu *v, unsigned int port)
 
     smp_rmb();
 
-    in_fifo_level = xencons_queued(in_prod,
+    in_fifo_level = prtoscons_queued(in_prod,
                                    in_cons,
                                    sizeof(intf->in));
 
-    out_fifo_level = xencons_queued(out_prod,
+    out_fifo_level = prtoscons_queued(out_prod,
                                     out_cons,
                                     sizeof(intf->out));
 
@@ -657,8 +657,8 @@ int domain_vpl011_init(struct domain *d, struct vpl011_init_info *info)
         }
         else
         {
-            printk(XENLOG_ERR
-                   "vpl011: Unable to re-use the Xen UART information.\n");
+            printk(PRTOSLOG_ERR
+                   "vpl011: Unable to re-use the PRTOS UART information.\n");
             return -EINVAL;
         }
 
@@ -671,8 +671,8 @@ int domain_vpl011_init(struct domain *d, struct vpl011_init_info *info)
          */
         if ( uart->size < GUEST_PL011_SIZE )
         {
-            printk(XENLOG_ERR
-                   "vpl011: Can't re-use the Xen UART MMIO region as it is too small.\n");
+            printk(PRTOSLOG_ERR
+                   "vpl011: Can't re-use the PRTOS UART MMIO region as it is too small.\n");
             return -EINVAL;
         }
     }
@@ -683,14 +683,14 @@ int domain_vpl011_init(struct domain *d, struct vpl011_init_info *info)
     }
 
     /*
-     * info is NULL when the backend is in Xen.
+     * info is NULL when the backend is in PRTOS.
      * info is != NULL when the backend is in a domain.
      */
     if ( info != NULL )
     {
         vpl011->backend_in_domain = true;
 
-        /* Map the guest PFN to Xen address space. */
+        /* Map the guest PFN to PRTOS address space. */
         rc =  prepare_ring_for_helper(d,
                                       gfn_x(info->gfn),
                                       &vpl011->backend.dom.ring_page,
@@ -698,7 +698,7 @@ int domain_vpl011_init(struct domain *d, struct vpl011_init_info *info)
         if ( rc < 0 )
             goto out;
 
-        rc = alloc_unbound_xen_event_channel(d, 0, info->console_domid,
+        rc = alloc_unbound_prtos_event_channel(d, 0, info->console_domid,
                                              vpl011_notification);
         if ( rc < 0 )
             goto out1;
@@ -709,8 +709,8 @@ int domain_vpl011_init(struct domain *d, struct vpl011_init_info *info)
     {
         vpl011->backend_in_domain = false;
 
-        vpl011->backend.xen = xzalloc(struct vpl011_xen_backend);
-        if ( vpl011->backend.xen == NULL )
+        vpl011->backend.prtos = xzalloc(struct vpl011_prtos_backend);
+        if ( vpl011->backend.prtos == NULL )
         {
             rc = -ENOMEM;
             goto out;
@@ -763,7 +763,7 @@ void domain_vpl011_deinit(struct domain *d)
 
         if ( vpl011->evtchn )
         {
-            free_xen_event_channel(d, vpl011->evtchn);
+            free_prtos_event_channel(d, vpl011->evtchn);
 
             /*
              * Set to invalid event channel port to prevent extra free and to
@@ -774,7 +774,7 @@ void domain_vpl011_deinit(struct domain *d)
         }
     }
     else
-        XFREE(vpl011->backend.xen);
+        XFREE(vpl011->backend.prtos);
 }
 
 /*

@@ -64,7 +64,7 @@ static int prtos_do_iret(struct cpu_user_regs *regs) {
 /*
  * prtos_do_hvc - PRTOS AArch64 hypercall dispatch
  *
- * Called from Xen's do_trap_guest_sync when HSR_EC_HVC64 with ISS == 0.
+ * Called from PRTOS's do_trap_guest_sync when HSR_EC_HVC64 with ISS == 0.
  * Reads x0 (hypercall number) and x1-x5 (arguments) from the guest regs,
  * dispatches to hypercalls_table, stores result back in x0.
  *
@@ -101,7 +101,7 @@ int prtos_do_hvc(struct cpu_user_regs *regs) {
 }
 
 /*
- * prtos_timer_irq_dispatch - Bridge Xen timer IRQ to PRTOS
+ * prtos_timer_irq_dispatch - Bridge PRTOS timer IRQ to PRTOS
  *
  * Called from static_htimer_isr with the GIC IRQ number.
  * For hw-virt partitions (Linux): inject timer as PPI 27 via VGIC ICH_LR.
@@ -138,7 +138,7 @@ void prtos_timer_irq_dispatch(int irq_nr) {
 /*
  * prtos_stage2_fault_dispatch - Handle stage-2 MMU faults for PRTOS partitions.
  *
- * Called from Xen's do_trap_stage2_abort_guest when the faulting domain
+ * Called from PRTOS's do_trap_stage2_abort_guest when the faulting domain
  * is the idle domain (i.e. a PRTOS partition).  Routes the fault through
  * PRTOS's Health Monitor (do_hyp_trap) so that the configured HM action
  * (halt, propagate, etc.) is applied.
@@ -159,14 +159,14 @@ void prtos_stage2_fault_dispatch(prtos_u64_t pc, prtos_u64_t cpsr, int is_data) 
  * prtos_sysreg_dispatch - Handle trapped system register accesses for
  * hw-virt (idle-domain) partitions.
  *
- * Xen's do_sysreg -> vgic_emulate path dereferences domain->arch.vgic
+ * PRTOS's do_sysreg -> vgic_emulate path dereferences domain->arch.vgic
  * which is NULL for idle domain.  This function intercepts GICv3 ICC_*
  * system register traps and handles them via PRTOS's VGIC infrastructure.
  *
  * Returns 1 if handled (caller should advance_pc), 0 if unhandled.
  */
 
-/* HSR_SYSREG encoding helpers (from Xen arm64/hsr.h) */
+/* HSR_SYSREG encoding helpers (from PRTOS arm64/hsr.h) */
 #define _HSR_SYSREG(op0,op1,crn,crm,op2) \
     (((op0)<<20)|((op2)<<17)|((op1)<<14)|((crn)<<10)|((crm)<<1))
 #define _HSR_SYSREG_MASK \

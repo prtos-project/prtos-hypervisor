@@ -83,7 +83,7 @@ real_start_efi:
 primary_switched:
         bl    zero_bss
         PRINT("- Ready -\r\n")
-        /* Setup the arguments for start_xen and jump to C world */
+        /* Setup the arguments for start_prtos and jump to C world */
         mov   x0, x20                /* x0 := cpu_id */
         mov   x1, x21                /* x1 := idle */
         ldr   x2, =setup_kernel //FIXME: just comment it for build pass
@@ -282,7 +282,7 @@ END(fail)
  * Clobbers x0 - x1
  */
 FUNC_LOCAL(init_uart)
-        ldr   x23, =CONFIG_EARLY_UART_BASE_ADDRESS   // comes from include/generated/xen_autoconf.h
+        ldr   x23, =CONFIG_EARLY_UART_BASE_ADDRESS   // comes from include/aarch64/prtos_inc/generated_prtos_autoconf.h
 #ifdef CONFIG_EARLY_UART_INIT
         early_uart_init x23, 0  // comes from arch/arm/arm64/debug-pl011.inc
 #endif

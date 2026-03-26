@@ -1,8 +1,8 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /******************************************************************************
  * xsm/silo.c
  *
- * SILO module for XSM (Xen Security Modules)
+ * SILO module for XSM (PRTOS Security Modules)
  *
  * Copyright (c) 2018 Citrix Systems Ltd.
  *
@@ -19,7 +19,7 @@
  * this program; If not, see <http://www.gnu.org/licenses/>.
  */
 #define XSM_NO_WRAPPERS
-#include <xsm_dummy.h>
+#include <prtos_xsm_dummy.h>
 
 /*
  * Check if inter-domain communication is allowed.

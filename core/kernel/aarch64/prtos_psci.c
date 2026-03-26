@@ -182,7 +182,7 @@ static prtos_s64_t prtos_psci_features(prtos_u32_t fid) {
 /*
  * prtos_psci_handle - Main PSCI dispatcher for SMC traps.
  *
- * Called from Xen's trap handler when an SMC64 is received from an
+ * Called from PRTOS's trap handler when an SMC64 is received from an
  * idle-domain (PRTOS) partition.
  *
  * Returns 1 if handled (caller must advance_pc), 0 if not a PSCI call.

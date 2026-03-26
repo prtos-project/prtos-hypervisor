@@ -1,4 +1,4 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /******************************************************************************
  * tasklet.c
  * 
@@ -14,11 +14,11 @@
  *    Keir Fraser <keir@xen.org>
  */
 
-#include <xen_init.h>
-#include <xen_sched.h>
-#include <xen_softirq.h>
-#include <xen_tasklet.h>
-#include <xen_cpu.h>
+#include <prtos_init.h>
+#include <prtos_sched.h>
+#include <prtos_softirq.h>
+#include <prtos_tasklet.h>
+#include <prtos_cpu.h>
 
 /* Some subsystems call into us before we are initialised. We ignore them. */
 static bool tasklets_initialised;

@@ -20,7 +20,7 @@
 
 
 #ifdef __ASSEMBLY__
-// #include <xen_macros.h>
+// #include <prtos_macros.h>
 
 
 #define ROUNDUP(x, a) (((x) + (a) - 1) & ~((a) - 1))

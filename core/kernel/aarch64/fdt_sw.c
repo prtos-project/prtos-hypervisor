@@ -1,4 +1,4 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 // SPDX-License-Identifier: (GPL-2.0-or-later OR BSD-2-Clause)
 /*
  * libfdt - Flat Device Tree manipulation
@@ -6,8 +6,8 @@
  */
 #include "libfdt_env.h"
 
-#include <xen_libfdt_fdt.h>
-#include <xen_libfdt_libfdt.h>
+#include <prtos_libfdt_fdt.h>
+#include <prtos_libfdt_libfdt.h>
 
 #include "libfdt_internal.h"
 

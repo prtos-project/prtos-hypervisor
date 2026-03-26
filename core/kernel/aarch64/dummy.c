@@ -1,4 +1,4 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /*
  *  This work is based on the LSM implementation in Linux 2.6.13.4.
  *
@@ -12,7 +12,7 @@
  */
 
 #define XSM_NO_WRAPPERS
-#include <xsm_dummy.h>
+#include <prtos_xsm_dummy.h>
 
 static const struct xsm_ops __initconst_cf_clobber dummy_ops = {
     .set_system_active             = xsm_set_system_active,
@@ -141,7 +141,7 @@ static const struct xsm_ops __initconst_cf_clobber dummy_ops = {
     .pmu_op                        = xsm_pmu_op,
 #endif
     .dm_op                         = xsm_dm_op,
-    .xen_version                   = xsm_xen_version,
+    .prtos_version                   = xsm_prtos_version,
     .domain_resource_map           = xsm_domain_resource_map,
 #ifdef CONFIG_ARGO
     .argo_enable                   = xsm_argo_enable,

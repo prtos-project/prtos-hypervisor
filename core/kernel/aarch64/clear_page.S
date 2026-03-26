@@ -1,4 +1,4 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /*
  * Copyright (C) 2012 ARM Ltd.
  *
@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <xen_page-size.h>
+#include <prtos_page-size.h>
 
 /*
  * Clear page @dest

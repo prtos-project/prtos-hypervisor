@@ -1,6 +1,6 @@
-#include <xen_xen_config.h>
+#include <prtos_prtos_config.h>
 /*
- * xen/arch/arm/arm64/debug.S
+ * prtos aarch64 debug.S
  *
  * Wrapper for early printk
  *
