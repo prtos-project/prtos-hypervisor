@@ -11,9 +11,8 @@ links:
 	@if test -d $(LIB_PRTOS_PATH)/include/prtos_inc; then \
 		$(MAKE) -s -C . clean-silent;\
 	fi
-	@if ! test -d $(LIB_PRTOS_PATH)/include/arch; then \
-		ln -sf $(LIB_PRTOS_PATH)/include/$(ARCH) $(LIB_PRTOS_PATH)/include/arch; \
-	fi
+	@rm -f $(LIB_PRTOS_PATH)/include/arch; \
+	ln -sf $(LIB_PRTOS_PATH)/include/$(ARCH) $(LIB_PRTOS_PATH)/include/arch
 	@if ! test -d $(LIB_PRTOS_PATH)/include/prtos_inc; then \
 		ln -sf $(PRTOS_CORE_PATH)/include $(LIB_PRTOS_PATH)/include/prtos_inc; \
 	fi

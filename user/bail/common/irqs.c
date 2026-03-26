@@ -16,6 +16,9 @@ static void unexpected_trap(trap_ctxt_t *ctxt) {
 #ifdef CONFIG_x86
     printf("[P%d:%d] Unexpected trap 0x%x (ip: 0x%x)\n", PRTOS_PARTITION_SELF, prtos_get_vcpuid(), ctxt->irq_nr, ctxt->ip);
 #endif
+#ifdef CONFIG_AARCH64
+    printf("[P%d:%d] Unexpected trap 0x%llx\n", PRTOS_PARTITION_SELF, prtos_get_vcpuid(), ctxt->irq_nr);
+#endif
 }
 
 prtos_s32_t install_trap_handler(prtos_s32_t trap_number, trap_handler_t handler) {

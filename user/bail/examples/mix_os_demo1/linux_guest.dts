@@ -1,0 +1,109 @@
+/*
+ * Device tree for Linux guest running in PRTOS partition 1.
+ * 3 vCPUs with PSCI SMP boot, 256MB RAM at IPA 0x10000000.
+ */
+
+/dts-v1/;
+
+/ {
+	compatible = "linux,dummy-virt";
+	#address-cells = <2>;
+	#size-cells = <2>;
+	interrupt-parent = <&gic>;
+
+	chosen {
+		bootargs = "console=ttyAMA0 earlycon=pl011,0x09000000 loglevel=8";
+		stdout-path = "/pl011@9000000";
+	};
+
+	memory@10000000 {
+		device_type = "memory";
+		reg = <0x0 0x10000000 0x0 0x10000000>;  /* 256MB */
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		shmem@30000000 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x30000000 0x0 0x100000>;  /* 1MB shared memory */
+			no-map;
+		};
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a57";
+			reg = <0x0>;
+			enable-method = "psci";
+		};
+
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a57";
+			reg = <0x1>;
+			enable-method = "psci";
+		};
+
+		cpu@2 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a57";
+			reg = <0x2>;
+			enable-method = "psci";
+		};
+	};
+
+	psci {
+		compatible = "arm,psci-1.0", "arm,psci-0.2";
+		method = "smc";
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <1 13 0x304>,
+			     <1 14 0x304>,
+			     <1 11 0x304>,
+			     <1 10 0x304>;
+		always-on;
+	};
+
+	gic: interrupt-controller@8000000 {
+		compatible = "arm,gic-v3";
+		#interrupt-cells = <3>;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		interrupt-controller;
+		reg = <0x0 0x08000000 0x0 0x10000>,
+		      <0x0 0x080a0000 0x0 0x200000>;
+		#redistributor-regions = <1>;
+	};
+
+	pl011@9000000 {
+		compatible = "arm,pl011", "arm,primecell";
+		reg = <0x0 0x09000000 0x0 0x1000>;
+		interrupts = <0 1 4>;
+		clock-names = "uartclk", "apb_pclk";
+		clocks = <&clk24mhz>, <&clk24mhz>;
+	};
+
+	virtio_mmio@a000000 {
+		compatible = "virtio,mmio";
+		reg = <0x0 0x0a000000 0x0 0x200>;
+		interrupts = <0 34 1>;
+		/* SPI 34 (INTID 66), edge-triggered */
+	};
+
+	clk24mhz: clk24mhz {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+		clock-output-names = "clk24mhz";
+	};
+};

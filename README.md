@@ -31,9 +31,9 @@ PRTOS is a lightweight real-time hypervisor，Its architecture is as follows:
 
 **Currently supported platforms**
 - [x] QEMU 32bit X86 platform
+- [x] QEMU ARMv8 virt platform
 
 **Plan to support platforms**
-- [x] QEMU ARMv8 virt platform
 - [x] Raspberry Pi 4b/5b Single-board Computer
 - [x] QEMU RISC-V virt platform
 

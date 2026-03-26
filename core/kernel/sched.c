@@ -195,6 +195,15 @@ void set_sched_pending(void) {
     info->cpu.irq_nesting_counter |= SCHED_PENDING;
 }
 
+prtos_u32_t prtos_check_and_clear_sched_pending(void) {
+    local_processor_t *info = GET_LOCAL_PROCESSOR();
+    if (info->cpu.irq_nesting_counter & SCHED_PENDING) {
+        info->cpu.irq_nesting_counter &= ~SCHED_PENDING;
+        return 1;
+    }
+    return 0;
+}
+
 void schedule(void) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     prtos_word_t hw_flags;
@@ -231,7 +240,6 @@ void schedule(void) {
             stop_vclock(&info->sched.current_kthread->ctrl.g->vclock, &info->sched.current_kthread->ctrl.g->vtimer);
 
         if (new_kthread->ctrl.g) set_hw_timer(traverse_ktimer_queue(&new_kthread->ctrl.local_active_ktimers, get_sys_clock_usec()));
-
         prtos_s32_t e;
         for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
             info->sched.current_kthread->ctrl.irq_mask[e] = hw_irq_get_mask(e);

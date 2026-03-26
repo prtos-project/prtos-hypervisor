@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <rsvmem.h>
 #include <boot.h>
+#include <gaccess.h>
 #include <hypercalls.h>
 #include <kthread.h>
 #include <physmm.h>
@@ -25,6 +26,7 @@ static prtos_s32_t ctrl_status(prtos_obj_desc_t desc, prtos_u32_t cmd, union sta
     extern prtos_u32_t sys_reset_counter[];
     prtos_id_t part_id;
     prtos_id_t vcpu_id;
+    if (check_gp_param(args, sizeof(union status_fmd), 4, PFLAG_NOT_NULL | PFLAG_RW) < 0) return PRTOS_INVALID_PARAM;
     part_id = OBJDESC_GET_PARTITIONID(desc);
     if (part_id != get_partition(info->sched.current_kthread)->cfg->id) {
         if (!(get_partition(info->sched.current_kthread)->cfg->flags & PRTOS_PART_SYSTEM)) return PRTOS_PERM_ERROR;

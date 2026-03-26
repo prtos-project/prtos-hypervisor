@@ -18,7 +18,7 @@
         </Devices>
     </HwDescription>
     
-    <PRTOSHypervisor console="Vga">
+    <PRTOSHypervisor console="Uart">
         <PhysicalMemoryArea size="4MB" />
     </PRTOSHypervisor>
     

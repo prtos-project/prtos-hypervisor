@@ -1,0 +1,80 @@
+<!--
+  Mixed-OS Demo: Linux (3 vCPUs) + FreeRTOS (1 vCPU)
+
+  Memory layout:
+    Partition 0 (Linux):    IPA 0x10000000, 256MB, 3 vCPUs on pCPU 0-2
+    Partition 1 (FreeRTOS): IPA 0x40000000, 64MB, 1 vCPU on pCPU 3
+    Shared memory:          IPA 0x30000000, 1MB (both partitions)
+
+  Shared memory is used for FreeRTOS → Linux inter-partition communication
+  via a ring buffer. The hypervisor exposes it to Linux as a virtio-console
+  device (/dev/hvc0) at MMIO address 0x0a000000.
+
+  Scheduler: Each pCPU runs one vCPU of one partition.
+    pCPU 0: Linux vCPU 0 (50ms slot)  — MPIDR 0 matches DTS cpu@0
+    pCPU 1: Linux vCPU 1 (50ms slot)  — MPIDR 1 matches DTS cpu@1
+    pCPU 2: Linux vCPU 2 (50ms slot)  — MPIDR 2 matches DTS cpu@2
+    pCPU 3: FreeRTOS vCPU 0 (1ms slot, real-time)
+
+  Note: Linux is partition 0 so that the hypervisor routes serial
+  console input to it by default (console_rx starts at dom0).
+-->
+<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="mix_os_demo1">
+    <HwDescription>
+        <MemoryLayout>
+            <Region type="ram" start="0x0" size="2048MB" />
+        </MemoryLayout>
+        <ProcessorTable>
+            <Processor id="0">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="100ms">
+                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="0"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="1">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="100ms">
+                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="1"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="2">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="100ms">
+                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="2"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="3">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="2ms">
+                        <Slot id="0" start="0ms" duration="1ms" partitionId="1" vCpuId="0"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+        </ProcessorTable>
+        <Devices>
+            <Uart id="0" baudRate="115200" name="Uart" />
+        </Devices>
+    </HwDescription>
+
+    <PRTOSHypervisor console="Uart">
+        <PhysicalMemoryArea size="64MB" />
+    </PRTOSHypervisor>
+
+    <PartitionTable>
+        <Partition id="0" name="Linux_HMI" flags="system" console="Uart" noVCpus="3">
+            <PhysicalMemoryAreas>
+                <Area start="0x10000000" size="256MB" />
+                <Area start="0x30000000" size="1MB" flags="shared"/>
+            </PhysicalMemoryAreas>
+        </Partition>
+        <Partition id="1" name="FreeRTOS_RTOS" flags="system" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x40000000" size="64MB" />
+                <Area start="0x30000000" size="1MB" flags="shared"/>
+            </PhysicalMemoryAreas>
+        </Partition>
+    </PartitionTable>
+</SystemDescription>

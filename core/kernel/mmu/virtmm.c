@@ -45,5 +45,7 @@ void __VBOOT setup_virt_mm(void) {
     eprintf("PRTOS map: [0x%" PRNT_ADDR_FMT "x - 0x%" PRNT_ADDR_FMT "x] flags: 0x%x\n", st, end, flags);
     ASSERT(st == CONFIG_PRTOS_LOAD_ADDR);
     setup_vm_map(&vmm_start_addr, &num_of_frames);
-    eprintf("[VMM] Free [0x%" PRNT_ADDR_FMT "x-0x%" PRNT_ADDR_FMT "x] %d frames\n", vmm_start_addr, PRTOS_VMAPEND, num_of_frames);
+
+    #define PRTOS_VMAPEND (vmm_start_addr + (num_of_frames << PAGE_SHIFT))
+    eprintf("[VMM] Free [0x%llx-0x%llx] 0x%x frames\n", vmm_start_addr, PRTOS_VMAPEND, num_of_frames);
 }

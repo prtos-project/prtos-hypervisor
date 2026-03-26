@@ -128,7 +128,7 @@ __hypercall prtos_s32_t resume_vcpu_sys(prtos_id_t vcpu_id) {
 #ifdef CONFIG_SMP
     else {
         prtos_u8_t cpu = prtos_conf_vcpu_table[(KID2PARTID(info->sched.current_kthread->ctrl.g->id) * prtos_conf_table.hpv.num_of_cpus) + vcpu_id].cpu;
-        if (cpu != GET_CPU_ID()) send_ipi(cpu, NO_SHORTHAND_IPI, SCHED_PENDING_IPI_VECTOR);
+        if (cpu != GET_CPU_ID()) { CROSS_CPU_SCHED_NOTIFY(cpu); }
     }
 #endif
 
@@ -142,9 +142,14 @@ __hypercall prtos_s32_t reset_vcpu_sys(prtos_id_t vcpu_id, prtos_address_t ptd_l
 
     if (vcpu_id >= partition->cfg->num_of_vcpus) return PRTOS_INVALID_PARAM;
 
+#ifdef CONFIG_AARCH64
+    /* AArch64: stage-2 MMU provides memory isolation; no x86-style
+     * page table validation needed. ptd_level_1_table is unused. */
+#else
     if (!(ptd_level_1_page = pmm_find_page(ptd_level_1_table, partition, 0))) return PRTOS_INVALID_PARAM;
 
     if (ptd_level_1_page->type != PPAG_PTDL1) return PRTOS_INVALID_PARAM;
+#endif
 
     HALT_VCPU(partition->cfg->id, vcpu_id);
 
@@ -582,7 +587,7 @@ __hypercall prtos_s32_t raise_part_ipvi_sys(prtos_id_t partition_id, prtos_u8_t 
                 set_ext_irq_pending(k, ipvi_number);
 #ifdef CONFIG_SMP
                 prtos_u8_t cpu = prtos_conf_vcpu_table[(KID2PARTID(k->ctrl.g->id) * prtos_conf_table.hpv.num_of_cpus) + KID2VCPUID(k->ctrl.g->id)].cpu;
-                if (cpu != GET_CPU_ID()) send_ipi(cpu, NO_SHORTHAND_IPI, SCHED_PENDING_IPI_VECTOR);
+                if (cpu != GET_CPU_ID()) { CROSS_CPU_SCHED_NOTIFY(cpu); }
 #endif
             }
             return PRTOS_OK;
@@ -615,7 +620,7 @@ __hypercall prtos_s32_t raise_ipvi_sys(prtos_u8_t ipvi_number) {
             set_ext_irq_pending(k, ipvi_number);
 #ifdef CONFIG_SMP
             prtos_u8_t cpu = prtos_conf_vcpu_table[(KID2PARTID(k->ctrl.g->id) * prtos_conf_table.hpv.num_of_cpus) + KID2VCPUID(k->ctrl.g->id)].cpu;
-            if (cpu != GET_CPU_ID()) send_ipi(cpu, NO_SHORTHAND_IPI, SCHED_PENDING_IPI_VECTOR);
+            if (cpu != GET_CPU_ID()) { CROSS_CPU_SCHED_NOTIFY(cpu); }
 #endif
         }
     }

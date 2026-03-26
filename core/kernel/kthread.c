@@ -22,6 +22,11 @@
 #include <arch/asm.h>
 #include <arch/prtos_def.h>
 
+#ifdef CONFIG_AARCH64
+extern void setup_stage2_mmu(kthread_t *k);
+#include "aarch64/prtos_vgic.h"
+#endif
+
 static prtos_s32_t num_of_vcpus;
 
 static void kthread_timer_handle(ktimer_t *ktimer, void *args) {
@@ -49,7 +54,7 @@ void init_idle(kthread_t *idle, prtos_s32_t cpu) {
     prtos_s32_t e;
     for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
         idle->ctrl.irq_mask[e] = hw_irq_get_mask(e) | info->cpu.global_irq_mask[e];
-        idle->ctrl.irq_pend_mask[e] = 0xFFFFFFFF; // All IRQs are pending
+        idle->ctrl.irq_pend_mask[e] = 0xFFFFFFFF;  // All IRQs are pending
     }
     set_kthread_flags(idle, KTHREAD_DCACHE_ENABLED_F | KTHREAD_ICACHE_ENABLED_F);
     set_kthread_flags(idle, KTHREAD_READY_F);
@@ -65,9 +70,30 @@ void start_up_guest(prtos_address_t entry) {
     set_kthread_flags(info->sched.current_kthread, KTHREAD_DCACHE_ENABLED_F | KTHREAD_ICACHE_ENABLED_F);
     set_cache_state(DCACHE | ICACHE);
     resume_vclock(&k->ctrl.g->vclock, &k->ctrl.g->vtimer);
-    switch_kthread_arch_post(k);
 
     // JMP_PARTITION must enable interrupts
+#ifdef CONFIG_AARCH64
+    setup_stage2_mmu(k);
+
+    /*
+     * Call switch_kthread_arch_post AFTER setup_stage2_mmu so that
+     * vttbr is set and the VGIC (ICH_HCR_EL2, ICH_VMCR_EL2, timer
+     * virtualization) is properly configured before the first ERET
+     * to the partition.  Without this, the VGIC is not enabled during
+     * the first execution slot, preventing virtual interrupt delivery.
+     */
+    switch_kthread_arch_post(k);
+
+    /* PSCI secondary vCPU boot: jump to PSCI entry point instead of
+     * partition entry.  psci_entry is set by prtos_psci_cpu_on(). */
+    if (k->ctrl.g->karch.psci_entry != 0) {
+        /* PSCI secondary vCPU boot */
+        JMP_PARTITION_PSCI(k);
+        /* unreachable */
+    }
+#else
+    switch_kthread_arch_post(k);
+#endif
     JMP_PARTITION(entry, k);
 
     get_cpu_ctxt(&ctxt);
@@ -131,7 +157,7 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) local_irq_mask[e] = local_processor_info[cpu_id].cpu.global_irq_mask[e];
         for (e = 0; e < CONFIG_NO_HWIRQS; e++)
             if (prtos_conf_table.hpv.hw_irq_table[e].owner == cfg->id) {
-                local_irq_mask[e / 32] = ~(1 << (e % 32)); // Enable IRQs owned by the partition
+                local_irq_mask[e / 32] = ~(1 << (e % 32));  // Enable IRQs owned by the partition
             }
 
         k->ctrl.irq_cpu_ctxt = 0;
@@ -142,6 +168,53 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         k->ctrl.g->part_ctrl_table = (partition_control_table_t *)(pct + pct_size * i);
         k->ctrl.g->part_ctrl_table->part_ctrl_table_size = pct_size;
         setup_kthread_arch(k);
+#ifdef CONFIG_AARCH64
+        /* Allocate stage-2 page tables per partition (shared across vcpus) */
+        if (i == 0) {
+            prtos_s32_t tbl;
+            GET_MEMAZ(k->ctrl.g->karch.s2_l1, PAGE_SIZE, PAGE_SIZE);
+            GET_MEMAZ(k->ctrl.g->karch.s2_l2[0], PAGE_SIZE, PAGE_SIZE);
+            GET_MEMAZ(k->ctrl.g->karch.s2_l2[1], PAGE_SIZE, PAGE_SIZE);
+            for (tbl = 0; tbl < 8; tbl++)
+                GET_MEMAZ(k->ctrl.g->karch.s2_l3[tbl], PAGE_SIZE, PAGE_SIZE);
+            k->ctrl.g->karch.s2_l3_count = 0;
+
+            /* Allocate VGIC state for hw-virt partitions.
+             * Heuristic: partitions with memory >= 64MB are hw-virt guests
+             * that need full GIC emulation.  Para-virt (PCT-based) partitions
+             * keep vgic=NULL and use the PCT hypercall path. */
+            k->ctrl.g->karch.vgic = 0;
+            {
+                struct prtos_conf_memory_area *mem_areas =
+                    &prtos_conf_phys_mem_area_table[cfg->physical_memory_areas_offset];
+                prtos_u64_t total_mem = 0;
+                prtos_s32_t ma;
+                for (ma = 0; ma < (prtos_s32_t)cfg->num_of_physical_memory_areas; ma++)
+                    total_mem += mem_areas[ma].size;
+                if (total_mem >= (64ULL * 1024 * 1024)) {
+                    extern void prtos_vgic_init(struct prtos_vgic_state *vgic,
+                                                prtos_u32_t num_vcpus);
+                    struct prtos_vgic_state *vgic;
+                    GET_MEMAZ(vgic, sizeof(struct prtos_vgic_state), ALIGNMENT);
+                    prtos_vgic_init(vgic, cfg->num_of_vcpus);
+                    k->ctrl.g->karch.vgic = vgic;
+                }
+            }
+        } else {
+            prtos_s32_t tbl;
+            k->ctrl.g->karch.s2_l1 = p->kthread[0]->ctrl.g->karch.s2_l1;
+            k->ctrl.g->karch.s2_l2[0] = p->kthread[0]->ctrl.g->karch.s2_l2[0];
+            k->ctrl.g->karch.s2_l2[1] = p->kthread[0]->ctrl.g->karch.s2_l2[1];
+            for (tbl = 0; tbl < 8; tbl++)
+                k->ctrl.g->karch.s2_l3[tbl] = p->kthread[0]->ctrl.g->karch.s2_l3[tbl];
+            k->ctrl.g->karch.s2_l3_count = p->kthread[0]->ctrl.g->karch.s2_l3_count;
+            /* Share VGIC state with vCPU 0 */
+            k->ctrl.g->karch.vgic = p->kthread[0]->ctrl.g->karch.vgic;
+        }
+        /* Initialize PSCI fields */
+        k->ctrl.g->karch.psci_entry = 0;
+        k->ctrl.g->karch.psci_context_id = 0;
+#endif
     }
 
     return p;
@@ -208,21 +281,26 @@ void reset_kthread(kthread_t *k, prtos_address_t ptd_level_1, prtos_address_t en
     setup_pct(k->ctrl.g->part_ctrl_table, k, get_partition(k)->cfg);
     k->ctrl.g->part_ctrl_table->reset_counter++;
     k->ctrl.g->part_ctrl_table->reset_status = status;
+#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
     k->ctrl.g->karch.ptd_level_1 = ptd_level_1;
     k->ctrl.g->part_ctrl_table->arch._ARCH_PTDL1_REG = ptd_level_1;
+#endif
 
-    set_kthread_flags(k, KTHREAD_READY_F);
-    clear_kthread_flags(k, KTHREAD_HALTED_F);
 #ifdef CONFIG_AUDIT_EVENTS
     raise_audit_event(TRACE_SCHED_MODULE, AUDIT_SCHED_VCPU_RESET, 1, &k->ctrl.g->id);
 #endif
     if (k != info->sched.current_kthread) {
+        /* setup_kstack MUST complete before making the kthread schedulable
+         * (READY + !HALTED).  Otherwise another CPU's scheduler may pick it
+         * up with an uninitialised stack. */
         setup_kstack(k, start_up_guest, entry_point);
+        set_kthread_flags(k, KTHREAD_READY_F);
+        clear_kthread_flags(k, KTHREAD_HALTED_F);
 #ifdef CONFIG_SMP
         if (k->ctrl.g) {
             prtos_u8_t cpu = prtos_conf_vcpu_table[(KID2PARTID(k->ctrl.g->id) * prtos_conf_table.hpv.num_of_cpus) + KID2VCPUID(k->ctrl.g->id)].cpu;
             if (cpu != GET_CPU_ID())
-                send_ipi(cpu, NO_SHORTHAND_IPI, SCHED_PENDING_IPI_VECTOR);
+                CROSS_CPU_SCHED_NOTIFY(cpu);
             else
                 schedule();
         }
@@ -230,6 +308,8 @@ void reset_kthread(kthread_t *k, prtos_address_t ptd_level_1, prtos_address_t en
         schedule();
 #endif
     } else {
+        set_kthread_flags(k, KTHREAD_READY_F);
+        clear_kthread_flags(k, KTHREAD_HALTED_F);
         load_part_page_table(k);
         start_up_guest(entry_point);
     }
@@ -249,6 +329,11 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
     // Is partition image valid?
     if (!(prtos_conf_boot_part->flags & PRTOS_PART_BOOT)) return -1;
 
+#ifdef CONFIG_AARCH64
+    /* AArch64: physmm functions are not implemented; skip physical validation.
+     * Stage-2 MMU provides memory isolation; partition runs at EL1 via ERET. */
+    ptd_level_1 = 0;
+#else
     if (!phys_mm_find_area(prtos_conf_boot_part->hdr_phys_addr, sizeof(struct prtos_image_hdr), p, 0)) return -1;
 
     prtos_image_hdr = (struct prtos_image_hdr *)prtos_conf_boot_part->hdr_phys_addr;
@@ -270,6 +355,7 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
     phys_mm_reset_part(p);
     ptd_level_1 = setup_page_table(p, read_by_pass_mmu_word(&prtos_image_hdr->page_table), read_by_pass_mmu_word(&prtos_image_hdr->page_table_size));
     if (ptd_level_1 == ~0) return -1;
+#endif
 
     switch (cold) {
         case PRTOS_WARM_RESET: /*WARM RESET*/
@@ -283,7 +369,13 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
             p->op_mode = PRTOS_OPMODE_COLD_RESET;
             p->kthread[0]->ctrl.g->part_ctrl_table->reset_counter = -1;
             reset_part_ports(p);
+#ifdef CONFIG_AARCH64
+            /* AArch64: no separate partition loader; boot directly to
+             * the partition entry point from the configuration table. */
+            reset_kthread(p->kthread[0], ptd_level_1, prtos_conf_boot_partition_table[p->cfg->id].entry_point, status);
+#else
             reset_kthread(p->kthread[0], ptd_level_1, PRTOS_PCTRLTAB_ADDR - 256 * 1024, status);
+#endif
             break;
         case 2: /*COLD RESET -> used at boot time*/
             p->kthread[0]->ctrl.g->op_mode = PRTOS_OPMODE_COLD_RESET;
