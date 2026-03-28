@@ -1,0 +1,41 @@
+/*
+ * FILE: pbl.riscv64.lds.in
+ *
+ * ld script to build the riscv64 PBL
+ *
+ * www.prtos.org
+ */
+
+#include <config.h>
+#include <arch/paging.h>
+
+OUTPUT_FORMAT("elf64-littleriscv", "elf64-littleriscv",
+	      "elf64-littleriscv")
+OUTPUT_ARCH("riscv")
+ENTRY(_start)
+
+SECTIONS
+{
+    _spbl = .;
+    . = (PRTOS_PCTRLTAB_ADDR)-256*1024-(4096*18);
+    .bss ALIGN(8) : {
+	_sbss = .;
+	*(COMMON)
+        *(.bss)
+	_ebss = .;
+    }
+
+    . = (PRTOS_PCTRLTAB_ADDR)-256*1024;
+
+    .text ALIGN(8): {
+        *(.text)
+    }
+    .data ALIGN(8) : {
+        *(.data)
+    }
+    _epbl = .;
+    /DISCARD/ : {
+        *(.note)
+        *(.comment*)
+    }
+}

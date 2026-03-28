@@ -30,7 +30,7 @@ struct irq_table_entry {
     void *data;
 };
 
-#ifndef CONFIG_AARCH64 // For AArch64, CONFIG_NO_HWIRQS is not limited to 32. 
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
 #if (CONFIG_NO_HWIRQS) > 32
 #error CONFIG_NO_HWIRQS is greater than 32
 #endif

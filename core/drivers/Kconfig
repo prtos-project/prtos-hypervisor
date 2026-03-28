@@ -2,7 +2,7 @@ menu "Drivers"
 
 config DEV_UART
        tristate "Enable UART driver"
-       depends on AARCH64 || x86
+       depends on AARCH64 || x86 || riscv64
        default y
 
 config DEV_VGA
@@ -12,23 +12,23 @@ config DEV_VGA
        
 config EARLY_OUTPUT
        bool "Enable early output"
-       depends on (DEV_UART&&(AARCH64))||(x86&&(DEV_UART||DEV_VGA))
+       depends on (DEV_UART&&(AARCH64||riscv64))||(x86&&(DEV_UART||DEV_VGA))
        default n
 
 config EARLY_CPU_MHZ
        int "CPU frequency (MHz)"
-       depends on EARLY_OUTPUT&&(AARCH64)
+       depends on EARLY_OUTPUT&&(AARCH64||riscv64)
        default 45
 
 config EARLY_UART_BAUDRATE
        int "Early UART baudrate"
-       depends on EARLY_OUTPUT&&(AARCH64)
+       depends on EARLY_OUTPUT&&(AARCH64||riscv64)
        default 115200
 
 choice
         prompt "Select early UART port"
         default EARLY_UART1
-        depends on EARLY_OUTPUT&&(AARCH64)
+        depends on EARLY_OUTPUT&&(AARCH64||riscv64)
 
 config EARLY_UART1
        bool "UART1"
@@ -47,7 +47,7 @@ config DEV_NO_UARTS
 choice
        prompt "Select early output device"
        default EARLY_DEV_UART
-       depends on EARLY_OUTPUT && (x86||AARCH64)
+       depends on EARLY_OUTPUT && (x86||AARCH64||riscv64)
        
 config EARLY_DEV_UART
        bool "UART"

@@ -10,7 +10,8 @@ ARCH=""
 BUILDER=""
 
 # Test case definitions: name, expected_verification_count, timeout_seconds
-# Format: "case_name:expected_count:timeout"
+# Format: "case_name:expected_count:timeout[:arch_list]"
+# arch_list: comma-separated architectures (empty = all archs)
 ALL_CASES=(
     "example.001:2:20"
     "example.002:1:8"
@@ -19,10 +20,10 @@ ALL_CASES=(
     "example.005:1:8"
     "example.006:1:20"
     "example.007:1:40"
-    "example.008:2:15"
+    "example.008:2:15:x86,aarch64,riscv64"
     "example.009:2:15"
     "helloworld:1:15"
-    "helloworld_smp:2:15"
+    "helloworld_smp:2:15:x86,aarch64,riscv64"
     "freertos_para_virt:1:20:aarch64"
     "freertos_hw_virt:0:30:aarch64"
     "linux:0:180:aarch64"
@@ -92,8 +93,8 @@ if [[ -z "${ARCH}" ]]; then
 fi
 
 # Validate architecture
-if [[ "${ARCH}" != "x86" && "${ARCH}" != "aarch64" ]]; then
-    echo "Error: unsupported architecture '${ARCH}'. Use 'x86' or 'aarch64'."
+if [[ "${ARCH}" != "x86" && "${ARCH}" != "aarch64" && "${ARCH}" != "riscv64" ]]; then
+    echo "Error: unsupported architecture '${ARCH}'. Use 'x86', 'aarch64', or 'riscv64'."
     exit 1
 fi
 
@@ -104,6 +105,10 @@ if [[ "${ARCH}" == "x86" ]]; then
     QEMU="qemu-system-i386"
     MAKE_RUN_TARGET="run.x86.nographic"
     CONFIG_FILE="prtos_config.x86"
+elif [[ "${ARCH}" == "riscv64" ]]; then
+    QEMU="qemu-system-riscv64"
+    MAKE_RUN_TARGET="run.riscv64"
+    CONFIG_FILE="prtos_config.riscv64"
 else
     QEMU="qemu-system-aarch64"
     MAKE_RUN_TARGET="run.aarch64"
@@ -530,7 +535,7 @@ function run_test() {
     wait ${qemu_pid} 2>/dev/null
 
     local halted_num
-    halted_num=$(grep -c "Verification Passed$" "${output_file}" 2>/dev/null || echo 0)
+    halted_num=$(tr -d '\r' < "${output_file}" 2>/dev/null | grep -c "Verification Passed$") || true
 
     if [[ ${halted_num} -eq ${CASE_EXPECT} ]]; then
         echo -e "${GREEN}Check ${case_name} PASS${NC}"
@@ -603,7 +608,8 @@ check-all)
         case_name="${entry%%:*}"
         lookup_case "${case_name}"
         # Skip tests restricted to a different architecture
-        if [[ -n "${CASE_ARCH}" && "${CASE_ARCH}" != "${ARCH}" ]]; then
+        # CASE_ARCH is a comma-separated list of allowed architectures
+        if [[ -n "${CASE_ARCH}" ]] && ! echo ",${CASE_ARCH}," | grep -q ",${ARCH},"; then
             record_result "${case_name}" "SKIP"
             continue
         fi

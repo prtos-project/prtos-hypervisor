@@ -142,8 +142,8 @@ __hypercall prtos_s32_t reset_vcpu_sys(prtos_id_t vcpu_id, prtos_address_t ptd_l
 
     if (vcpu_id >= partition->cfg->num_of_vcpus) return PRTOS_INVALID_PARAM;
 
-#ifdef CONFIG_AARCH64
-    /* AArch64: stage-2 MMU provides memory isolation; no x86-style
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+    /* AArch64/RISC-V: stage-2 MMU provides memory isolation; no x86-style
      * page table validation needed. ptd_level_1_table is unused. */
 #else
     if (!(ptd_level_1_page = pmm_find_page(ptd_level_1_table, partition, 0))) return PRTOS_INVALID_PARAM;

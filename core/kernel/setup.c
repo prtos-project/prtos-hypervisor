@@ -119,12 +119,12 @@ void reset_system(prtos_u32_t reset_mode) {
     raise_audit_event(TRACE_SCHED_MODULE, AUDIT_SCHED_HYP_RESET, 1, (prtos_word_t *)&reset_mode);
 #endif
     if ((reset_mode & PRTOS_RESET_MODE) == PRTOS_WARM_RESET) {
-#ifndef CONFIG_AARCH64  // FIXME: this just a WA for aarch64
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
         _reset((prtos_address_t)start);
 #endif
     } else {  // Cold reset
         sys_reset_counter[0] = 0;
-#ifndef CONFIG_AARCH64  // FIXME: this just a WA for aarch64
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
         _reset((prtos_address_t)start);
 #endif
     }
@@ -161,7 +161,6 @@ static void __VBOOT setup_partitions(void) {
     prtos_address_t st, end, v_start, v_end;
     partition_t *p;
     prtos_s32_t e, a;
-    kprintf("%d Partition(s) created\n", prtos_conf_table.num_of_partitions);
 
     // Creating the partitions
     for (e = 0; e < prtos_conf_table.num_of_partitions; e++) {

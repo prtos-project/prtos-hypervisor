@@ -34,6 +34,15 @@ void undef_exception_handler(trap_ctxt_t *ctxt) {
 }
 #endif
 
+#ifdef CONFIG_riscv64
+#define ILLEGAL_INSTR_TRAP 0
+#define ILLEGAL_INSTR_VECTOR 1
+
+void illegal_instr_exception_handler(trap_ctxt_t *ctxt) {
+    PRINT("#Illegal Instruction Exception propagated, ignoring...\n");
+}
+#endif
+
 void partition_main(void) {
     prtos_idle_self();
 
@@ -68,6 +77,16 @@ void partition_main(void) {
      * For PROPAGATE: handler runs, IRET returns here.
      */
     prtos_raise_partition_trap(UNDEF_INSTR_TRAP);
+#endif
+
+#ifdef CONFIG_riscv64
+    /* Route trap 0 (ILLEGAL_INSTR) to vector 1 and install handler */
+    prtos_route_irq(PRTOS_TRAP_TYPE, ILLEGAL_INSTR_TRAP, ILLEGAL_INSTR_VECTOR);
+    install_trap_handler(ILLEGAL_INSTR_VECTOR, illegal_instr_exception_handler);
+
+    PRINT("Raising illegal instruction trap...\n");
+
+    prtos_raise_partition_trap(ILLEGAL_INSTR_TRAP);
 #endif
 
     PRINT("Verification Passed\n");
