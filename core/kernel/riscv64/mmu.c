@@ -85,7 +85,7 @@ void setup_stage2_mmu(kthread_t *k) {
 
             /* Get or wire L1 table from pre-allocated karch array */
             if (!(root[vpn2] & PTE_V)) {
-                ASSERT(next_l1 < 2);
+                ASSERT(next_l1 < 4);
                 l1 = ka->s2_l1[next_l1++];
                 root[vpn2] = ((_VIRT2PHYS((prtos_u64_t)(prtos_address_t)l1) >> PAGE_SHIFT) << 10) | PTE_V;
             } else {
@@ -139,7 +139,7 @@ void setup_stage2_mmu(kthread_t *k) {
 
             /* Get or wire L1 table */
             if (!(root[vpn2] & PTE_V)) {
-                ASSERT(next_l1 < 2);
+                ASSERT(next_l1 < 4);
                 l1 = ka->s2_l1[next_l1++];
                 root[vpn2] = ((_VIRT2PHYS((prtos_u64_t)(prtos_address_t)l1) >> PAGE_SHIFT) << 10) | PTE_V;
             } else {

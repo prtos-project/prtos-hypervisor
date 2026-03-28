@@ -35,6 +35,19 @@ void __VBOOT setup_arch_common(void) {
 
     cpu_khz = get_gpu_khz();
     SET_NRCPUS(1);
+
+    /* Delegate VS-mode interrupts to guest via hideleg:
+     * bit 2 = VSSIP (Virtual Supervisor Software Interrupt)
+     * bit 6 = VSTIP (Virtual Supervisor Timer Interrupt)
+     * bit 10 = VSEIP (Virtual Supervisor External Interrupt)
+     * Also set hcounteren.TM (bit 1) to allow guest rdtime access. */
+    __asm__ __volatile__(
+        "li t0, (1 << 2) | (1 << 6) | (1 << 10)\n\t"
+        "csrs hideleg, t0\n\t"
+        "li t0, (1 << 1)\n\t"
+        "csrs hcounteren, t0\n\t"
+        ::: "t0", "memory"
+    );
 }
 
 void __VBOOT early_delay(prtos_u32_t cycles) {

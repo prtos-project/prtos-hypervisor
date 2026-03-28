@@ -26,6 +26,8 @@ ALL_CASES=(
     "helloworld_smp:2:20:x86,aarch64,riscv64"
     "freertos_para_virt:1:20:aarch64"
     "freertos_hw_virt:0:30:aarch64"
+    "freertos_para_virt_riscv:1:20:riscv64"
+    "freertos_hw_virt_riscv:0:30:riscv64"
     "linux:0:180:aarch64"
     "linux_4vcpu_1partion:0:360:aarch64"
     "mix_os_demo1:0:420:aarch64"
@@ -199,6 +201,42 @@ function run_test_freertos_hw_virt() {
         return 0
     else
         echo -e "${RED}Check freertos_hw_virt FAILED${NC} (expected >=5 'Stop' lines, got ${stop_count})"
+        cat "${output_file}" 2>/dev/null || true
+        return 1
+    fi
+}
+
+# Run the FreeRTOS hw_virt_riscv test case (riscv64 only)
+# Same as freertos_hw_virt but for RISC-V 64 platform.
+function run_test_freertos_hw_virt_riscv() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/freertos_hw_virt_riscv"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/freertos_hw_virt_riscv [${ARCH}]"
+    cd "${test_dir}"
+
+    local output_file="${test_dir}/freertos_hw_virt_riscv.output"
+    rm -f "${output_file}"
+
+    make ${MAKE_RUN_TARGET} > "${output_file}" 2>&1 &
+    local qemu_pid=$!
+
+    sleep 30
+
+    killall -9 "${QEMU}" 2>/dev/null
+    wait ${qemu_pid} 2>/dev/null
+
+    local stop_count
+    stop_count=$(grep -c "Stop$" "${output_file}" 2>/dev/null) || stop_count=0
+
+    if [[ ${stop_count} -ge 5 ]]; then
+        echo -e "${GREEN}Check freertos_hw_virt_riscv PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check freertos_hw_virt_riscv FAILED${NC} (expected >=5 'Stop' lines, got ${stop_count})"
         cat "${output_file}" 2>/dev/null || true
         return 1
     fi
@@ -503,6 +541,10 @@ function run_test() {
         run_test_freertos_hw_virt
         return $?
     fi
+    if [[ "${case_name}" == "freertos_hw_virt_riscv" ]]; then
+        run_test_freertos_hw_virt_riscv
+        return $?
+    fi
     if [[ "${case_name}" == "mix_os_demo1" ]]; then
         run_test_mix_os_demo1
         return $?
@@ -588,6 +630,8 @@ function builder_to_case() {
         check-helloworld_smp) echo "helloworld_smp" ;;
         check-freertos_para_virt)       echo "freertos_para_virt" ;;
         check-freertos_hw_virt) echo "freertos_hw_virt" ;;
+        check-freertos_para_virt_riscv) echo "freertos_para_virt_riscv" ;;
+        check-freertos_hw_virt_riscv) echo "freertos_hw_virt_riscv" ;;
         check-linux)          echo "linux" ;;
         check-linux_4vcpu_1partion) echo "linux_4vcpu_1partion" ;;
         check-mix_os_demo1) echo "mix_os_demo1" ;;

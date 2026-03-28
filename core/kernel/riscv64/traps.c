@@ -69,6 +69,19 @@ void riscv64_trap_handler(struct cpu_user_regs *regs) {
             sbi_set_timer((prtos_u64_t)-1);
             /* Clear timer interrupt pending */
             __asm__ __volatile__("csrc sip, %0" : : "r"(1UL << 5));
+
+            /* If a guest partition uses SBI timer (hw-virt), inject VSTIP
+             * (Virtual Supervisor Timer Interrupt Pending) via hvip so the
+             * guest's vstvec handler is invoked on sret. The guest will
+             * re-program the timer in its tick handler via SBI set_timer. */
+            {
+                local_processor_t *info = GET_LOCAL_PROCESSOR();
+                kthread_t *k = info->sched.current_kthread;
+                if (k && k->ctrl.g && k->ctrl.g->karch.guest_timer_active) {
+                    __asm__ __volatile__("csrs hvip, %0" :: "r"(1UL << 6));
+                }
+            }
+
             /* Call the ktimer handler registered via set_timer_handler */
             {
                 extern timer_handler_t riscv_timer_handler;
@@ -93,12 +106,34 @@ void riscv64_trap_handler(struct cpu_user_regs *regs) {
         switch (exception_code) {
         case 9:  /* ECALL from S-mode (guest hypercall via para-virt) */
         case 10: { /* ECALL from VS-mode (guest hypercall via H-extension) */
-            /* Hypercall: a0 = HC number, a1-a5 = args */
-            prtos_u32_t hc_nr = (prtos_u32_t)regs->a0;
+            prtos_u32_t hc_nr;
             prtos_s32_t result;
 
             /* Advance sepc past the ecall instruction (4 bytes) */
             regs->sepc += 4;
+
+            /* Check for SBI legacy set_timer call (a7 == 0, a0 = timer value):
+             * Native (unmodified) guests use SBI ecalls for timer.
+             * Detect via a7 == 0 (SBI extension ID for legacy set_timer)
+             * AND a0 > NR_HYPERCALLS + 1 (SBI timer values are large numbers,
+             * while PRTOS hypercall numbers are 0..NR_HYPERCALLS+1).
+             * This avoids false positives when BAIL partitions do ecall with
+             * a7 uninitialized (possibly 0) and a0 = hypercall number. */
+            if (regs->a7 == 0 && regs->a0 > (NR_HYPERCALLS + 1)) {
+                /* SBI legacy set_timer: a0 = stime_value */
+                local_processor_t *info = GET_LOCAL_PROCESSOR();
+                kthread_t *k = info->sched.current_kthread;
+                if (k && k->ctrl.g) {
+                    k->ctrl.g->karch.guest_timer_active = 1;
+                    /* Clear any pending VSTIP before reprogramming */
+                    __asm__ __volatile__("csrc hvip, %0" :: "r"(1UL << 6));
+                    /* Forward to real SBI to program hardware timer */
+                    sbi_set_timer(regs->a0);
+                }
+                break;
+            }
+
+            hc_nr = (prtos_u32_t)regs->a0;
 
             /* Handle IRET: guest returns from virtual IRQ */
             if (hc_nr == NR_HYPERCALLS) {

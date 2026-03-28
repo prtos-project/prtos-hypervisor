@@ -149,15 +149,25 @@ static inline prtos_s32_t asm_ronly_check(prtos_address_t param, prtos_u_size_t 
             /* Clear SIE (bit 1) so interrupts are re-enabled by sret via SPIE */                        \
             "li t0, (1 << 1)\n\t"                                                                        \
             "csrc sstatus, t0\n\t"                                                                       \
+            /* Allow guest to read time CSR: set hcounteren.TM (bit 1) */                                  \
+            "li t0, (1 << 1)\n\t"                                                                        \
+            "csrs hcounteren, t0\n\t"                                                                    \
+            /* Delegate VS-mode interrupts to guest via hideleg:
+             * bit 2 = VSSIP, bit 6 = VSTIP, bit 10 = VSEIP */                                         \
+            "li t0, (1 << 2) | (1 << 6) | (1 << 10)\n\t"                                               \
+            "csrs hideleg, t0\n\t"                                                                      \
             /* Set sscratch = current kernel sp for trap reentry */                                      \
             "csrw sscratch, sp\n\t"                                                                      \
-            /* Set a0 = PCT physical address */                                                          \
-            "mv a0, %0\n\t"                                                                              \
+            /* SBI convention: a0 = hartid (0), a1 = PCT physical address.
+             * This is compatible with both BAIL partitions (which read a1)
+             * and native guests (which check a0 == 0 for hart ID). */                                  \
+            "mv a1, %0\n\t"                                                                              \
+            "li a0, 0\n\t"                                                                               \
             /* Enter VS-mode */                                                                          \
             "sret\n\t"                                                                                   \
             :                                                                                            \
             : "r"(_pct_paddr), "r"(_entry)                                                               \
-            : "a0", "t0", "memory");                                                                     \
+            : "a0", "a1", "t0", "memory");                                                               \
     } while (0)
 
 /* No MMU page table switching needed for para-virt */

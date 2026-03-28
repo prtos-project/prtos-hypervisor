@@ -19,9 +19,9 @@
 
 _start:
 start:
-    /* a0 = PCT physical address (passed by hypervisor in JMP_PARTITION) */
-    /* Save PCT paddr — a0 will be clobbered by the ecall below */
-    mv   s0, a0
+    /* a0 = hartid (0), a1 = PCT physical address (SBI convention) */
+    /* Save PCT paddr from a1 — a1 will be clobbered by the ecall below */
+    mv   s0, a1
 
     /* Get vCPU ID via hypercall (no stack needed for ecall) */
     li   a0, 32            /* get_vcpuid_nr = hypercall #32 */

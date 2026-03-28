@@ -62,6 +62,9 @@ struct kthread_arch {
     prtos_u64_t *s2_l1[4];  /* L1 tables */
     prtos_u64_t *s2_l2[8];  /* L2 tables for 4KB page mappings */
     prtos_s32_t s2_l2_count;
+
+    /* Guest SBI timer emulation (for HW-virt partitions) */
+    prtos_u64_t guest_timer_active;  /* Guest has pending SBI timer */
 };
 
 #endif
