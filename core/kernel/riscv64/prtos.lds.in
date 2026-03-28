@@ -2,6 +2,8 @@
  * FILE: prtos.lds.in
  *
  * RISC-V 64-bit linker script for PRTOS hypervisor
+ * Boot code runs at physical addresses before MMU is enabled.
+ * Everything after .boot runs at virtual addresses (CONFIG_PRTOS_OFFSET).
  *
  * www.prtos.org
  */
@@ -12,11 +14,11 @@ OUTPUT_FORMAT("elf64-littleriscv", "elf64-littleriscv", "elf64-littleriscv")
 OUTPUT_ARCH("riscv")
 ENTRY(start)
 
-/* RISC-V: identity mapped, no virtual offset */
-PHYSOFFSET = 0;
+PHYSOFFSET = - CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR;
 
 SECTIONS
 {
+    /* Boot sections: linked and loaded at physical addresses */
     . = CONFIG_PRTOS_LOAD_ADDR;
     _sprtos = .;
 
@@ -40,14 +42,17 @@ SECTIONS
         *(.prtos_hdr)
     }
 
-    .vboot ALIGN(0x1000) : {
+    /* Transition to virtual addresses: VMA = CONFIG_PRTOS_OFFSET + (LMA - LOAD_ADDR) */
+    . = . + CONFIG_PRTOS_OFFSET - CONFIG_PRTOS_LOAD_ADDR;
+
+    .vboot ALIGN(0x1000) : AT (ADDR (.vboot) + PHYSOFFSET) {
         _svboot = .;
         *(.vboot.text)
         *(.vboot.data)
         _evboot = .;
     }
 
-    .text ALIGN(0x1000) : {
+    .text ALIGN(0x1000) : AT (ADDR (.text) + PHYSOFFSET) {
         _sinittext = .;
         *(.text)
         _einittext = .;
@@ -57,24 +62,24 @@ SECTIONS
         _edevice = .;
     }
 
-    .rsv_hwirqs ALIGN(8) : {
+    .rsv_hwirqs ALIGN(8) : AT (ADDR (.rsv_hwirqs) + PHYSOFFSET) {
         rsv_hw_irqs = .;
         end_rsv_hw_irqs = .;
     }
 
-    .rsv_ioports ALIGN(8) : {
+    .rsv_ioports ALIGN(8) : AT (ADDR (.rsv_ioports) + PHYSOFFSET) {
         rsv_io_ports = .;
         *(.rsv_ioports)
         end_rsv_io_ports = .;
     }
 
-    .rsv_physpages ALIGN(8) : {
+    .rsv_physpages ALIGN(8) : AT (ADDR (.rsv_physpages) + PHYSOFFSET) {
         rsv_phys_pages = .;
         *(.rsv_physpages)
         end_rsv_phys_pages = .;
     }
 
-    .rodata ALIGN(0x1000) : {
+    .rodata ALIGN(0x1000) : AT (ADDR (.rodata) + PHYSOFFSET) {
         _srodata = .;
         hypercalls_table = .;
         *(.hypercallstab)
@@ -113,7 +118,7 @@ SECTIONS
         _erodata = .;
     }
 
-    .build_info ALIGN(8) : {
+    .build_info ALIGN(8) : AT (ADDR (.build_info) + PHYSOFFSET) {
         build_info = .;
         *(.kbuild_info)
         *(.build_info)
@@ -121,7 +126,7 @@ SECTIONS
     }
 
     . = ALIGN(128);
-    .data ALIGN(8) : {
+    .data ALIGN(8) : AT (ADDR (.data) + PHYSOFFSET) {
         _sdata = .;
         *(.data.page_aligned)
         . = ALIGN(8);
@@ -137,7 +142,7 @@ SECTIONS
         QUAD(0);
     }
 
-    .bss ALIGN(0x1000) : {
+    .bss ALIGN(0x1000) : AT (ADDR (.bss) + PHYSOFFSET) {
         _sbss = .;
         *(COMMON)
         *(.bss)
@@ -145,7 +150,27 @@ SECTIONS
         _ebss = .;
     }
 
-    _eprtos = .;
+    /* Physical address aliases for BSS (used by boot code before MMU) */
+    _sbss_phys = _sbss + PHYSOFFSET;
+    _ebss_phys = _ebss + PHYSOFFSET;
+
+    /* Physical address aliases for virtual code entry points (boot trampoline) */
+    _virtual_start_phys = _virtual_start + PHYSOFFSET;
+    _secondary_virtual_phys = _secondary_virtual + PHYSOFFSET;
+
+    /* Virtual address alias for boot stacks (physical .boot.data accessible via VA mapping) */
+    _boot_stacks_va = _boot_stacks - PHYSOFFSET;
+
+    /* Virtual address alias for boot page table (used as _page_tables by kernel code) */
+    _page_tables = _boot_pt_l1 - PHYSOFFSET;
+
+    /* Virtual address alias for boot hartid */
+    _boot_hartid_va = _boot_hartid - PHYSOFFSET;
+
+    /* Virtual address alias for secondary start address storage */
+    _secondary_start_addr_va = _secondary_start_addr - PHYSOFFSET;
+
+    _eprtos = . + PHYSOFFSET;
 
     . = ALIGN(0x1000);
     prtos_conf_table = .;

@@ -15,7 +15,7 @@
 #define PRTOS_VMAPSIZE ((PRTOS_VMAPEND - PRTOS_VMAPSTART) + 1)
 
 #define LPAGE_SIZE (2 * 1024 * 1024)  /* 2MB mega page for Sv39 */
-#define PRTOS_VMAPEND 0xffffffffUL
+#define PRTOS_VMAPEND 0xFFFFFFFFFFFFFFFFUL  /* Sv39 upper canonical end */
 
 #define PTD_LEVELS 3  /* Sv39: 3 levels */
 
@@ -32,6 +32,14 @@
 #define PTDL3ENTRIES 512
 
 #define PRTOS_PCTRLTAB_ADDR (CONFIG_PRTOS_OFFSET - 256 * 1024)
+
+/* Sv39 page table index macros */
+#define VADDR_TO_VPN2(va) (((prtos_u64_t)(va) >> 30) & 0x1FF)
+#define VADDR_TO_VPN1(va) (((prtos_u64_t)(va) >> 21) & 0x1FF)
+#define VADDR_TO_VPN0(va) (((prtos_u64_t)(va) >> 12) & 0x1FF)
+
+/* Satp CSR: MODE=Sv39 (8), ASID=0, PPN=root>>12 */
+#define SATP_MODE_SV39 (8UL << 60)
 
 #ifdef _PRTOS_KERNEL_
 #ifndef __ASSEMBLY__

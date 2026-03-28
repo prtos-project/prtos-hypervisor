@@ -15,7 +15,10 @@
 
 extern void setup_cpu_idtable(prtos_u32_t num_of_cpus);
 extern void _secondary_start(void);
-extern prtos_u32_t _boot_hartid;
+extern prtos_u32_t _boot_hartid;  /* physical address in .boot.data */
+extern prtos_u32_t _boot_hartid_va;  /* virtual alias from linker script */
+extern unsigned long _secondary_start_addr;  /* stored by boot code: PA of _secondary_start */
+extern unsigned long _secondary_start_addr_va;  /* virtual alias */
 
 /*
  * SBI HSM extension: hart_start
@@ -74,14 +77,14 @@ void __VBOOT setup_smp(void) {
     if (ncpus <= 1)
         return;
 
-    build_hart_mapping(ncpus, _boot_hartid);
+    build_hart_mapping(ncpus, _boot_hartid_va);
     setup_cpu_idtable(ncpus);
 
     for (cpu = 1; cpu < ncpus; cpu++) {
         prtos_u32_t hartid = logical_to_hart[cpu];
         kprintf("Starting secondary hart %d (logical CPU %d)\n", hartid, cpu);
         /* opaque = logical CPU ID, received as a1 by _secondary_start */
-        ret = sbi_hart_start(hartid, (unsigned long)_secondary_start, cpu);
+        ret = sbi_hart_start(hartid, _secondary_start_addr_va, cpu);
         if (ret != 0)
             kprintf("Failed to start hart %d: error %ld\n", hartid, ret);
     }

@@ -23,7 +23,7 @@ ALL_CASES=(
     "example.008:2:15:x86,aarch64,riscv64"
     "example.009:2:15"
     "helloworld:1:15"
-    "helloworld_smp:2:15:x86,aarch64,riscv64"
+    "helloworld_smp:2:20:x86,aarch64,riscv64"
     "freertos_para_virt:1:20:aarch64"
     "freertos_hw_virt:0:30:aarch64"
     "linux:0:180:aarch64"

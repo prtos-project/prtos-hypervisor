@@ -218,6 +218,29 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         k->ctrl.g->karch.psci_entry = 0;
         k->ctrl.g->karch.psci_context_id = 0;
 #endif
+#ifdef CONFIG_riscv64
+        /* Allocate G-stage page tables per partition (shared across vcpus) */
+        if (i == 0) {
+            prtos_s32_t tbl;
+            /* Sv39x4 root: 16KB, 16KB-aligned (2048 entries) */
+            GET_MEMAZ(k->ctrl.g->karch.s2_root, 16384, 16384);
+            /* L1 tables: 4KB each */
+            GET_MEMAZ(k->ctrl.g->karch.s2_l1[0], PAGE_SIZE, PAGE_SIZE);
+            GET_MEMAZ(k->ctrl.g->karch.s2_l1[1], PAGE_SIZE, PAGE_SIZE);
+            /* L0 tables: 4KB each */
+            for (tbl = 0; tbl < 8; tbl++)
+                GET_MEMAZ(k->ctrl.g->karch.s2_l2[tbl], PAGE_SIZE, PAGE_SIZE);
+            k->ctrl.g->karch.s2_l2_count = 0;
+        } else {
+            prtos_s32_t tbl;
+            k->ctrl.g->karch.s2_root = p->kthread[0]->ctrl.g->karch.s2_root;
+            k->ctrl.g->karch.s2_l1[0] = p->kthread[0]->ctrl.g->karch.s2_l1[0];
+            k->ctrl.g->karch.s2_l1[1] = p->kthread[0]->ctrl.g->karch.s2_l1[1];
+            for (tbl = 0; tbl < 8; tbl++)
+                k->ctrl.g->karch.s2_l2[tbl] = p->kthread[0]->ctrl.g->karch.s2_l2[tbl];
+            k->ctrl.g->karch.s2_l2_count = p->kthread[0]->ctrl.g->karch.s2_l2_count;
+        }
+#endif
     }
 
     return p;

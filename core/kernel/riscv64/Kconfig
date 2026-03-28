@@ -44,11 +44,11 @@ menu "Physical memory layout"
 
 config PRTOS_LOAD_ADDR
         hex "PRTOS load address (physical)"
-        default "0x80200000"
+        default "0x80400000"
 
 config PRTOS_OFFSET
         hex "PRTOS virtual address offset"
-        default "0x80200000"
+        default "0xFFFFFFC080400000"
 
 endmenu
 
