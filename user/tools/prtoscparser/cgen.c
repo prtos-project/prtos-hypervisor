@@ -38,7 +38,7 @@ static inline void generate_region_table(FILE *out_file) {
     fprintf(out_file, "const struct prtos_conf_memory_region prtos_conf_mem_reg_table[] = {\n");
 
     for (e = 0; e < prtos_conf.num_of_regions; e++) {
-#if defined(CONFIG_AARCH64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
         fprintf(out_file,
                 ADDNTAB(1, "[%d] = {\n") ADDNTAB(2, ".start_addr = 0x%" PRINT_PREF "llx,\n") ADDNTAB(2, ".size = %" PRINT_PREF "llu,\n")
                     ADDNTAB(2, ".flags = 0x%x,\n") ADDNTAB(1, "},\n"),
@@ -60,7 +60,7 @@ static inline void generate_phys_mem_area_table(FILE *out_file) {
     for (i = 0; i < prtos_conf.num_of_physical_memory_areas; i++) {
         fprintf(out_file, ADDNTAB(1, "[%d] = {\n"), i);
         fprintf(out_file, ADDNTAB(2, ".name_offset = %u,\n"), prtos_conf_mem_area_table[i].name_offset);
-#if defined(CONFIG_AARCH64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
         fprintf(out_file, ADDNTAB(2, ".start_addr = 0x%" PRINT_PREF "llx,\n"), prtos_conf_mem_area_table[i].start_addr);
         fprintf(out_file, ADDNTAB(2, ".mapped_at = 0x%" PRINT_PREF "llx,\n"), prtos_conf_mem_area_table[i].mapped_at);
         fprintf(out_file, ADDNTAB(2, ".size = %" PRINT_PREF "llu,\n"), prtos_conf_mem_area_table[i].size);
@@ -80,7 +80,7 @@ static inline void generate_cyclic_slots(FILE *out_file) {
     int j;
     fprintf(out_file, "const struct prtos_conf_sched_cyclic_slot prtos_conf_sched_cyclic_slot_table[] = {\n");
     for (j = 0; j < prtos_conf.num_of_sched_cyclic_slots; j++) {
-#if defined(CONFIG_AARCH64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
         fprintf(out_file,
                 ADDNTAB(1, "[%d] = {\n") ADDNTAB(2, ".id = 0x%llx,\n") ADDNTAB(2, ".partition_id = %lld,\n") ADDNTAB(2, ".vcpu_id = %lld,\n")
                     ADDNTAB(2, ".start_exec = %d,\n") ADDNTAB(2, ".end_exec = %d,\n") ADDNTAB(1, "},\n"),
@@ -101,7 +101,7 @@ static inline void generate_cyclic_plans(FILE *out_file) {
     int j;
     fprintf(out_file, "const struct prtos_conf_sched_cyclic_plan prtos_conf_sched_cyclic_plan_table[] = {\n");
     for (j = 0; j < prtos_conf.num_of_sched_cyclic_plans; j++) {
-#if defined(CONFIG_AARCH64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
         fprintf(out_file,
                 ADDNTAB(1, "[%d] = {\n") ADDNTAB(2, ".name_offset = %d,\n") ADDNTAB(2, ".id = 0x%llx,\n") ADDNTAB(2, ".major_frame = %u,\n")
                     ADDNTAB(2, ".num_of_slots = %d,\n") ADDNTAB(2, ".slots_offset = %d,\n") ADDNTAB(1, "},\n"),
@@ -214,7 +214,7 @@ static inline void generate_hpv(FILE *out_file) {
     fprintf(out_file, ADDNTAB(2, ".num_of_cpus = %d,\n") ADDNTAB(2, ".cpu_table = {\n"), prtos_conf.hpv.num_of_cpus);
 
     for (e = 0; e < prtos_conf.hpv.num_of_cpus; e++) {
-#if defined(CONFIG_AARCH64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
         fprintf(out_file, ADDNTAB(3, "[%d] = {\n") ADDNTAB(4, ".id = %lld,\n") ADDNTAB(4, ".features = 0x%x,\n") ADDNTAB(4, ".freq = "), e,
                 prtos_conf.hpv.cpu_table[e].id, prtos_conf.hpv.cpu_table[e].features);
 #else
@@ -247,7 +247,7 @@ static inline void generate_hpv(FILE *out_file) {
     generate_trace(out_file, &prtos_conf.hpv.trace);
     generate_dev(out_file, "console_device", &prtos_conf.hpv.console_device);
     generate_dev(out_file, "hm_device", &prtos_conf.hpv.hm_device);
-#if defined(CONFIG_AARCH64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
     fprintf(out_file, ADDNTAB(2, ".node_id = %lld,\n"), prtos_conf.hpv.node_id);
 #else
     fprintf(out_file, ADDNTAB(2, ".node_id = %d,\n"), prtos_conf.hpv.node_id);
@@ -269,7 +269,7 @@ static inline void generate_partition_tab(FILE *out_file) {
 
     fprintf(out_file, "const struct prtos_conf_part prtos_conf_partition_table[] = {\n");
     for (e = 0, num_of_vcpus = 0; e < prtos_conf.num_of_partitions; e++, num_of_vcpus += prtos_conf_partition_table[e].num_of_vcpus) {
-#if defined(CONFIG_AARCH64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
         fprintf(out_file, ADDNTAB(1, "[%d] = {\n") ADDNTAB(2, ".id = %lld,\n") ADDNTAB(2, ".name_offset = %d,\n") ADDNTAB(2, ".flags = 0x%x,\n"), e,
                 prtos_conf_partition_table[e].id, prtos_conf_partition_table[e].name_offset, prtos_conf_partition_table[e].flags);
 #else
@@ -325,7 +325,7 @@ static inline void generate_system_devices(FILE *out_file) {
 
 static inline void generate_prtos_config(FILE *out_file) {
     fprintf(out_file, "struct prtos_conf_rsw_info prtos_conf_rsw_info;\n\n");
-#if defined(CONFIG_AARCH64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
     fprintf(out_file,
             "const struct prtos_conf prtos_conf __attribute__ ((section(\".rodata.hdr\"))) = {\n" ADDNTAB(1, ".signature = PRTOSC_SIGNATURE,\n")
                 ADDNTAB(1, ".data_size = (prtos_u_size_t)_data_size,\n") ADDNTAB(1, ".size = (prtos_u_size_t)_prtos_c_size,\n")
@@ -410,7 +410,7 @@ static void generate_rsv_mem(FILE *out_file) {
         }
     }
 
-#if defined(CONFIG_AARCH64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
     /* Reserve kthread + guest for each secondary CPU idle thread (SMP) */
     for (i = 1; i < prtos_conf.hpv.num_of_cpus; i++) {
         rsv_block(_KTHREAD_T_SIZEOF, ALIGNMENT, "secondary idle kthread");
@@ -439,7 +439,7 @@ static void generate_rsv_mem(FILE *out_file) {
     arch_mmu_rsv_mem(out_file);
 #endif
     for (i = 0; i < prtos_conf.num_of_partitions; i++) {
-#if defined(CONFIG_AARCH64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
         rsv_block(prtos_conf_partition_table[i].num_of_vcpus *
                       (_PARTITION_CONTROL_TABLE_T_SIZEOF + _PRTOS_PHYSICAL_MEM_MAP_SIZEOF * prtos_conf_partition_table[i].num_of_physical_memory_areas +
                        ((prtos_conf_partition_table[i].num_of_ports & ((1 << PRTOS_LOG2_WORD_SZ) - 1))

@@ -450,7 +450,7 @@ static struct node_xml devices_node = {BAD_CAST "Devices",
 #if defined(CONFIG_DEV_MEMBLOCK) || defined(CONFIG_DEV_MEMBLOCK_MODULE)
                                            &memory_block_device_node,
 #endif
-#if defined(CONFIG_DEV_UART) || defined(CONFIG_DEV_UART_MODULE) || defined(CONFIG_AARCH64)  // FIXME: Here is WA for aarch64 build
+#if defined(CONFIG_DEV_UART) || defined(CONFIG_DEV_UART_MODULE) || defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)  // FIXME: Here is WA for aarch64 build
                                            &uart_device_node,
 #endif
 #ifdef CONFIG_x86

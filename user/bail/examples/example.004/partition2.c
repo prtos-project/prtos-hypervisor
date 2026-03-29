@@ -5,7 +5,11 @@
 
 #define SPORT_NAME "portS"
 
+#if defined(CONFIG_riscv64)
+#define SHARED_ADDRESS 0x86300000
+#else
 #define SHARED_ADDRESS 0x6300000
+#endif
 
 #define PRINT(...)                             \
     do {                                       \

@@ -43,6 +43,15 @@
     "\t${TARGET_OBJCOPY} -O binary  obj_exc_elf %s"                                                                                                          \
     "\n.PHONY: run\n"
 
+#elif defined(CONFIG_riscv64)
+
+#define MAKEFILE                                                                                                                                             \
+    "include %s\nrun:a.c.prtos_conf\n\t${TARGET_CC} ${TARGET_CFLAGS_ARCH} -x c %s --include prtos_inc/config.h --include prtos_inc/arch/arch_types.h %s -c " \
+    "-o xml_obj_file.o\n"                                                                                                                                    \
+    "\t${TARGET_LD} xml_obj_file.o -nostdlib  -o obj_exc_elf -e 0x0 -T%s\n"                                                                                  \
+    "\t${TARGET_OBJCOPY} -O binary  obj_exc_elf %s"                                                                                                          \
+    "\n.PHONY: run\n"
+
 #else
 #error "unsupported architecture"
 #endif
@@ -106,6 +115,36 @@ static char lds_content[] = "OUTPUT_FORMAT(\"elf64-littleaarch64\")\n"
                             "	}\n"
                             "}\n";
 
+#elif defined(CONFIG_riscv64)
+static char lds_content[] = "OUTPUT_FORMAT(\"elf64-littleriscv\")\n"
+                            "SECTIONS\n"
+                            "{\n"
+                            "         . = 0x0;\n"
+                            "         .data ALIGN (8) : {\n"
+                            "      	     *(.rodata.hdr)\n"
+                            "    	     *(.rodata)\n"
+                            "    	     *(.data)\n"
+                            "                _mem_obj_table = .;\n"
+                            "                *(.data.memobj)\n"
+                            "                QUAD(0);\n"
+                            "        }\n"
+                            "\n"
+                            "        _data_size = .;\n"
+                            "\n"
+                            "        .bss ALIGN (8) : {\n"
+                            "                *(.bss)\n"
+                            "    	     *(.bss.mempool)\n"
+                            "    	}\n"
+                            "\n"
+                            "    	_prtos_c_size = .;\n"
+                            "\n"
+                            " 	/DISCARD/ : {\n"
+                            "	   	*(.text)\n"
+                            "    	*(.note)\n"
+                            "	    	*(.comment*)\n"
+                            "	}\n"
+                            "}\n";
+
 #else
 #error "unsupported architecture"
 #endif
@@ -142,7 +181,7 @@ void exec_xml_conf_build(char *path, char *in, char *out) {
 
 #if defined(CONFIG_x86)
     sprintf(make_file, MAKEFILE, config_path, CFLAGS, in, out, lds_file);
-#elif defined(CONFIG_AARCH64)
+#elif defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
     sprintf(make_file, MAKEFILE, config_path, CFLAGS, in, lds_file, out);
 #else
 #error "unsupported architecture"

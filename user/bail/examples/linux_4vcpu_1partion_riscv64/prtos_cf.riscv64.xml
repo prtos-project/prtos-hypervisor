@@ -1,0 +1,56 @@
+<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="linux_hwvirt_4vcpu_riscv64">
+    <HwDescription>
+        <MemoryLayout>
+            <Region type="ram" start="0x0" size="512MB" />
+            <Region type="ram" start="0x80000000" size="1024MB" />
+        </MemoryLayout>
+        <ProcessorTable>
+            <Processor id="0">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="100ms">
+                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="0"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="1">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="100ms">
+                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="1"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="2">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="100ms">
+                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="2"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="3">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="100ms">
+                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="3"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+        </ProcessorTable>
+        <Devices>
+            <Uart id="0" baudRate="115200" name="Uart" />
+        </Devices>
+    </HwDescription>
+
+    <PRTOSHypervisor console="Uart">
+        <PhysicalMemoryArea size="64MB" />
+    </PRTOSHypervisor>
+
+    <PartitionTable>
+        <Partition id="0" name="Linux" flags="system" console="Uart" noVCpus="4">
+            <PhysicalMemoryAreas>
+                <!-- Linux kernel + initramfs (IPA 0x88000000, 256MB) -->
+                <Area start="0x88000000" size="256MB" />
+                <!-- UART device pass-through (16550 at 0x10000000) -->
+                <Area start="0x10000000" size="4KB" />
+            </PhysicalMemoryAreas>
+        </Partition>
+    </PartitionTable>
+</SystemDescription>

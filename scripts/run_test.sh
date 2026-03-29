@@ -10,7 +10,8 @@ ARCH=""
 BUILDER=""
 
 # Test case definitions: name, expected_verification_count, timeout_seconds
-# Format: "case_name:expected_count:timeout"
+# Format: "case_name:expected_count:timeout[:arch_list]"
+# arch_list: comma-separated architectures (empty = all archs)
 ALL_CASES=(
     "example.001:2:20"
     "example.002:1:8"
@@ -19,15 +20,19 @@ ALL_CASES=(
     "example.005:1:8"
     "example.006:1:20"
     "example.007:1:40"
-    "example.008:2:15"
+    "example.008:2:15:x86,aarch64,riscv64"
     "example.009:2:15"
     "helloworld:1:15"
-    "helloworld_smp:2:15"
+    "helloworld_smp:2:20:x86,aarch64,riscv64"
     "freertos_para_virt:1:20:aarch64"
     "freertos_hw_virt:0:30:aarch64"
+    "freertos_para_virt_riscv:1:20:riscv64"
+    "freertos_hw_virt_riscv:0:30:riscv64"
     "linux:0:180:aarch64"
     "linux_4vcpu_1partion:0:360:aarch64"
+    "linux_4vcpu_1partion_riscv64:0:360:riscv64"
     "mix_os_demo1:0:420:aarch64"
+    "mix_os_demo_riscv64:0:420:riscv64"
 )
 
 # Colors for output
@@ -53,7 +58,9 @@ Commands:
                          freertos_hw_virt (aarch64 only),
                          linux (aarch64 only),
                          linux_4vcpu_1partion (aarch64 only),
-                         mix_os_demo1 (aarch64 only)
+                         linux_4vcpu_1partion_riscv64 (riscv64 only),
+                         mix_os_demo1 (aarch64 only),
+                         mix_os_demo_riscv64 (riscv64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -92,8 +99,8 @@ if [[ -z "${ARCH}" ]]; then
 fi
 
 # Validate architecture
-if [[ "${ARCH}" != "x86" && "${ARCH}" != "aarch64" ]]; then
-    echo "Error: unsupported architecture '${ARCH}'. Use 'x86' or 'aarch64'."
+if [[ "${ARCH}" != "x86" && "${ARCH}" != "aarch64" && "${ARCH}" != "riscv64" ]]; then
+    echo "Error: unsupported architecture '${ARCH}'. Use 'x86', 'aarch64', or 'riscv64'."
     exit 1
 fi
 
@@ -104,6 +111,10 @@ if [[ "${ARCH}" == "x86" ]]; then
     QEMU="qemu-system-i386"
     MAKE_RUN_TARGET="run.x86.nographic"
     CONFIG_FILE="prtos_config.x86"
+elif [[ "${ARCH}" == "riscv64" ]]; then
+    QEMU="qemu-system-riscv64"
+    MAKE_RUN_TARGET="run.riscv64"
+    CONFIG_FILE="prtos_config.riscv64"
 else
     QEMU="qemu-system-aarch64"
     MAKE_RUN_TARGET="run.aarch64"
@@ -194,6 +205,42 @@ function run_test_freertos_hw_virt() {
         return 0
     else
         echo -e "${RED}Check freertos_hw_virt FAILED${NC} (expected >=5 'Stop' lines, got ${stop_count})"
+        cat "${output_file}" 2>/dev/null || true
+        return 1
+    fi
+}
+
+# Run the FreeRTOS hw_virt_riscv test case (riscv64 only)
+# Same as freertos_hw_virt but for RISC-V 64 platform.
+function run_test_freertos_hw_virt_riscv() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/freertos_hw_virt_riscv"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/freertos_hw_virt_riscv [${ARCH}]"
+    cd "${test_dir}"
+
+    local output_file="${test_dir}/freertos_hw_virt_riscv.output"
+    rm -f "${output_file}"
+
+    make ${MAKE_RUN_TARGET} > "${output_file}" 2>&1 &
+    local qemu_pid=$!
+
+    sleep 30
+
+    killall -9 "${QEMU}" 2>/dev/null
+    wait ${qemu_pid} 2>/dev/null
+
+    local stop_count
+    stop_count=$(grep -c "Stop$" "${output_file}" 2>/dev/null) || stop_count=0
+
+    if [[ ${stop_count} -ge 5 ]]; then
+        echo -e "${GREEN}Check freertos_hw_virt_riscv PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check freertos_hw_virt_riscv FAILED${NC} (expected >=5 'Stop' lines, got ${stop_count})"
         cat "${output_file}" 2>/dev/null || true
         return 1
     fi
@@ -479,6 +526,177 @@ PYTEST
     fi
 }
 
+# Run the Linux 4-vCPU test case (riscv64 only)
+# Uses pexpect to boot, login (root/1234), and verify 4 vCPUs.
+function run_test_linux_4vcpu_1partion_riscv64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/linux_4vcpu_1partion_riscv64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/linux_4vcpu_1partion_riscv64 [${ARCH}]"
+    cd "${test_dir}"
+
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check linux_4vcpu_1partion_riscv64 FAILED${NC} (build error)"
+        return 1
+    fi
+
+    riscv64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S \
+        resident_sw resident_sw.bin
+
+    python3 -u << 'PYTEST' 2>&1
+import pexpect, sys, time
+child = pexpect.spawn(
+    'qemu-system-riscv64 '
+    '-machine virt -cpu rv64 -smp 4 -m 1G '
+    '-nographic -no-reboot '
+    '-bios default -kernel resident_sw.bin '
+    '-monitor none -serial stdio',
+    timeout=340, encoding='utf-8', codec_errors='replace'
+)
+try:
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=320)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: login prompt not reached')
+        child.close(force=True); sys.exit(1)
+    time.sleep(4); child.sendline('root')
+    idx = child.expect(['Password:', 'assword:', pexpect.TIMEOUT], timeout=30)
+    if idx >= 2:
+        print('LINUX_TEST_FAIL: no password prompt')
+        child.close(force=True); sys.exit(1)
+    time.sleep(2); child.sendline('1234')
+    idx = child.expect(['#', 'Login incorrect', pexpect.TIMEOUT], timeout=30)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: login failed')
+        child.close(force=True); sys.exit(1)
+    time.sleep(2); child.sendline('nproc')
+    idx = child.expect(['4', pexpect.TIMEOUT], timeout=10)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: nproc did not return 4')
+        child.close(force=True); sys.exit(1)
+    child.expect(['#', pexpect.TIMEOUT], timeout=5)
+    child.sendline('which htop')
+    idx = child.expect(['htop', pexpect.TIMEOUT], timeout=10)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: htop not found')
+        child.close(force=True); sys.exit(1)
+    print('Verification Passed')
+    child.close(force=True)
+except Exception as e:
+    print(f'LINUX_TEST_FAIL: {e}')
+    try: child.close(force=True)
+    except: pass
+    sys.exit(1)
+PYTEST
+
+    local rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        echo -e "${GREEN}Check linux_4vcpu_1partion_riscv64 PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check linux_4vcpu_1partion_riscv64 FAILED${NC}"
+        return 1
+    fi
+}
+
+# Run the Mixed-OS demo test (riscv64 only)
+# FreeRTOS para-virt on vCPU3 + Linux on vCPU0-2.
+function run_test_mix_os_demo_riscv64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/mix_os_demo_riscv64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/mix_os_demo_riscv64 [${ARCH}]"
+    cd "${test_dir}"
+
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check mix_os_demo_riscv64 FAILED${NC} (build error)"
+        return 1
+    fi
+
+    riscv64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S \
+        resident_sw resident_sw.bin
+
+    python3 -u << 'PYTEST' 2>&1
+import pexpect, sys, time
+child = pexpect.spawn(
+    'qemu-system-riscv64 '
+    '-machine virt -cpu rv64 -smp 4 -m 1G '
+    '-nographic -no-reboot '
+    '-bios default -kernel resident_sw.bin '
+    '-monitor none -serial stdio',
+    timeout=400, encoding='utf-8', codec_errors='replace'
+)
+try:
+    # Wait for Linux login prompt (RTOS output may be interleaved)
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=380)
+    if idx != 0:
+        print('MIX_OS_TEST_FAIL: login prompt not reached')
+        child.close(force=True); sys.exit(1)
+    boot_output = child.before if child.before else ''
+    rtos_found = 'RTOS' in boot_output
+    if not rtos_found:
+        print('MIX_OS_TEST_FAIL: no FreeRTOS output on serial')
+        child.close(force=True); sys.exit(1)
+    print('FreeRTOS serial output detected')
+    # Retry login up to 3 times in case of interleaved RTOS output
+    logged_in = False
+    for attempt in range(3):
+        time.sleep(6)
+        child.sendline('root')
+        idx = child.expect(['assword', 'buildroot login:', pexpect.TIMEOUT], timeout=60)
+        if idx == 0:
+            time.sleep(2); child.sendline('1234')
+            idx2 = child.expect([r'[\$#] ', 'Login incorrect', pexpect.TIMEOUT], timeout=60)
+            if idx2 == 0:
+                logged_in = True
+                break
+            elif idx2 == 1:
+                print('MIX_OS_TEST_FAIL: login incorrect')
+                child.close(force=True); sys.exit(1)
+        elif idx == 1:
+            continue
+    if not logged_in:
+        print('MIX_OS_TEST_FAIL: login failed after retries')
+        child.close(force=True); sys.exit(1)
+    time.sleep(2); child.sendline('nproc')
+    idx = child.expect(['3', pexpect.TIMEOUT], timeout=15)
+    if idx != 0:
+        print('MIX_OS_TEST_FAIL: nproc did not return 3')
+        child.close(force=True); sys.exit(1)
+    child.expect([r'[\$#] ', pexpect.TIMEOUT], timeout=10)
+    child.sendline('cat /proc/cpuinfo | grep processor | wc -l')
+    idx = child.expect(['3', pexpect.TIMEOUT], timeout=15)
+    if idx != 0:
+        print('MIX_OS_TEST_FAIL: cpuinfo does not show 3 CPUs')
+        child.close(force=True); sys.exit(1)
+    print('Verification Passed')
+    child.close(force=True)
+except Exception as e:
+    print(f'MIX_OS_TEST_FAIL: {e}')
+    try: child.close(force=True)
+    except: pass
+    sys.exit(1)
+PYTEST
+
+    local rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        echo -e "${GREEN}Check mix_os_demo_riscv64 PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check mix_os_demo_riscv64 FAILED${NC}"
+        return 1
+    fi
+}
+
 # Run a single test case
 # Arguments: case_name
 # Returns: 0 on PASS, 1 on FAIL
@@ -498,8 +716,20 @@ function run_test() {
         run_test_freertos_hw_virt
         return $?
     fi
+    if [[ "${case_name}" == "freertos_hw_virt_riscv" ]]; then
+        run_test_freertos_hw_virt_riscv
+        return $?
+    fi
     if [[ "${case_name}" == "mix_os_demo1" ]]; then
         run_test_mix_os_demo1
+        return $?
+    fi
+    if [[ "${case_name}" == "linux_4vcpu_1partion_riscv64" ]]; then
+        run_test_linux_4vcpu_1partion_riscv64
+        return $?
+    fi
+    if [[ "${case_name}" == "mix_os_demo_riscv64" ]]; then
+        run_test_mix_os_demo_riscv64
         return $?
     fi
 
@@ -530,7 +760,7 @@ function run_test() {
     wait ${qemu_pid} 2>/dev/null
 
     local halted_num
-    halted_num=$(grep -c "Verification Passed$" "${output_file}" 2>/dev/null || echo 0)
+    halted_num=$(tr -d '\r' < "${output_file}" 2>/dev/null | grep -c "Verification Passed$") || true
 
     if [[ ${halted_num} -eq ${CASE_EXPECT} ]]; then
         echo -e "${GREEN}Check ${case_name} PASS${NC}"
@@ -583,9 +813,13 @@ function builder_to_case() {
         check-helloworld_smp) echo "helloworld_smp" ;;
         check-freertos_para_virt)       echo "freertos_para_virt" ;;
         check-freertos_hw_virt) echo "freertos_hw_virt" ;;
+        check-freertos_para_virt_riscv) echo "freertos_para_virt_riscv" ;;
+        check-freertos_hw_virt_riscv) echo "freertos_hw_virt_riscv" ;;
         check-linux)          echo "linux" ;;
         check-linux_4vcpu_1partion) echo "linux_4vcpu_1partion" ;;
+        check-linux_4vcpu_1partion_riscv64) echo "linux_4vcpu_1partion_riscv64" ;;
         check-mix_os_demo1) echo "mix_os_demo1" ;;
+        check-mix_os_demo_riscv64) echo "mix_os_demo_riscv64" ;;
         check-[0-9]*)         echo "example.${builder#check-}" ;;
         *)                    echo "" ;;
     esac
@@ -603,7 +837,8 @@ check-all)
         case_name="${entry%%:*}"
         lookup_case "${case_name}"
         # Skip tests restricted to a different architecture
-        if [[ -n "${CASE_ARCH}" && "${CASE_ARCH}" != "${ARCH}" ]]; then
+        # CASE_ARCH is a comma-separated list of allowed architectures
+        if [[ -n "${CASE_ARCH}" ]] && ! echo ",${CASE_ARCH}," | grep -q ",${ARCH},"; then
             record_result "${case_name}" "SKIP"
             continue
         fi

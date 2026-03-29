@@ -65,17 +65,20 @@ void rsw_main(void) {
     init_output();
     xprintf("[RSW] Start Resident Software\n");
 
+    xprintf("[RSW] container_ptr=0x%x\n", (prtos_u32_t)(prtos_address_t)prtos_pef_container_ptr);
     // Parse container header
     if ((ret = parse_pef_container(prtos_pef_container_ptr, &container)) != CONTAINER_OK) {
         xprintf("[RSW] Error %d when parsing container file\n", ret);
         halt_system();
     }
+    xprintf("[RSW] Container parsed OK, num_partitions=%d\n", container.hdr->num_of_partitions);
 
     // Parse PRTOS header(.i.e: pefile) and check PRTOS file's digestion correctness
     if ((ret = parse_pef_file((prtos_u8_t *)(container.file_table[container.partition_table[0].file].offset + prtos_pef_container_ptr), &pef_file)) != PEF_OK) {
         xprintf("[RSW] Error %d when parsing PEF file\n", ret);
         halt_system();
     }
+    xprintf("[RSW] PRTOS PEF parsed OK\n");
 
     // Parse PRTOS XML configuration file header(.i.e: pef_custom_file) and check the configuation file's digestion correctness
     if ((ret = parse_pef_file((prtos_u8_t *)(container.file_table[container.partition_table[0].custom_file_table[0]].offset + prtos_pef_container_ptr),
@@ -83,14 +86,18 @@ void rsw_main(void) {
         xprintf("[RSW] Error %d when parsing PEF file\n", ret);
         halt_system();
     }
+    xprintf("[RSW] Config PEF parsed OK\n");
 
     // Load PRTOS XML configuation file to the specified memory address
     prtos_conf = load_pef_custom_file(&pef_custom_file, &pef_file.custom_file_table[0]);
+    xprintf("[RSW] prtos_conf loaded at 0x%x\n", (prtos_u32_t)(prtos_address_t)prtos_conf);
 
+    xprintf("[RSW] prtos_conf signature=0x%x\n", prtos_conf->signature);
     if (prtos_conf->signature != PRTOSC_SIGNATURE) {
         xprintf("[RSW] PRTOS Config File signature not found\n");
         halt_system();
     }
+    xprintf("[RSW] Config signature OK\n");
 
     // Load PRTOS Core file to the specified memory address
 #if defined(CONFIG_AARCH64)
@@ -101,10 +108,12 @@ void rsw_main(void) {
     prtos_hdr = load_pef_file(&pef_file, 0, 0, 0);
     hpv_entry_point[0] = pef_file.hdr->entry_point;
 #endif
+    xprintf("[RSW] PRTOS core loaded, hdr=0x%x, entry=0x%x\n", (prtos_u32_t)(prtos_address_t)prtos_hdr, (prtos_u32_t)hpv_entry_point[0]);
     if ((prtos_hdr->start_signature != PRTOS_EXEC_HYP_MAGIC) || (prtos_hdr->end_signature != PRTOS_EXEC_HYP_MAGIC)) {
-        xprintf("[RSW] prtos signature not found\n");
+        xprintf("[RSW] prtos signature not found (start=0x%x, end=0x%x)\n", prtos_hdr->start_signature, prtos_hdr->end_signature);
         halt_system();
     }
+    xprintf("[RSW] PRTOS header signatures OK\n");
 
     // Load additional custom files to the specifiled memory address
     min = (container.partition_table[0].num_of_custom_files > prtos_hdr->num_of_custom_files) ? prtos_hdr->num_of_custom_files
@@ -180,5 +189,13 @@ void rsw_main(void) {
     }
 
     xprintf("[RSW] Starting prtos at 0x%x\n", hpv_entry_point[0]);
+#if defined(CONFIG_riscv64)
+    {
+        extern prtos_u32_t rsw_boot_hartid;
+        /* Pass boot hartid in a0 so that PRTOS knows which hart is BSP */
+        ((void (*)(prtos_u32_t))ADDR2PTR(hpv_entry_point[0]))(rsw_boot_hartid);
+    }
+#else
     ((void (*)(void))ADDR2PTR(hpv_entry_point[0]))();
+#endif
 }

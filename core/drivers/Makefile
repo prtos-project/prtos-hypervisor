@@ -20,6 +20,10 @@ ifdef CONFIG_AARCH64
 srcs-$(CONFIG_DEV_UART) += pc_uart.c pl011.c
 endif
 
+ifdef CONFIG_riscv64
+srcs-$(CONFIG_DEV_UART) += pc_uart.c
+endif
+
 srcs-$(CONFIG_DEV_MEMBLOCK) += memblock.c
 
 SRCS := $(srcs-y) $(srcs-m)

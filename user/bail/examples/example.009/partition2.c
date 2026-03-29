@@ -3,7 +3,11 @@
 #include <prtos.h>   // hypercall services provided by the libprtos library
 #include <irqs.h>    // virtual irq services provided by the libbail library
 
+#if defined(CONFIG_riscv64)
+#define SHARED_ADDRESS 0x86300000
+#else
 #define SHARED_ADDRESS 0x6300000
+#endif
 
 #define PRINT(...)                             \
     do {                                       \

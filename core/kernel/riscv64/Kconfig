@@ -1,0 +1,72 @@
+mainmenu "PRTOS Configuration"
+
+config riscv64
+        def_bool y
+
+config HWIRQ_PRIO_FBS
+        def_bool y
+
+config MMU
+        def_bool y
+
+config ARCH_MMU_BYPASS
+        depends on !riscv64
+        def_bool n
+
+config MAX_NO_KTHREADS
+        int
+        default "255"
+
+config VMM_UPDATE_HYPERCALLS
+        def_bool y
+
+config NO_HWIRQS
+        int
+        default "32"
+
+config TARGET_LITTLE_ENDIAN
+        def_bool y
+
+menu "Processor"
+
+choice
+        prompt "Board"
+        default QEMU
+
+config QEMU
+        bool "Qemu RISC-V virt"
+
+endchoice
+
+endmenu
+
+menu "Physical memory layout"
+
+config PRTOS_LOAD_ADDR
+        hex "PRTOS load address (physical)"
+        default "0x84000000"
+
+config PRTOS_OFFSET
+        hex "PRTOS virtual address offset"
+        default "0xFFFFFFC084000000"
+
+endmenu
+
+menu "Hypervisor arch-dependent parameters"
+
+config UART_TIMEOUT
+        int "UART timeout (us)"
+        default "200"
+
+endmenu
+
+config SMP
+        bool "Symmetric Multi-Processing support"
+        default n
+
+config NO_CPUS
+        int "Number of CPUs (if SMP)"
+        default "1"
+        depends on SMP
+
+source "kernel/Kconfig"

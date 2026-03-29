@@ -69,6 +69,12 @@ void error_printf(char *fmt, ...) {
 #define PRINT_PREF
 #endif
 
+#if defined(CONFIG_riscv64)
+#define EM_ARCH EM_RISCV
+#define ELF(x) Elf64_##x
+#define PRINT_PREF
+#endif
+
 static int parse_elf_image(int fd_elf) {
     struct prtos_image_hdr *prtos_image_hdr = 0;
     struct pef_segment *pef_sect;

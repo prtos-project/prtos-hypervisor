@@ -109,9 +109,16 @@ prtos_s32_t __VBOOT init_mem_block(void) {
         mem_block_data[e].cfg = &prtos_conf_mem_block_table[e];
 #if defined(CONFIG_MMU)
         // Mapping on virtual memory
-#ifdef CONFIG_AARCH64
+#if defined(CONFIG_AARCH64)
         /* On AArch64, use PRTOS's directmap to access the memblock physical memory.
          * The config address is an IPA; prtos_ipa_to_va converts IPA→PA→directmap VA. */
+        {
+            extern void *prtos_ipa_to_va(prtos_u64_t ipa);
+            mem_block_data[e].addr = (prtos_address_t)prtos_ipa_to_va(
+                prtos_conf_phys_mem_area_table[prtos_conf_mem_block_table[e].physical_memory_areas_offset].start_addr);
+        }
+#elif defined(CONFIG_riscv64)
+        /* On riscv64, use prtos_ipa_to_va to convert physical to virtual address. */
         {
             extern void *prtos_ipa_to_va(prtos_u64_t ipa);
             mem_block_data[e].addr = (prtos_address_t)prtos_ipa_to_va(

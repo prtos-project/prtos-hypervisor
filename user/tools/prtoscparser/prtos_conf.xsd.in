@@ -193,6 +193,17 @@
       <xs:enumeration value="PRTOS_HM_EV_ARM_INSTR_BACKGROUND_FAULT"/>
       <xs:enumeration value="PRTOS_HM_EV_ARM_INSTR_PERMISSION_FAULT"/>
 #endif
+#if defined(CONFIG_riscv64)
+      <xs:enumeration value="PRTOS_HM_EV_RISCV_ILLEGAL_INSTR"/>
+      <xs:enumeration value="PRTOS_HM_EV_RISCV_INSTR_ACCESS_FAULT"/>
+      <xs:enumeration value="PRTOS_HM_EV_RISCV_LOAD_ACCESS_FAULT"/>
+      <xs:enumeration value="PRTOS_HM_EV_RISCV_STORE_ACCESS_FAULT"/>
+      <xs:enumeration value="PRTOS_HM_EV_RISCV_INSTR_PAGE_FAULT"/>
+      <xs:enumeration value="PRTOS_HM_EV_RISCV_LOAD_PAGE_FAULT"/>
+      <xs:enumeration value="PRTOS_HM_EV_RISCV_STORE_PAGE_FAULT"/>
+      <xs:enumeration value="PRTOS_HM_EV_RISCV_INSTR_MISALIGNED"/>
+      <xs:enumeration value="PRTOS_HM_EV_RISCV_LOAD_MISALIGNED"/>
+#endif
     </xs:restriction>
   </xs:simpleType>
   <xs:simpleType name="hmAction_t">
@@ -249,7 +260,7 @@
     </xs:restriction>
   </xs:simpleType>
 #endif
-#if defined(CONFIG_AARCH64) // FIXME: this is just a WA for build pass
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
   <xs:simpleType name="memRegion_t">
     <xs:annotation id="docmemRegion_t">
       <xs:documentation>It declares the access type of the memory. It can be ram or rom.</xs:documentation>
@@ -439,7 +450,7 @@
     <xs:sequence minOccurs="0" maxOccurs="unbounded">
       <xs:choice>
 <!-- FIXME: this is just a WA -->
-#if defined(CONFIG_DEV_MEMBLOCK)||defined(CONFIG_DEV_MEMBLOCK_MODULE)  || defined(CONFIG_AARCH64) 
+#if defined(CONFIG_DEV_MEMBLOCK)||defined(CONFIG_DEV_MEMBLOCK_MODULE)  || defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
         <xs:element name="MemoryBlock"  minOccurs="0">
           <xs:annotation id="docmemory_block">
             <xs:documentation>It is a block of memory mapped by a device. This memory area must overlap with a real physical memory region declared in SystemDescription/HwDescription/MemoryLayout section.</xs:documentation>

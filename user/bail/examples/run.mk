@@ -55,6 +55,23 @@ run.aarch64.debug:
 		-chardev socket,id=qemu-monitor,host=localhost,port=8889,server=on,wait=off,telnet=on \
 		-mon qemu-monitor,mode=readline -gdb tcp::1234 -S
 
+run.riscv64:
+	@$(MAKE) clean
+	@$(MAKE) resident_sw
+	@echo "=== Creating bootable image ==="
+	@riscv64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S resident_sw resident_sw.bin
+	@echo "=== Starting QEMU (Use Ctrl+C to exit) ==="
+	@qemu-system-riscv64 \
+		-machine virt \
+		-cpu rv64 \
+		-smp 4 \
+		-m 1G \
+		-nographic -no-reboot \
+		-bios default \
+		-kernel resident_sw.bin \
+		-monitor none \
+		-serial stdio
+
 run: run.$(ARCH)
 	
-.PHONY: run run.aarch64 run.aarch64.debug run.x86 run.x86.nographic
+.PHONY: run run.aarch64 run.aarch64.debug run.riscv64 run.x86 run.x86.nographic

@@ -43,6 +43,9 @@ extern void setup_smp(void);
 #elif defined(CONFIG_AARCH64)
 #define CROSS_CPU_SCHED_NOTIFY(cpu) do { __asm__ __volatile__("sev" ::: "memory"); } while(0)
 #define smp_halt_all() do { __asm__ __volatile__("dsb ish\n\tsev" ::: "memory"); } while(0)
+#elif defined(CONFIG_riscv64)
+#define CROSS_CPU_SCHED_NOTIFY(cpu) riscv_send_ipi_to(cpu)
+#define smp_halt_all() riscv_send_ipi_all_others()
 #endif
 #endif
 

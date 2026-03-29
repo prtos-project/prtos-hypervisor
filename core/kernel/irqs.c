@@ -69,7 +69,7 @@ void set_trap_pending(cpu_ctxt_t *ctxt) {
 }
 
 static inline prtos_address_t is_in_part_exception_table(prtos_address_t addr) {
-#ifndef CONFIG_AARCH64
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
     extern struct exception_table {
         prtos_address_t a;
         prtos_address_t b;
@@ -185,7 +185,7 @@ void do_unrecover_exception(cpu_ctxt_t *ctxt) {
 
 void do_hyp_irq(cpu_ctxt_t *ctxt) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
-#ifndef CONFIG_AARCH64
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
     ASSERT(!hw_is_sti());
 #endif
 #ifdef CONFIG_AUDIT_EVENTS
@@ -207,7 +207,7 @@ void do_hyp_irq(cpu_ctxt_t *ctxt) {
     do {
         schedule();
     } while (info->cpu.irq_nesting_counter == SCHED_PENDING);
-#ifndef CONFIG_AARCH64
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
     ASSERT(!hw_is_sti());
     ASSERT(!(info->cpu.irq_nesting_counter & SCHED_PENDING));
 #endif

@@ -84,7 +84,7 @@ int check_phys_mem_area(int mem_area) {
     if (prtos_conf_mem_area_table[mem_area].size & (PAGE_SIZE - 1))
         line_error(prtos_conf_mem_area_table[mem_area].size, "memory area size (%d) is not multiple of %d", prtos_conf_mem_area_table[mem_area].size,
                    PAGE_SIZE);
-#if !defined(CONFIG_AARCH64)  // FIXME: this is just a WA for arm64 build
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)  // FIXME: this is just a WA for arm64 build
     for (e = 0; e < num_of_rsv_phys_pages; e++) {
         s1 = rsv_phys_pages[e].address;
         e1 = s1 + (rsv_phys_pages[e].num_of_pages * PAGE_SIZE) - 1;

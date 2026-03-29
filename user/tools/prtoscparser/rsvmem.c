@@ -44,7 +44,7 @@ void rsv_block(unsigned int size, int align, char *comment) {
                     comment, align, size, align, size);             \
         }                                                           \
     } while (0)
-#elif defined(CONFIG_AARCH64)
+#elif defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
 /* On AArch64 GAS, .align n means align to 2^n bytes (not n bytes).
  * Convert byte-alignment to log2 for the .align directive. */
 static int aarch64_log2_align(int align) {

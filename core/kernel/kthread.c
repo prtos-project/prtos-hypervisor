@@ -92,7 +92,19 @@ void start_up_guest(prtos_address_t entry) {
         /* unreachable */
     }
 #else
+#ifdef CONFIG_riscv64
+    setup_stage2_mmu(k);
+#endif
     switch_kthread_arch_post(k);
+#endif
+
+#ifdef CONFIG_riscv64
+    /* SBI HSM secondary vCPU boot: jump to HSM entry point instead of
+     * partition entry.  hsm_entry is set by prtos_sbi_hsm_hart_start(). */
+    if (k->ctrl.g->karch.hsm_entry != 0) {
+        JMP_PARTITION_HSM(k);
+        /* unreachable */
+    }
 #endif
     JMP_PARTITION(entry, k);
 
@@ -215,6 +227,32 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         k->ctrl.g->karch.psci_entry = 0;
         k->ctrl.g->karch.psci_context_id = 0;
 #endif
+#ifdef CONFIG_riscv64
+        /* Allocate G-stage page tables per partition (shared across vcpus) */
+        if (i == 0) {
+            prtos_s32_t tbl;
+            /* Sv39x4 root: 16KB, 16KB-aligned (2048 entries) */
+            GET_MEMAZ(k->ctrl.g->karch.s2_root, 16384, 16384);
+            /* L1 tables: 4KB each */
+            GET_MEMAZ(k->ctrl.g->karch.s2_l1[0], PAGE_SIZE, PAGE_SIZE);
+            GET_MEMAZ(k->ctrl.g->karch.s2_l1[1], PAGE_SIZE, PAGE_SIZE);
+            /* L0 tables: 4KB each */
+            for (tbl = 0; tbl < 8; tbl++)
+                GET_MEMAZ(k->ctrl.g->karch.s2_l2[tbl], PAGE_SIZE, PAGE_SIZE);
+            k->ctrl.g->karch.s2_l2_count = 0;
+        } else {
+            prtos_s32_t tbl;
+            k->ctrl.g->karch.s2_root = p->kthread[0]->ctrl.g->karch.s2_root;
+            k->ctrl.g->karch.s2_l1[0] = p->kthread[0]->ctrl.g->karch.s2_l1[0];
+            k->ctrl.g->karch.s2_l1[1] = p->kthread[0]->ctrl.g->karch.s2_l1[1];
+            for (tbl = 0; tbl < 8; tbl++)
+                k->ctrl.g->karch.s2_l2[tbl] = p->kthread[0]->ctrl.g->karch.s2_l2[tbl];
+            k->ctrl.g->karch.s2_l2_count = p->kthread[0]->ctrl.g->karch.s2_l2_count;
+        }
+        /* Initialize SBI HSM fields */
+        k->ctrl.g->karch.hsm_entry = 0;
+        k->ctrl.g->karch.hsm_opaque = 0;
+#endif
     }
 
     return p;
@@ -281,7 +319,7 @@ void reset_kthread(kthread_t *k, prtos_address_t ptd_level_1, prtos_address_t en
     setup_pct(k->ctrl.g->part_ctrl_table, k, get_partition(k)->cfg);
     k->ctrl.g->part_ctrl_table->reset_counter++;
     k->ctrl.g->part_ctrl_table->reset_status = status;
-#ifndef CONFIG_AARCH64  // FIXME: here is the WA for build pass
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
     k->ctrl.g->karch.ptd_level_1 = ptd_level_1;
     k->ctrl.g->part_ctrl_table->arch._ARCH_PTDL1_REG = ptd_level_1;
 #endif
@@ -329,9 +367,8 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
     // Is partition image valid?
     if (!(prtos_conf_boot_part->flags & PRTOS_PART_BOOT)) return -1;
 
-#ifdef CONFIG_AARCH64
-    /* AArch64: physmm functions are not implemented; skip physical validation.
-     * Stage-2 MMU provides memory isolation; partition runs at EL1 via ERET. */
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+    /* AArch64/RISC-V: physmm functions are not implemented; skip physical validation. */
     ptd_level_1 = 0;
 #else
     if (!phys_mm_find_area(prtos_conf_boot_part->hdr_phys_addr, sizeof(struct prtos_image_hdr), p, 0)) return -1;
@@ -369,8 +406,8 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
             p->op_mode = PRTOS_OPMODE_COLD_RESET;
             p->kthread[0]->ctrl.g->part_ctrl_table->reset_counter = -1;
             reset_part_ports(p);
-#ifdef CONFIG_AARCH64
-            /* AArch64: no separate partition loader; boot directly to
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+            /* AArch64/RISC-V: no separate partition loader; boot directly to
              * the partition entry point from the configuration table. */
             reset_kthread(p->kthread[0], ptd_level_1, prtos_conf_boot_partition_table[p->cfg->id].entry_point, status);
 #else
