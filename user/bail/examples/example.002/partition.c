@@ -9,8 +9,8 @@
         printf(__VA_ARGS__);                   \
     } while (0)
 
-#ifdef CONFIG_x86
-prtos_u32_t exception_ret;
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
+prtos_address_t exception_ret;
 
 // BAIL trap API
 void divide_exception_handler(trap_ctxt_t *ctxt) {
@@ -46,14 +46,18 @@ void illegal_instr_exception_handler(trap_ctxt_t *ctxt) {
 void partition_main(void) {
     prtos_idle_self();
 
-#ifdef CONFIG_x86
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
     {
         volatile prtos_s32_t val = 0;
 
         // Install trap handler
         install_trap_handler(DIVIDE_ERROR, divide_exception_handler);
 
+#ifdef CONFIG_amd64
+        __asm__ __volatile__("leaq 1f(%%rip), %0\n\t" : "=r"(exception_ret) :);
+#else
         __asm__ __volatile__("movl $1f, %0\n\t" : "=r"(exception_ret) :);
+#endif
 
         PRINT("Dividing by zero...\n");
 

@@ -16,6 +16,7 @@ RSW-common = common/rsw.c common/rsw_stdc.c
 RSW-x86-SRC=x86/boot.S x86/serial.c
 RSW-aarch64-SRC=aarch64/boot.S aarch64/serial.c aarch64/pl011.c
 RSW-riscv64-SRC=riscv64/boot.S riscv64/serial.c
+RSW-amd64-SRC=amd64/boot.S amd64/serial.c
 
 RESIDENT_SW_SRC= $(RSW-common) $(RSW-$(ARCH)-SRC)
 

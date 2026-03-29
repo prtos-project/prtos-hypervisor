@@ -106,10 +106,16 @@ void start_up_guest(prtos_address_t entry) {
         /* unreachable */
     }
 #endif
+#ifdef CONFIG_amd64
+    /* Load partition CR3 right before entering user mode. On amd64,
+     * CR3 is not loaded during switch_kthread_arch_pre to avoid page
+     * faults during CONTEXT_SWITCH with the partition's 4-level tables. */
+    load_part_page_table(k);
+#endif
     JMP_PARTITION(entry, k);
 
     get_cpu_ctxt(&ctxt);
-    part_panic(&ctxt, __PRTOS_FILE__ ":%u:0x%x: executing unreachable code!", __LINE__, k);
+    part_panic(&ctxt, __PRTOS_FILE__ ":%u:0x%llx: executing unreachable code!", __LINE__, (unsigned long long)(prtos_address_t)k);
 }
 
 static inline kthread_t *alloc_kthread(prtos_id_t id) {
@@ -389,9 +395,23 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
 
     if (info->sched.current_kthread == p->kthread[0]) load_hyp_page_table();
 
+    /* On amd64, partition page tables don't include the full identity map,
+     * so we need the hypervisor's page tables for setup_page_table() and
+     * setup_ptd_level_1_table() which use identity-mapped physical access.
+     * Save/restore CR3 so the calling partition's page tables are restored. */
+#ifdef CONFIG_amd64
+    prtos_u64_t _saved_cr3 = save_cr3();
+    load_hyp_page_table();
+#endif
+
     phys_mm_reset_part(p);
     ptd_level_1 = setup_page_table(p, read_by_pass_mmu_word(&prtos_image_hdr->page_table), read_by_pass_mmu_word(&prtos_image_hdr->page_table_size));
-    if (ptd_level_1 == ~0) return -1;
+    if (ptd_level_1 == ~0) {
+#ifdef CONFIG_amd64
+        load_cr3(_saved_cr3);
+#endif
+        return -1;
+    }
 #endif
 
     switch (cold) {
@@ -422,6 +442,10 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
             reset_kthread(p->kthread[0], ptd_level_1, prtos_conf_boot_partition_table[p->cfg->id].entry_point, status);
             break;
     }
+
+#ifdef CONFIG_amd64
+    load_cr3(_saved_cr3);
+#endif
 
     if (info->sched.current_kthread == p->kthread[0]) load_part_page_table(p->kthread[0]);
 

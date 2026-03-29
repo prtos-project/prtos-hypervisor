@@ -29,3 +29,22 @@ start_stack:
 .global end_stack
 end_stack:
 #endif
+
+#ifdef CONFIG_amd64
+.global _start, start
+_start:
+start:
+        movq %rbx, part_ctrl_table_ptr(%rip)
+        leaq end_stack(%rip), %rsp
+        call main_pbl
+        movq part_ctrl_table_ptr(%rip), %rbx
+        jmp *%rax
+1:
+        jmp 1b
+.bss
+.global start_stack
+start_stack:
+        .zero STACK_SIZE
+.global end_stack
+end_stack:
+#endif

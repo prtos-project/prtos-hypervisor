@@ -2,17 +2,17 @@ menu "Drivers"
 
 config DEV_UART
        tristate "Enable UART driver"
-       depends on AARCH64 || x86 || riscv64
+       depends on AARCH64 || x86 || riscv64 || amd64
        default y
 
 config DEV_VGA
        bool "Enable VGA driver"
-       depends on x86
+       depends on x86 || amd64
        default y
        
 config EARLY_OUTPUT
        bool "Enable early output"
-       depends on (DEV_UART&&(AARCH64||riscv64))||(x86&&(DEV_UART||DEV_VGA))
+       depends on (DEV_UART&&(AARCH64||riscv64))||((x86||amd64)&&(DEV_UART||DEV_VGA))
        default n
 
 config EARLY_CPU_MHZ
@@ -47,7 +47,7 @@ config DEV_NO_UARTS
 choice
        prompt "Select early output device"
        default EARLY_DEV_UART
-       depends on EARLY_OUTPUT && (x86||AARCH64||riscv64)
+       depends on EARLY_OUTPUT && (x86||amd64||AARCH64||riscv64)
        
 config EARLY_DEV_UART
        bool "UART"

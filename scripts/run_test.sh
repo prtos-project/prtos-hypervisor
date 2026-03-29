@@ -20,10 +20,10 @@ ALL_CASES=(
     "example.005:1:8"
     "example.006:1:20"
     "example.007:1:40"
-    "example.008:2:15:x86,aarch64,riscv64"
+    "example.008:2:15:x86,aarch64,riscv64,amd64"
     "example.009:2:15"
     "helloworld:1:15"
-    "helloworld_smp:2:20:x86,aarch64,riscv64"
+    "helloworld_smp:2:20:x86,aarch64,riscv64,amd64"
     "freertos_para_virt:1:20:aarch64"
     "freertos_hw_virt:0:30:aarch64"
     "freertos_para_virt_riscv:1:20:riscv64"
@@ -99,8 +99,8 @@ if [[ -z "${ARCH}" ]]; then
 fi
 
 # Validate architecture
-if [[ "${ARCH}" != "x86" && "${ARCH}" != "aarch64" && "${ARCH}" != "riscv64" ]]; then
-    echo "Error: unsupported architecture '${ARCH}'. Use 'x86', 'aarch64', or 'riscv64'."
+if [[ "${ARCH}" != "x86" && "${ARCH}" != "aarch64" && "${ARCH}" != "riscv64" && "${ARCH}" != "amd64" ]]; then
+    echo "Error: unsupported architecture '${ARCH}'. Use 'x86', 'aarch64', 'riscv64', or 'amd64'."
     exit 1
 fi
 
@@ -115,6 +115,10 @@ elif [[ "${ARCH}" == "riscv64" ]]; then
     QEMU="qemu-system-riscv64"
     MAKE_RUN_TARGET="run.riscv64"
     CONFIG_FILE="prtos_config.riscv64"
+elif [[ "${ARCH}" == "amd64" ]]; then
+    QEMU="qemu-system-x86_64"
+    MAKE_RUN_TARGET="run.amd64.nographic"
+    CONFIG_FILE="prtos_config.amd64"
 else
     QEMU="qemu-system-aarch64"
     MAKE_RUN_TARGET="run.aarch64"

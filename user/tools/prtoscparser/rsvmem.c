@@ -27,7 +27,7 @@ void rsv_block(unsigned int size, int align, char *comment) {
     block_table[num_of_blocks - 1].comment = strdup(comment);
 }
 
-#if defined(CONFIG_x86)  // FIXME: will extract the common part before it is merged finally.
+#if defined(CONFIG_x86)
 #define MEM_BLOCK(size, align, comment)                             \
     do {                                                            \
         if (size) {                                                 \
@@ -35,6 +35,23 @@ void rsv_block(unsigned int size, int align, char *comment) {
                     "\n__asm__ (/* %s */ \\\n"                      \
                     "         \".section .data.memobj\\n\\t\" \\\n" \
                     "         \".long 1f\\n\\t\" \\\n"              \
+                    "         \".long %d\\n\\t\" \\\n"              \
+                    "         \".long %d\\n\\t\" \\\n"              \
+                    "         \".section .bss.mempool\\n\\t\" \\\n" \
+                    "         \".align %d\\n\\t\" \\\n"             \
+                    "         \"1:.zero %d\\n\\t\" \\\n"            \
+                    "         \".previous\\n\\t\");\n",             \
+                    comment, align, size, align, size);             \
+        }                                                           \
+    } while (0)
+#elif defined(CONFIG_amd64)
+#define MEM_BLOCK(size, align, comment)                             \
+    do {                                                            \
+        if (size) {                                                 \
+            fprintf(out_file,                                       \
+                    "\n__asm__ (/* %s */ \\\n"                      \
+                    "         \".section .data.memobj\\n\\t\" \\\n" \
+                    "         \".quad 1f\\n\\t\" \\\n"              \
                     "         \".long %d\\n\\t\" \\\n"              \
                     "         \".long %d\\n\\t\" \\\n"              \
                     "         \".section .bss.mempool\\n\\t\" \\\n" \

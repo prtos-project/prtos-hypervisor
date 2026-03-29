@@ -161,7 +161,7 @@
       <xs:enumeration value="PRTOS_HM_EV_FP_ERROR"/>
       <xs:enumeration value="PRTOS_HM_EV_MEM_PROTECTION"/>
       <xs:enumeration value="PRTOS_HM_EV_UNEXPECTED_TRAP"/>
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
       <xs:enumeration value="PRTOS_HM_EV_X86_DIVIDE_ERROR"/>
       <xs:enumeration value="PRTOS_HM_EV_X86_DEBUG"/>
       <xs:enumeration value="PRTOS_HM_EV_X86_NMI_INTERRUPT"/>
@@ -249,7 +249,7 @@
     </xs:annotation>
     <xs:list itemType="memAreaFlags_t"/>
   </xs:simpleType>
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
   <xs:simpleType name="memRegion_t">
     <xs:annotation id="docmemRegion_t">
       <xs:documentation>It declares the access type of the memory. It can be ram or rom.</xs:documentation>
@@ -474,7 +474,7 @@
           </xs:complexType>
         </xs:element>
 #endif
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
         <xs:element name="Vga" minOccurs="0" maxOccurs="1">
           <xs:annotation id="docVGA">
             <xs:documentation>It is a VGA device.</xs:documentation>

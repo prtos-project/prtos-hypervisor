@@ -1,0 +1,188 @@
+mainmenu "PRTOS Configuration"
+
+config amd64
+        def_bool y
+
+config HWIRQ_PRIO_FBS
+        def_bool y
+
+config MMU
+        def_bool y
+
+config ARCH_MMU_BYPASS
+        depends on !amd64
+        def_bool n
+
+config MAX_NO_KTHREADS
+        int
+        default "255"
+
+config VMM_UPDATE_HYPERCALLS
+        def_bool y
+
+config NO_HWIRQS
+        int
+        default "16" if !APIC
+        default "32" if APIC
+
+config TARGET_LITTLE_ENDIAN
+        def_bool y
+
+menu "Processor"
+
+choice
+        prompt "Board"
+        default QEMU
+
+config QEMU
+        bool "Qemu"
+        select SMP_INTERFACE_ACPI if SMP
+
+config VMWARE
+        bool "VMWare"
+        select SMP_INTERFACE_ACPI if SMP
+
+endchoice
+
+config CHIPSET_ICH
+        bool
+        default n
+
+choice
+        prompt "Clock source"
+        default TSC_TIMER
+
+config TSC_CLOCK
+        bool "TSC"
+        depends on !SMP
+        select PC_PIT_TIMER
+
+config PC_PIT_CLOCK
+        bool "PIT"
+        depends on !SMP
+        select PC_PIT_TIMER
+
+config HPET_CLOCK
+        bool "HPET"
+        select HPET
+        select HPET_TIMER if !SMP
+
+endchoice
+
+config HPET
+        def_bool n
+
+config SMI_DISABLE
+        bool "Disable SMI Interrupts (see Help WARNING note)"
+        default n
+        help
+        WARNING:
+        This option disables SMI Interrupts to provide deterministic RT behaviour.
+        At a cost that disabling SMI may cause harm to your computer.
+        Be sure *you know what you are doing* before disabling System Management Interrupts.
+        default "0x8086" if VMWARE QEMU
+
+config SMP
+        bool "Symmetric multi-processing support"
+        default n
+        select HPET_CLOCK
+
+config NO_CPUS
+        int "Number of CPUs supported"
+        default "4"
+        depends on SMP
+
+if SMP
+config SMP_INTERFACE_MPSPEC
+        bool
+        default n
+
+config SMP_INTERFACE_ACPI
+        bool
+        default n
+
+config APIC
+        bool
+        depends on SMP
+        default y
+
+config MAX_NO_IOAPICS
+        int "Maximum number of supported IO-Apics"
+        depends on APIC
+        default "1"
+
+config MAX_NO_IOINT
+        int "Maximum number of IO-Apic interrupt sources"
+        depends on APIC
+        default "24"
+
+config MAX_NO_LINT
+        int "Maximum number of Local interrupt sources "
+        depends on APIC
+        default "16"
+
+config MAX_NO_BUSES
+        int "Maximum number of SMP buses"
+        depends on SMP
+        default "16"
+
+config HPET_TIMER
+        bool "Use HPET timer"
+        depends on SMP
+        select HPET
+
+config PC_PIT_TIMER
+        def_bool n
+        depends on !APIC
+        depends on !HPET_TIMER
+
+endif
+
+endmenu
+
+menu "Physical memory layout"
+
+config PRTOS_LOAD_ADDR
+        hex "PRTOS physical load address"
+        default "0x1000000"
+
+config PRTOS_OFFSET
+        hex "PRTOS virtual base address"
+        default "0xFC000000"
+
+endmenu
+
+menu "Hypervisor arch-dependent parameters"
+
+config PARTITION_NO_GDT_ENTRIES
+        int "Number of GDT entries per partition"
+        default "32"
+
+config UART_TIMEOUT
+        int "Timeout on UART(us)"
+        default "200"
+
+config EXPERIMENTAL
+        bool "Experimental flags"
+        default n
+
+config DEBUG
+        bool "Debug flags"
+        default y
+
+config VERBOSE_TRAP
+        bool "Verbose trap information"
+        default y
+        depends on DEBUG
+
+config NO_GCC_OPT
+        bool "No gcc optimizations"
+        default n
+
+config ID_STRING_LENGTH
+        int "Max. identifier string length"
+        default "16"
+
+endmenu
+
+source "kernel/Kconfig"

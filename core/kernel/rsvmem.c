@@ -31,7 +31,6 @@ void init_rsv_mem(void) {
 
 void *alloc_rsv_mem(prtos_u32_t size, prtos_u32_t align) {
     prtos_s32_t e;
-    eprintf("alloc_rsv_mem: size: %d, align: 0x%x\n", size, align);
     for (e = 0; prtos_conf_rsv_mem_table[e].obj; e++) {
         if (!(prtos_conf_rsv_mem_table[e].used_align & RSV_MEM_USED) && ((prtos_conf_rsv_mem_table[e].used_align & ~RSV_MEM_USED) == align) &&
             (prtos_conf_rsv_mem_table[e].size == size)) {
