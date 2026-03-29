@@ -152,11 +152,16 @@ static inline prtos_s32_t asm_ronly_check(prtos_address_t param, prtos_u_size_t 
             /* Allow guest to read time CSR: set hcounteren.TM (bit 1) */                                  \
             "li t0, (1 << 1)\n\t"                                                                        \
             "csrs hcounteren, t0\n\t"                                                                    \
+            /* Delegate VS-mode exceptions to guest via hedeleg */                                      \
+            "li t0, (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 12) | (1 << 13) | (1 << 15)\n\t" \
+            "csrs hedeleg, t0\n\t"                                                                      \
             /* Delegate VS-mode interrupts to guest via hideleg:
              * bit 2 = VSSIP, bit 6 = VSTIP, bit 10 = VSEIP */                                         \
             "li t0, (1 << 2) | (1 << 6) | (1 << 10)\n\t"                                               \
             "csrs hideleg, t0\n\t"                                                                      \
             /* Set sscratch = current kernel sp for trap reentry */                                      \
+            "addi sp, sp, -8\n\t"                                                                        \
+            "sd tp, 0(sp)\n\t"         /* Save host tp in stack slot */                                  \
             "csrw sscratch, sp\n\t"                                                                      \
             /* SBI convention: a0 = hartid (0), a1 = PCT physical address.
              * This is compatible with both BAIL partitions (which read a1)
@@ -167,6 +172,40 @@ static inline prtos_s32_t asm_ronly_check(prtos_address_t param, prtos_u_size_t 
             "sret\n\t"                                                                                   \
             :                                                                                            \
             : "r"(_pct_paddr), "r"(_entry)                                                               \
+            : "a0", "a1", "t0", "memory");                                                               \
+    } while (0)
+
+/* Jump to partition for SBI HSM secondary vCPU boot.
+ * a0 = hartid (vCPU ID), a1 = opaque (set by SBI HART_START).
+ * Enters VS-mode at hsm_entry address. */
+#define JMP_PARTITION_HSM(k)                                                                             \
+    do {                                                                                                 \
+        prtos_u64_t _entry = (k)->ctrl.g->karch.hsm_entry;                                              \
+        prtos_u64_t _opaque = (k)->ctrl.g->karch.hsm_opaque;                                            \
+        prtos_u64_t _hartid = (prtos_u64_t)KID2VCPUID((k)->ctrl.g->id);                                 \
+        __asm__ __volatile__(                                                                            \
+            "csrw sepc, %0\n\t"                                                                          \
+            "li t0, (1 << 7)\n\t"                                                                        \
+            "csrs hstatus, t0\n\t"                                                                       \
+            "li t0, (1 << 8) | (1 << 5)\n\t"                                                            \
+            "csrs sstatus, t0\n\t"                                                                       \
+            "li t0, (1 << 1)\n\t"                                                                        \
+            "csrc sstatus, t0\n\t"                                                                       \
+            "li t0, (1 << 1)\n\t"                                                                        \
+            "csrs hcounteren, t0\n\t"                                                                    \
+            /* Delegate VS-mode exceptions to guest via hedeleg */                                      \
+            "li t0, (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 12) | (1 << 13) | (1 << 15)\n\t" \
+            "csrs hedeleg, t0\n\t"                                                                      \
+            "li t0, (1 << 2) | (1 << 6) | (1 << 10)\n\t"                                               \
+            "csrs hideleg, t0\n\t"                                                                      \
+            "addi sp, sp, -8\n\t"                                                                        \
+            "sd tp, 0(sp)\n\t"         /* Save host tp in stack slot */                                  \
+            "csrw sscratch, sp\n\t"                                                                      \
+            "mv a1, %1\n\t"                                                                              \
+            "mv a0, %2\n\t"                                                                              \
+            "sret\n\t"                                                                                   \
+            :                                                                                            \
+            : "r"(_entry), "r"(_opaque), "r"(_hartid)                                                    \
             : "a0", "a1", "t0", "memory");                                                               \
     } while (0)
 

@@ -97,6 +97,15 @@ void start_up_guest(prtos_address_t entry) {
 #endif
     switch_kthread_arch_post(k);
 #endif
+
+#ifdef CONFIG_riscv64
+    /* SBI HSM secondary vCPU boot: jump to HSM entry point instead of
+     * partition entry.  hsm_entry is set by prtos_sbi_hsm_hart_start(). */
+    if (k->ctrl.g->karch.hsm_entry != 0) {
+        JMP_PARTITION_HSM(k);
+        /* unreachable */
+    }
+#endif
     JMP_PARTITION(entry, k);
 
     get_cpu_ctxt(&ctxt);
@@ -240,6 +249,9 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
                 k->ctrl.g->karch.s2_l2[tbl] = p->kthread[0]->ctrl.g->karch.s2_l2[tbl];
             k->ctrl.g->karch.s2_l2_count = p->kthread[0]->ctrl.g->karch.s2_l2_count;
         }
+        /* Initialize SBI HSM fields */
+        k->ctrl.g->karch.hsm_entry = 0;
+        k->ctrl.g->karch.hsm_opaque = 0;
 #endif
     }
 

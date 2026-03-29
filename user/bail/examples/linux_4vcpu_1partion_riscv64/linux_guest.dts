@@ -1,0 +1,92 @@
+/*
+ * Device tree for Linux guest running in a PRTOS hw-virt partition.
+ * RISC-V QEMU virt-compatible layout: NS16550 UART, SBI timer/IPI.
+ * 256MB RAM at IPA 0x88000000, 4 vCPUs with SBI HSM SMP boot.
+ */
+
+/dts-v1/;
+
+/ {
+	compatible = "riscv-virtio";
+	model = "riscv-virtio,qemu";
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	chosen {
+		bootargs = "earlycon=sbi console=ttyS0 loglevel=1";
+		stdout-path = "/uart@10000000";
+	};
+
+	memory@88000000 {
+		device_type = "memory";
+		reg = <0x0 0x88000000 0x0 0x10000000>;  /* 256MB */
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		timebase-frequency = <10000000>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "riscv";
+			reg = <0>;
+			riscv,isa = "rv64imafdc";
+			mmu-type = "riscv,sv39";
+			status = "okay";
+			cpu0_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "riscv";
+			reg = <1>;
+			riscv,isa = "rv64imafdc";
+			mmu-type = "riscv,sv39";
+			status = "okay";
+			cpu1_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+
+		cpu@2 {
+			device_type = "cpu";
+			compatible = "riscv";
+			reg = <2>;
+			riscv,isa = "rv64imafdc";
+			mmu-type = "riscv,sv39";
+			status = "okay";
+			cpu2_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+
+		cpu@3 {
+			device_type = "cpu";
+			compatible = "riscv";
+			reg = <3>;
+			riscv,isa = "rv64imafdc";
+			mmu-type = "riscv,sv39";
+			status = "okay";
+			cpu3_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+	};
+
+	uart@10000000 {
+		compatible = "ns16550a";
+		reg = <0x0 0x10000000 0x0 0x100>;
+		clock-frequency = <3686400>;
+	};
+};

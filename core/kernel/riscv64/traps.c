@@ -39,6 +39,9 @@ static inline prtos_u64_t read_time(void) {
 extern prtos_s32_t do_hypercall(prtos_u32_t hc_nr, prtos_u64_t a1, prtos_u64_t a2,
                                 prtos_u64_t a3, prtos_u64_t a4, prtos_u64_t a5);
 
+/* Forward declaration of SBI emulation handler */
+extern int prtos_sbi_handle(struct cpu_user_regs *regs);
+
 /*
  * riscv64_trap_handler - main C trap handler
  *
@@ -58,6 +61,15 @@ void riscv64_trap_handler(struct cpu_user_regs *regs) {
         case 1:  /* Supervisor software interrupt (IPI) */
             /* Clear SSIP */
             __asm__ __volatile__("csrc sip, %0" : : "r"(1UL << 1));
+            /* If current guest has a pending VSSIP from SBI IPI, inject it */
+            {
+                local_processor_t *info = GET_LOCAL_PROCESSOR();
+                kthread_t *k = info->sched.current_kthread;
+                if (k && k->ctrl.g && k->ctrl.g->karch.vssip_pending) {
+                    k->ctrl.g->karch.vssip_pending = 0;
+                    __asm__ __volatile__("csrs hvip, %0" :: "r"(1UL << 2));
+                }
+            }
             {
                 cpu_ctxt_t ctxt;
                 ctxt.irq_nr = 1;
@@ -70,6 +82,16 @@ void riscv64_trap_handler(struct cpu_user_regs *regs) {
             /* Clear timer interrupt pending */
             __asm__ __volatile__("csrc sip, %0" : : "r"(1UL << 5));
 
+            /* Debug: periodic guest PC dump */
+            {
+                static unsigned long tmr_cnt = 0;
+                tmr_cnt++;
+                if (tmr_cnt == 1 || tmr_cnt == 100 || tmr_cnt == 1000 ||
+                    tmr_cnt == 10000 || tmr_cnt == 100000 || (tmr_cnt % 500000 == 0)) {
+                    kprintf("[TMR] cpu%d #%lu sepc=0x%llx\n", GET_CPU_ID(), tmr_cnt, regs->sepc);
+                }
+            }
+
             /* If a guest partition uses SBI timer (hw-virt), inject VSTIP
              * (Virtual Supervisor Timer Interrupt Pending) via hvip so the
              * guest's vstvec handler is invoked on sret. The guest will
@@ -79,6 +101,12 @@ void riscv64_trap_handler(struct cpu_user_regs *regs) {
                 kthread_t *k = info->sched.current_kthread;
                 if (k && k->ctrl.g && k->ctrl.g->karch.guest_timer_active) {
                     __asm__ __volatile__("csrs hvip, %0" :: "r"(1UL << 6));
+                }
+                /* Also re-inject any pending VSSIP that may have been missed
+                 * by the IPI handler due to timing races. */
+                if (k && k->ctrl.g && k->ctrl.g->karch.vssip_pending) {
+                    k->ctrl.g->karch.vssip_pending = 0;
+                    __asm__ __volatile__("csrs hvip, %0" :: "r"(1UL << 2));
                 }
             }
 
@@ -108,9 +136,14 @@ void riscv64_trap_handler(struct cpu_user_regs *regs) {
         case 10: { /* ECALL from VS-mode (guest hypercall via H-extension) */
             prtos_u32_t hc_nr;
             prtos_s32_t result;
-
             /* Advance sepc past the ecall instruction (4 bytes) */
             regs->sepc += 4;
+
+            /* Check for new-style SBI extensions (a7 != 0 means extension ID).
+             * Route to SBI emulation handler for HSM, IPI, RFENCE, BASE, TIME. */
+            if (regs->a7 != 0 && prtos_sbi_handle(regs)) {
+                break;
+            }
 
             /* Check for SBI legacy set_timer call (a7 == 0, a0 = timer value):
              * Native (unmodified) guests use SBI ecalls for timer.
@@ -183,9 +216,14 @@ void riscv64_trap_handler(struct cpu_user_regs *regs) {
             do_hyp_trap(&trap_ctxt);
             break;
         }
+        case 22: { /* Virtual instruction exception */
+            /* Emulate: skip the instruction (4 bytes) */
+            regs->sepc += 4;
+            break;
+        }
         default:
             /* Unhandled trap - system panic */
-            kprintf("[TRAP] scause=0x%llx sepc=0x%llx stval=0x%llx\n",
+            kprintf("[TRAP] UNHANDLED scause=0x%llx sepc=0x%llx stval=0x%llx\n",
                     scause, regs->sepc, regs->stval);
             halt_system();
             break;

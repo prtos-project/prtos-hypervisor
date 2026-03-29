@@ -17,7 +17,7 @@
         </ProcessorTable>
         <Devices>
             <Uart name="Uart" id="0" baudRate="115200" />
-            <MemoryBlock name="logBook" start="0x84300000" size="256KB" />
+            <MemoryBlock name="logBook" start="0x87300000" size="256KB" />
         </Devices>
     </HwDescription>
 

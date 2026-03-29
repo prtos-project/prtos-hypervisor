@@ -65,6 +65,13 @@ struct kthread_arch {
 
     /* Guest SBI timer emulation (for HW-virt partitions) */
     prtos_u64_t guest_timer_active;  /* Guest has pending SBI timer */
+
+    /* SBI IPI emulation: pending virtual supervisor software interrupt */
+    prtos_u64_t vssip_pending;
+
+    /* SBI HSM emulation (for HW-virt multi-vCPU partitions) */
+    prtos_u64_t hsm_entry;    /* Entry point set by SBI HART_START */
+    prtos_u64_t hsm_opaque;   /* Opaque value passed as a1 to started hart */
 };
 
 #endif

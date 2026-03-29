@@ -73,8 +73,11 @@ _trap_entry:
     j _trap_save_regs
 
 _trap_from_guest:
-    /* Trap from VS-mode: sp = kernel sp (from sscratch), guest sp in sscratch */
-    /* sp is now the hypervisor kernel stack */
+    /* Trap from VS-mode: sp = host stack with host_tp slot at top (from sscratch).
+     * sscratch = guest sp.  Skip past the 8-byte host_tp slot so that
+     * _trap_save_regs sees the original host sp. Host tp will be restored
+     * after all guest registers (including guest tp) are saved. */
+    addi sp, sp, 8
     /* Fall through to save regs */
 
 _trap_save_regs:
@@ -132,6 +135,14 @@ _trap_save_regs:
     csrr t0, hstatus
     sd t0,   REG_HSTATUS(sp)
 
+    /* If trapped from VS-mode (hstatus.SPV=1), restore host tp from the
+     * slot saved at (host_sp - 8) = sp + REG_SIZE - 8.  For HS-mode traps
+     * tp is already the host's value, so skip this. */
+    andi t1, t0, (1 << 7)
+    beqz t1, 1f
+    ld tp, (REG_SIZE - 8)(sp)
+1:
+
     /* Call C trap handler: riscv64_trap_handler(regs) */
     mv a0, sp
     call riscv64_trap_handler
@@ -148,8 +159,11 @@ _trap_save_regs:
     andi t0, t0, (1 << 7)
     beqz t0, _trap_restore_hs
 
-    /* Returning to VS-mode: set sscratch = current kernel sp (after frame cleanup) */
-    addi t0, sp, REG_SIZE
+    /* Returning to VS-mode: save host tp to the stack slot and set
+     * sscratch so that the next trap entry finds host_tp at (sscratch). */
+    addi t0, sp, REG_SIZE       /* t0 = host_sp (above register frame) */
+    sd tp, -8(t0)               /* Save host tp at host_sp - 8 */
+    addi t0, t0, -8             /* t0 = host_sp - 8 (slot address) */
     csrw sscratch, t0
     j _trap_restore_regs
 

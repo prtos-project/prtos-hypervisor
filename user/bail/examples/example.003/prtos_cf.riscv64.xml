@@ -17,8 +17,8 @@
         </ProcessorTable>
         <Devices>
             <Uart id="0" baudRate="115200" name="Uart" />
-            <MemoryBlock name="MemDisk0" start="0x84300000" size="256KB" />
-            <MemoryBlock name="MemDisk1" start="0x84400000" size="256KB" />
+            <MemoryBlock name="MemDisk0" start="0x87300000" size="256KB" />
+            <MemoryBlock name="MemDisk1" start="0x87400000" size="256KB" />
         </Devices>
     </HwDescription>
 
