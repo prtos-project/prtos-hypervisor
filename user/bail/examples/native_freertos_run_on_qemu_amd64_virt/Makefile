@@ -25,16 +25,22 @@ PORT_COMP_TARG = GCC/X86_64_BIT/
 OBJDIR = obj/
 
 # FreeRTOS source base directory
-FREERTOS_SRC = ./FreeRTOS/Source/
+# Reuse the full FreeRTOS kernel tree from the aarch64 native demo.
+# This amd64 demo only keeps amd64-specific port and app files locally.
+ORIG = ../native_freertos_run_on_qemu_a57_virt
+FREERTOS_SRC = $(ORIG)/FreeRTOS/Source/
 
 # Directory with memory management source files
 FREERTOS_MEMMANG_SRC = $(FREERTOS_SRC)portable/MemMang/
 
 # Directory with platform specific source files
-FREERTOS_PORT_SRC = $(FREERTOS_SRC)portable/$(PORT_COMP_TARG)
+FREERTOS_PORT_SRC = ./FreeRTOS/Source/portable/$(PORT_COMP_TARG)
 
-# Directory with Application source files
+# Directory with Application source files (amd64-specific)
 APP_SRC = ./FreeRTOS/Demo/X86_64/
+
+# Shared app sources (common FreeRTOS demo helpers)
+APP_SHARED_SRC = $(ORIG)/FreeRTOS/Demo/CORTEX_A57_64-bit/
 
 # FreeRTOS core objects
 FREERTOS_OBJS = queue.o list.o tasks.o timers.o
@@ -91,6 +97,10 @@ $(OBJDIR)%.o : $(APP_SRC)%.S
 
 # Application (C)
 $(OBJDIR)%.o : $(APP_SRC)%.c
+	$(CC) $(CFLAG) $(CFLAGS) $(INC_FLAGS) $< $(OFLAG) $@
+
+# Shared application helpers (example.c, nostdlib.c, printf-stdarg.c)
+$(OBJDIR)%.o : $(APP_SHARED_SRC)%.c
 	$(CC) $(CFLAG) $(CFLAGS) $(INC_FLAGS) $< $(OFLAG) $@
 
 run:
