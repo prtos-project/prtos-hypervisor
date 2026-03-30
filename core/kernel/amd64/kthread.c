@@ -18,11 +18,18 @@
 #include <vmmap.h>
 #include <arch/segments.h>
 #include <arch/prtos_def.h>
+#ifdef CONFIG_VMX
+#include <arch/vmx.h>
+#endif
 
 void switch_kthread_arch_pre(kthread_t *new, kthread_t *current) {
     if (current->ctrl.g) {
         current->ctrl.g->karch.ptd_level_1 = save_cr3();
         current->ctrl.g->karch.cr0 = save_cr0();
+#ifdef CONFIG_VMX
+        if (current->ctrl.g->karch.vmx)
+            vmx_switch_pre(current);
+#endif
     }
 
     if (new->ctrl.g) {
@@ -43,13 +50,35 @@ void switch_kthread_arch_pre(kthread_t *new, kthread_t *current) {
     } else {
         load_hyp_page_table();
     }
+#ifdef CONFIG_VMX
+    /* When VMX root mode is active, CR0 must satisfy VMX fixed bits.
+     * Ensure mandatory bits (e.g., NE, ET) are preserved alongside PE|PG. */
+    if (vmx_is_enabled()) {
+        prtos_u64_t cr0 = _CR0_PE | _CR0_PG;
+        cr0 |= (prtos_u32_t)read_msr(MSR_IA32_VMX_CR0_FIXED0);
+        load_cr0(cr0);
+    } else
+#endif
     load_cr0(_CR0_PE | _CR0_PG);
 }
 
 void switch_kthread_arch_post(kthread_t *current) {
     if (current->ctrl.g) {
-        load_cr0(current->ctrl.g->karch.cr0);
-        load_part_page_table(current);
+#ifdef CONFIG_VMX
+        /* VMX partitions: CR0/CR3 are managed in VMCS, not loaded directly.
+         * Also ensure host CR0 satisfies VMX fixed bits. */
+        if (current->ctrl.g->karch.vmx) {
+            prtos_u64_t cr0 = current->ctrl.g->karch.cr0;
+            cr0 |= (prtos_u32_t)read_msr(MSR_IA32_VMX_CR0_FIXED0);
+            load_cr0(cr0);
+            vmx_switch_post(current);
+            /* Don't load partition page table - VMX guest uses EPT */
+        } else
+#endif
+        {
+            load_cr0(current->ctrl.g->karch.cr0);
+            load_part_page_table(current);
+        }
     }
 }
 
@@ -108,6 +137,11 @@ void setup_kthread_arch(kthread_t *k) {
     } else
         disable_tss_io_map(&k->ctrl.g->karch.tss);
     load_tss_desc(&k->ctrl.g->karch.gdt_table[TSS_SEL >> 3], &k->ctrl.g->karch.tss);
+
+#ifdef CONFIG_VMX
+    /* Initialize VMX pointer to NULL (para-virt by default) */
+    k->ctrl.g->karch.vmx = 0;
+#endif
 }
 
 void setup_pct_arch(partition_control_table_t *part_ctrl_table, kthread_t *k) {

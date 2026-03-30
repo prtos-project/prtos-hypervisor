@@ -12,6 +12,9 @@
 #include <stdc.h>
 #include <physmm.h>
 #include <arch/pic.h>
+#ifdef CONFIG_VMX
+#include <arch/vmx.h>
+#endif
 
 volatile prtos_s8_t local_info_init = 0;
 
@@ -49,6 +52,9 @@ void __VBOOT setup_arch_common(void) {
 #endif
     cpu_khz = get_cpu_khz();
     init_pic(0x20, 0x28);
+#ifdef CONFIG_VMX
+    vmx_init();
+#endif
 #ifdef CONFIG_SMP
     SET_NRCPUS(init_smp());
     setup_apic_common();

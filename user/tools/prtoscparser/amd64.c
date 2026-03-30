@@ -128,6 +128,43 @@ void arch_mmu_rsv_mem(FILE *out_file) {
     rsv_block((((PRTOS_VMAPEND - end) + 1) >> PD_SHIFT) * PTDL2SIZE, PTDL2SIZE, "canon-ptdL2");
 }
 
+#ifdef CONFIG_VMX
+#include <prtos_inc/linkage.h>
+#include <prtos_inc/arch/asm_offsets.h>
+
+void arch_vmx_rsv_mem(FILE *out_file) {
+    int i;
+    (void)out_file;
+
+    /* VMXON region: one page per CPU */
+    for (i = 0; i < (int)prtos_conf.hpv.num_of_cpus; i++)
+        rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX VMXON region");
+
+    /* MSR bitmap: one page shared across all VMX partitions */
+    rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX MSR bitmap");
+
+    /* Per hw-virt partition: detect using same heuristic as kernel (mem >= 64MB) */
+    for (i = 0; i < prtos_conf.num_of_partitions; i++) {
+        prtos_u64_t total_mem = 0;
+        int ma;
+        for (ma = 0; ma < (int)prtos_conf_partition_table[i].num_of_physical_memory_areas; ma++)
+            total_mem += prtos_conf_mem_area_table[prtos_conf_partition_table[i].physical_memory_areas_offset + ma].size;
+        if (total_mem >= (64ULL * 1024 * 1024)) {
+            /* VMCS region: 1 page */
+            rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX VMCS region");
+            /* EPT PML4: 1 page */
+            rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PML4");
+            /* EPT PDPT: 1 page */
+            rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PDPT");
+            /* EPT PD: 1 page */
+            rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PD");
+            /* vmx_state struct */
+            rsv_block(_STRUCT_VMX_STATE_SIZEOF, ALIGNMENT, "VMX state");
+        }
+    }
+}
+#endif
+
 void arch_loader_rsv_mem(FILE *out_file) {
     prtos_s32_t i;
     for (i = 0; i < prtos_conf.num_of_partitions; i++) {

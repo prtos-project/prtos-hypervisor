@@ -3,6 +3,13 @@ mainmenu "PRTOS Configuration"
 config amd64
         def_bool y
 
+config VMX
+        bool "Intel VT-x hardware-assisted virtualization"
+        default y
+        help
+        Enable Intel VT-x (VMX) support for running unmodified guest
+        operating systems in hardware-isolated partitions.
+
 config HWIRQ_PRIO_FBS
         def_bool y
 

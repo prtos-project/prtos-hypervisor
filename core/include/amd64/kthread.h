@@ -19,6 +19,10 @@
 #error Kernel file, do not include.
 #endif
 
+#ifdef CONFIG_VMX
+struct vmx_state;  /* forward declaration */
+#endif
+
 struct kthread_arch {
     prtos_u64_t ptd_level_1;
     prtos_u64_t cr0;
@@ -30,6 +34,9 @@ struct kthread_arch {
     struct x86_desc_reg idtr;
     struct x86_gate hyp_idt_table[IDT_ENTRIES];
     struct io_tss tss;
+#ifdef CONFIG_VMX
+    struct vmx_state *vmx;  /* non-NULL for hw-virt partitions */
+#endif
 };
 
 #endif

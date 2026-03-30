@@ -21,6 +21,7 @@
 #define _CR0_EM (1 << 2)
 #define _CR0_TS (1 << 3)
 #define _CR0_ET (1 << 4)
+#define _CR0_NE (1 << 5)
 #define _CR0_WP (1 << 16)
 #define _CR0_AM (1 << 18)
 #define _CR0_NW (1 << 29)

@@ -488,6 +488,13 @@ static void generate_rsv_mem(FILE *out_file) {
                 break;
         }
 
+#ifdef CONFIG_VMX
+    {
+        extern void arch_vmx_rsv_mem(FILE *out_file);
+        arch_vmx_rsv_mem(out_file);
+    }
+#endif
+
     print_blocks(out_file);
 }
 

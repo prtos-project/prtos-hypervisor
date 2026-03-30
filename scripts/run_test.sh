@@ -28,6 +28,8 @@ ALL_CASES=(
     "freertos_hw_virt:0:30:aarch64"
     "freertos_para_virt_riscv:1:20:riscv64"
     "freertos_hw_virt_riscv:0:30:riscv64"
+    "freertos_para_virt_amd64:1:20:amd64"
+    "freertos_hw_virt_amd64:0:30:amd64"
     "linux:0:180:aarch64"
     "linux_4vcpu_1partion:0:360:aarch64"
     "linux_4vcpu_1partion_riscv64:0:360:riscv64"
@@ -245,6 +247,68 @@ function run_test_freertos_hw_virt_riscv() {
         return 0
     else
         echo -e "${RED}Check freertos_hw_virt_riscv FAILED${NC} (expected >=5 'Stop' lines, got ${stop_count})"
+        cat "${output_file}" 2>/dev/null || true
+        return 1
+    fi
+}
+
+# Run the FreeRTOS hw_virt_amd64 test case (amd64 only, requires KVM)
+# Uses Intel VT-x/VMX with EPT to run unmodified FreeRTOS.
+function run_test_freertos_hw_virt_amd64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/freertos_hw_virt_amd64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    # KVM is required for VMX instructions (QEMU TCG cannot emulate VMX).
+    # If /dev/kvm is not directly writable, try activating the kvm group
+    # via "sg kvm" (works when the user is in the kvm group in /etc/group
+    # but the current session hasn't picked it up yet).
+    local kvm_ok=0
+    if test -w /dev/kvm 2>/dev/null; then
+        kvm_ok=1
+    elif grep -q "^kvm:.*\b$(whoami)\b" /etc/group 2>/dev/null; then
+        # User is in kvm group but session doesn't have it active
+        if sg kvm -c "test -w /dev/kvm" 2>/dev/null; then
+            kvm_ok=2  # need sg kvm wrapper
+        fi
+    fi
+
+    if [[ ${kvm_ok} -eq 0 ]]; then
+        echo -e "${YELLOW}KVM not accessible (/dev/kvm) - cannot run freertos_hw_virt_amd64${NC}"
+        echo -e "${YELLOW}  To enable: sudo usermod -aG kvm \$(whoami) && newgrp kvm${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/freertos_hw_virt_amd64 [${ARCH}]"
+    cd "${test_dir}"
+
+    local output_file="${test_dir}/freertos_hw_virt_amd64.output"
+    rm -f "${output_file}"
+
+    # hw-virt requires KVM for VMX instructions
+    if [[ ${kvm_ok} -eq 2 ]]; then
+        sg kvm -c "make run.amd64.kvm.nographic" > "${output_file}" 2>&1 &
+    else
+        make run.amd64.kvm.nographic > "${output_file}" 2>&1 &
+    fi
+    local qemu_pid=$!
+
+    sleep 30
+
+    killall -9 "${QEMU}" 2>/dev/null
+    wait ${qemu_pid} 2>/dev/null
+
+    # Native FreeRTOS prints "Timer:XXXXX Stop" when each of 5 timers completes.
+    local stop_count
+    stop_count=$(grep -c "Stop$" "${output_file}" 2>/dev/null) || stop_count=0
+
+    if [[ ${stop_count} -ge 5 ]]; then
+        echo -e "${GREEN}Check freertos_hw_virt_amd64 PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check freertos_hw_virt_amd64 FAILED${NC} (expected >=5 'Stop' lines, got ${stop_count})"
         cat "${output_file}" 2>/dev/null || true
         return 1
     fi
@@ -724,6 +788,10 @@ function run_test() {
         run_test_freertos_hw_virt_riscv
         return $?
     fi
+    if [[ "${case_name}" == "freertos_hw_virt_amd64" ]]; then
+        run_test_freertos_hw_virt_amd64
+        return $?
+    fi
     if [[ "${case_name}" == "mix_os_demo1" ]]; then
         run_test_mix_os_demo1
         return $?
@@ -819,6 +887,8 @@ function builder_to_case() {
         check-freertos_hw_virt) echo "freertos_hw_virt" ;;
         check-freertos_para_virt_riscv) echo "freertos_para_virt_riscv" ;;
         check-freertos_hw_virt_riscv) echo "freertos_hw_virt_riscv" ;;
+        check-freertos_para_virt_amd64) echo "freertos_para_virt_amd64" ;;
+        check-freertos_hw_virt_amd64) echo "freertos_hw_virt_amd64" ;;
         check-linux)          echo "linux" ;;
         check-linux_4vcpu_1partion) echo "linux_4vcpu_1partion" ;;
         check-linux_4vcpu_1partion_riscv64) echo "linux_4vcpu_1partion_riscv64" ;;

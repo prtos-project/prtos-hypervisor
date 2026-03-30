@@ -82,6 +82,16 @@ run.amd64.nographic:
 	@$(MAKE) resident_sw.iso
 	@qemu-system-x86_64 -nographic -m 512 -cdrom resident_sw.iso -serial mon:stdio -boot d -smp 4
 
+run.amd64.kvm:
+	@$(MAKE) clean
+	@$(MAKE) resident_sw.iso
+	@qemu-system-x86_64 -enable-kvm -cpu host -m 512 -cdrom resident_sw.iso -serial stdio -boot d -smp 4
+
+run.amd64.kvm.nographic:
+	@$(MAKE) clean
+	@$(MAKE) resident_sw.iso
+	@qemu-system-x86_64 -enable-kvm -cpu host -nographic -m 512 -cdrom resident_sw.iso -serial mon:stdio -boot d -smp 4
+
 run: run.$(ARCH)
 	
-.PHONY: run run.aarch64 run.aarch64.debug run.riscv64 run.x86 run.x86.nographic run.amd64 run.amd64.nographic
+.PHONY: run run.aarch64 run.aarch64.debug run.riscv64 run.x86 run.x86.nographic run.amd64 run.amd64.nographic run.amd64.kvm run.amd64.kvm.nographic

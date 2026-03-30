@@ -110,6 +110,14 @@ void start_up_guest(prtos_address_t entry) {
     /* Load partition CR3 right before entering user mode. On amd64,
      * CR3 is not loaded during switch_kthread_arch_pre to avoid page
      * faults during CONTEXT_SWITCH with the partition's 4-level tables. */
+#ifdef CONFIG_VMX
+    /* For hw-virt partitions, enter the VMX guest loop instead of ring-3 */
+    if (k->ctrl.g->karch.vmx) {
+        extern void vmx_run_guest(void *kthread_ptr) __attribute__((noreturn));
+        vmx_run_guest(k);
+        /* noreturn */
+    }
+#endif
     load_part_page_table(k);
 #endif
     JMP_PARTITION(entry, k);
@@ -259,6 +267,25 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         k->ctrl.g->karch.hsm_entry = 0;
         k->ctrl.g->karch.hsm_opaque = 0;
 #endif
+#ifdef CONFIG_VMX
+        /* Detect hw-virt partitions by memory size (same heuristic as aarch64 VGIC).
+         * Partitions with >= 64MB memory are treated as hw-virt guests. */
+        if (i == 0) {
+            struct prtos_conf_memory_area *mem_areas =
+                &prtos_conf_phys_mem_area_table[cfg->physical_memory_areas_offset];
+            prtos_u64_t total_mem = 0;
+            prtos_s32_t ma;
+            for (ma = 0; ma < (prtos_s32_t)cfg->num_of_physical_memory_areas; ma++)
+                total_mem += mem_areas[ma].size;
+            if (total_mem >= (64ULL * 1024 * 1024)) {
+                extern int vmx_setup_partition(void *kthread_ptr);
+                vmx_setup_partition(k);
+            }
+        } else if (p->kthread[0]->ctrl.g->karch.vmx) {
+            /* Share VMX state with vCPU 0 (single VMCS per partition for now) */
+            k->ctrl.g->karch.vmx = p->kthread[0]->ctrl.g->karch.vmx;
+        }
+#endif
     }
 
     return p;
@@ -316,18 +343,30 @@ void reset_kthread(kthread_t *k, prtos_address_t ptd_level_1, prtos_address_t en
     struct phys_page *page = NULL;
     prtos_address_t vptd;
 
-    vptd = enable_by_pass_mmu(ptd_level_1, get_partition(k), &page);
-
-    setup_ptd_level_1_table((prtos_word_t *)vptd, k);
-
-    disable_by_pass_mmu(page);
+#ifdef CONFIG_VMX
+    if (k->ctrl.g->karch.vmx) {
+        /* VMX hw-virt: EPT handles memory mapping, skip guest page tables */
+        vptd = 0;
+    } else
+#endif
+    {
+        vptd = enable_by_pass_mmu(ptd_level_1, get_partition(k), &page);
+        setup_ptd_level_1_table((prtos_word_t *)vptd, k);
+        disable_by_pass_mmu(page);
+    }
 
     setup_pct(k->ctrl.g->part_ctrl_table, k, get_partition(k)->cfg);
     k->ctrl.g->part_ctrl_table->reset_counter++;
     k->ctrl.g->part_ctrl_table->reset_status = status;
 #if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
+#ifdef CONFIG_VMX
+    if (!k->ctrl.g->karch.vmx) {
+#endif
     k->ctrl.g->karch.ptd_level_1 = ptd_level_1;
     k->ctrl.g->part_ctrl_table->arch._ARCH_PTDL1_REG = ptd_level_1;
+#ifdef CONFIG_VMX
+    }
+#endif
 #endif
 
 #ifdef CONFIG_AUDIT_EVENTS
@@ -354,6 +393,9 @@ void reset_kthread(kthread_t *k, prtos_address_t ptd_level_1, prtos_address_t en
     } else {
         set_kthread_flags(k, KTHREAD_READY_F);
         clear_kthread_flags(k, KTHREAD_HALTED_F);
+#ifdef CONFIG_VMX
+        if (!k->ctrl.g->karch.vmx)
+#endif
         load_part_page_table(k);
         start_up_guest(entry_point);
     }
@@ -377,6 +419,14 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
     /* AArch64/RISC-V: physmm functions are not implemented; skip physical validation. */
     ptd_level_1 = 0;
 #else
+#ifdef CONFIG_VMX
+    /* VMX hw-virt: image already copied to partition area by vmx_setup_partition.
+     * Skip container-based header validation. */
+    if (p->kthread[0]->ctrl.g->karch.vmx) {
+        /* nothing to validate from container */
+    } else
+#endif
+    {
     if (!phys_mm_find_area(prtos_conf_boot_part->hdr_phys_addr, sizeof(struct prtos_image_hdr), p, 0)) return -1;
 
     prtos_image_hdr = (struct prtos_image_hdr *)prtos_conf_boot_part->hdr_phys_addr;
@@ -392,6 +442,7 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
     if (read_by_pass_mmu_word(&prtos_image_hdr->compilation_prtos_api_version) !=
         PRTOS_SET_VERSION(PRTOS_API_VERSION, PRTOS_API_SUBVERSION, PRTOS_API_REVISION))
         return -1;
+    }
 
     if (info->sched.current_kthread == p->kthread[0]) load_hyp_page_table();
 
@@ -405,12 +456,23 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
 #endif
 
     phys_mm_reset_part(p);
-    ptd_level_1 = setup_page_table(p, read_by_pass_mmu_word(&prtos_image_hdr->page_table), read_by_pass_mmu_word(&prtos_image_hdr->page_table_size));
-    if (ptd_level_1 == ~0) {
-#ifdef CONFIG_amd64
-        load_cr3(_saved_cr3);
+#ifdef CONFIG_VMX
+    /* VMX hw-virt partitions use EPT - skip guest page table creation.
+     * image_start is set to the partition physical area start (where the
+     * image was copied by vmx_setup_partition). */
+    if (p->kthread[0]->ctrl.g->karch.vmx) {
+        ptd_level_1 = 0;
+        p->image_start = prtos_conf_phys_mem_area_table[p->cfg->physical_memory_areas_offset].start_addr;
+    } else
 #endif
-        return -1;
+    {
+        ptd_level_1 = setup_page_table(p, read_by_pass_mmu_word(&prtos_image_hdr->page_table), read_by_pass_mmu_word(&prtos_image_hdr->page_table_size));
+        if (ptd_level_1 == ~0) {
+#ifdef CONFIG_amd64
+            load_cr3(_saved_cr3);
+#endif
+            return -1;
+        }
     }
 #endif
 
@@ -447,7 +509,12 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
     load_cr3(_saved_cr3);
 #endif
 
-    if (info->sched.current_kthread == p->kthread[0]) load_part_page_table(p->kthread[0]);
+    if (info->sched.current_kthread == p->kthread[0]) {
+#ifdef CONFIG_VMX
+        if (!p->kthread[0]->ctrl.g->karch.vmx)
+#endif
+        load_part_page_table(p->kthread[0]);
+    }
 
     return 0;
 }

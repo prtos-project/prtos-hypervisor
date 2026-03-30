@@ -23,6 +23,9 @@
 #include <logstream.h>
 #include <physmm.h>
 #include <local.h>
+#ifdef CONFIG_VMX
+#include <arch/vmx.h>
+#endif
 
 static inline void generate_offsets(void) {
     // local_processor_t
@@ -75,6 +78,9 @@ static inline void generate_offsets(void) {
     DEFINE2(local_time_t, sizeof(local_time_t), );
 #ifdef CONFIG_SMP
     DEFINE2(local_processor_t, sizeof(local_processor_t), );
+#endif
+#ifdef CONFIG_VMX
+    DEFINE2(struct_vmx_state, sizeof(struct vmx_state), );
 #endif
 }
 
