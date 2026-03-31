@@ -22,8 +22,10 @@
 #include <arch/asm.h>
 #include <arch/prtos_def.h>
 
-#ifdef CONFIG_AARCH64
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
 extern void setup_stage2_mmu(kthread_t *k);
+#endif
+#ifdef CONFIG_AARCH64
 #include "aarch64/prtos_vgic.h"
 #endif
 
@@ -370,7 +372,10 @@ void reset_kthread(kthread_t *k, prtos_address_t ptd_level_1, prtos_address_t en
 #endif
 
 #ifdef CONFIG_AUDIT_EVENTS
-    raise_audit_event(TRACE_SCHED_MODULE, AUDIT_SCHED_VCPU_RESET, 1, &k->ctrl.g->id);
+    {
+        prtos_word_t _audit_id = k->ctrl.g->id;
+        raise_audit_event(TRACE_SCHED_MODULE, AUDIT_SCHED_VCPU_RESET, 1, &_audit_id);
+    }
 #endif
     if (k != info->sched.current_kthread) {
         /* setup_kstack MUST complete before making the kthread schedulable
@@ -405,7 +410,9 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
     extern void reset_part_ports(partition_t * p);
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     struct prtos_conf_boot_part *prtos_conf_boot_part;
-    struct prtos_image_hdr *prtos_image_hdr;
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
+    struct prtos_image_hdr *prtos_image_hdr = 0;
+#endif
     prtos_address_t ptd_level_1;
 
     // All the vCPUs are halted

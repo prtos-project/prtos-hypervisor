@@ -53,16 +53,20 @@
 
 /* ---- Secondary proc-based VM-execution controls ---- */
 #define SECONDARY_EXEC_ENABLE_EPT     (1U << 1)
+#define SECONDARY_EXEC_ENABLE_RDTSCP  (1U << 3)
 #define SECONDARY_EXEC_UNRESTRICTED   (1U << 7)
 
 /* ---- VM-exit controls ---- */
 #define VM_EXIT_HOST_ADDR_SPACE_SIZE  (1U << 9)
 #define VM_EXIT_ACK_INTR_ON_EXIT     (1U << 15)
+#define VM_EXIT_SAVE_IA32_EFER       (1U << 20)
+#define VM_EXIT_LOAD_IA32_EFER       (1U << 21)
 #define VM_EXIT_SAVE_PREEMPT_TIMER   (1U << 22)
 
 /* ---- VM-entry controls ---- */
-#define VM_ENTRY_IA32E_MODE           (1U << 9)
 #define VM_ENTRY_LOAD_DEBUG_CTLS      (1U << 2)
+#define VM_ENTRY_IA32E_MODE           (1U << 9)
+#define VM_ENTRY_LOAD_IA32_EFER       (1U << 15)
 
 /* ---- VMCS field encodings ---- */
 /* 16-bit guest-state */
@@ -260,6 +264,7 @@ struct vpit_state {
     prtos_u8_t  latch_state;  /* byte selection: 0=lobyte, 1=hibyte */
     prtos_u8_t  access;       /* 1=lobyte, 2=hibyte, 3=lo+hi */
     prtos_u8_t  write_lsb;    /* 1 if LSB already written (for lo+hi access) */
+    prtos_u8_t  read_lsb;     /* 1 if LSB already read (for lo+hi read) */
     prtos_u64_t next_tick_us; /* next tick time in microseconds */
     prtos_u32_t period_us;    /* period in microseconds */
     prtos_u8_t  active;       /* timer is running */
@@ -274,17 +279,23 @@ struct vpic_state {
     prtos_u8_t  icw_step[2];   /* ICW initialization step (0=idle, 1-4) */
     prtos_u8_t  icw4[2];       /* ICW4 value */
     prtos_u8_t  elcr[2];       /* edge/level control */
+    prtos_u8_t  read_isr[2];   /* OCW3: 1=read ISR, 0=read IRR */
 };
 
 /* Virtual 16550 UART */
 struct vuart_state {
     prtos_u8_t  thr;           /* transmit holding register */
     prtos_u8_t  ier;           /* interrupt enable register */
+    prtos_u8_t  fcr;           /* FIFO control register */
     prtos_u8_t  lcr;           /* line control register */
     prtos_u8_t  mcr;           /* modem control register */
     prtos_u8_t  dll;           /* divisor latch low */
     prtos_u8_t  dlm;           /* divisor latch high */
     prtos_u8_t  scratch;
+    prtos_u8_t  thr_empty;     /* THR empty flag for interrupt generation */
+    prtos_u8_t  rx_buf[64];    /* receive buffer (ring) */
+    prtos_u8_t  rx_head;       /* ring head (write pointer) */
+    prtos_u8_t  rx_tail;       /* ring tail (read pointer) */
 };
 
 /* VMX state per-partition */
@@ -310,6 +321,7 @@ struct vmx_state {
     struct vpit_state  vpit;
     struct vpic_state  vpic;
     struct vuart_state vuart;
+    prtos_u8_t port61;         /* Speaker/PIT gate register (port 0x61) */
 };
 
 /* Register indices in guest_regs[] */
@@ -377,6 +389,7 @@ static inline int vmx_vmxon(prtos_u64_t *vmxon_region_phys) {
 
 /* ---- Function prototypes ---- */
 extern int vmx_init(void);
+extern int vmx_is_enabled(void);
 extern int vmx_setup_partition(void *kthread);
 extern void vmx_run_guest(void *kthread) __attribute__((noreturn));
 extern void vmx_switch_pre(void *old_kthread);

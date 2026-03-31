@@ -24,6 +24,9 @@
 
 extern void *memcpy(void *dest, const void *src, unsigned long n);
 
+/* Debug print - no-op by default, but RSW provides xprintf */
+#define DBG_PRINT(...) do {} while(0)
+
 void init_pef_parser() {}
 
 prtos_s32_t parse_pef_file(prtos_u8_t *img, struct pef_file *pef_file) {
@@ -41,13 +44,26 @@ prtos_s32_t parse_pef_file(prtos_u8_t *img, struct pef_file *pef_file) {
     pef_file->custom_file_table = (struct pef_custom_file *)(img + RWORD(pef_file->hdr->custom_file_table_offset));
     pef_file->image = img + RWORD(pef_file->hdr->image_offset);
     if (RWORD(pef_file->hdr->flags) & PEF_DIGEST) {
+        prtos_u32_t off_digest = OFFSETOF(struct pef_hdr, digest);
+        prtos_u32_t off_payload = OFFSETOF(struct pef_hdr, payload);
+        prtos_u_size_t fs = RWORD(pef_file->hdr->file_size);
+        prtos_u32_t len3 = (prtos_u32_t)(fs - off_payload);
+
+        DBG_PRINT("[PEF] off_digest=%d off_payload=%d file_size=%d len3=%d\n",
+                  off_digest, off_payload, (prtos_u32_t)fs, len3);
+
         for (e = 0; e < PRTOS_DIGEST_BYTES; e++) digest[e] = 0;
         digest_init(&digest_state);
-        digest_update(&digest_state, img, OFFSETOF(struct pef_hdr, digest));
+        digest_update(&digest_state, img, off_digest);
         digest_update(&digest_state, (prtos_u8_t *)digest, PRTOS_DIGEST_BYTES);
-        digest_update(&digest_state, &img[(prtos_u32_t)OFFSETOF(struct pef_hdr, payload)],
-                      RWORD(pef_file->hdr->file_size) - (prtos_u32_t)OFFSETOF(struct pef_hdr, payload));
+        digest_update(&digest_state, &img[off_payload], len3);
         digest_final(digest, &digest_state);
+
+        DBG_PRINT("[PEF] computed: ");
+        for (e = 0; e < PRTOS_DIGEST_BYTES; e++) DBG_PRINT("%x ", digest[e]);
+        DBG_PRINT("\n[PEF] expected: ");
+        for (e = 0; e < PRTOS_DIGEST_BYTES; e++) DBG_PRINT("%x ", pef_file->hdr->digest[e]);
+        DBG_PRINT("\n");
 
         for (e = 0; e < PRTOS_DIGEST_BYTES; e++) {
             if (digest[e] != pef_file->hdr->digest[e]) return PEF_UNMATCHING_DIGEST;

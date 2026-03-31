@@ -34,7 +34,7 @@
 #define PD_SHIFT 21
 #define PT_SHIFT 12
 
-#define PML4_INDEX(x) (((x) >> PML4_SHIFT) & 0x1FF)
+#define PML4_INDEX(x) ((((prtos_u64_t)(x)) >> PML4_SHIFT) & 0x1FF)
 #define PDPT_INDEX(x) (((x) >> PDPT_SHIFT) & 0x1FF)
 #define PD_INDEX(x) (((x) >> PD_SHIFT) & 0x1FF)
 #define PT_INDEX(x) (((x) >> PT_SHIFT) & 0x1FF)

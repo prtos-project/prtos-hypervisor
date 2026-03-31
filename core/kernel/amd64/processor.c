@@ -31,7 +31,6 @@ extern struct x86_desc early_gdt_table[];
 void _reset(prtos_address_t addr) {
     prtos_address_t *pd_table;
     prtos_address_t page;
-    extern prtos_address_t prtos_reserve_one_phys_page[];
     extern void _reset2(prtos_address_t);
 
     load_hyp_page_table();

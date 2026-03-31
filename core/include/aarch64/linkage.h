@@ -56,6 +56,7 @@
 #define PASTE_(a, b) a ## b
 #define PASTE(a, b) PASTE_(a, b)
 
+#undef __STR
 #define __STR(...) #__VA_ARGS__
 #define STR(...) __STR(__VA_ARGS__)
 

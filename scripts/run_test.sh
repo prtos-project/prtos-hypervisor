@@ -33,8 +33,10 @@ ALL_CASES=(
     "linux:0:180:aarch64"
     "linux_4vcpu_1partion:0:360:aarch64"
     "linux_4vcpu_1partion_riscv64:0:360:riscv64"
+    "linux_4vcpu_1partion_amd64:0:360:amd64"
     "mix_os_demo1:0:420:aarch64"
     "mix_os_demo_riscv64:0:420:riscv64"
+    "mix_os_demo_amd64:0:420:amd64"
 )
 
 # Colors for output
@@ -61,8 +63,10 @@ Commands:
                          linux (aarch64 only),
                          linux_4vcpu_1partion (aarch64 only),
                          linux_4vcpu_1partion_riscv64 (riscv64 only),
+                         linux_4vcpu_1partion_amd64 (amd64 only),
                          mix_os_demo1 (aarch64 only),
-                         mix_os_demo_riscv64 (riscv64 only)
+                         mix_os_demo_riscv64 (riscv64 only),
+                         mix_os_demo_amd64 (amd64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -765,6 +769,206 @@ PYTEST
     fi
 }
 
+# Run the Linux 4-vCPU test case (amd64 only, requires KVM)
+# Uses pexpect to boot Linux under PRTOS VMX, login (root/1234).
+function run_test_linux_4vcpu_1partion_amd64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/linux_4vcpu_1partion_amd64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    local kvm_ok=0
+    if test -w /dev/kvm 2>/dev/null; then
+        kvm_ok=1
+    elif grep -q "^kvm:.*\b$(whoami)\b" /etc/group 2>/dev/null; then
+        if sg kvm -c "test -w /dev/kvm" 2>/dev/null; then
+            kvm_ok=2
+        fi
+    fi
+
+    if [[ ${kvm_ok} -eq 0 ]]; then
+        echo -e "${YELLOW}KVM not accessible - cannot run linux_4vcpu_1partion_amd64${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/linux_4vcpu_1partion_amd64 [${ARCH}]"
+    cd "${test_dir}"
+
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check linux_4vcpu_1partion_amd64 FAILED${NC} (build error)"
+        return 1
+    fi
+
+    export KVM_OK=${kvm_ok}
+
+    python3 -u << 'PYTEST' 2>&1
+import pexpect, sys, time, os
+kvm_ok = int(os.environ.get('KVM_OK', '1'))
+sg_pre = "sg kvm -c '" if kvm_ok == 2 else ""
+sg_post = "'" if kvm_ok == 2 else ""
+cmd = (f"{sg_pre}qemu-system-x86_64 "
+       "-enable-kvm -cpu host "
+       "-m 512 -smp 4 "
+       "-nographic -no-reboot "
+       "-cdrom resident_sw.iso "
+       "-serial mon:stdio "
+       f"-boot d{sg_post}")
+child = pexpect.spawn('/bin/bash', ['-c', cmd],
+                      timeout=340, encoding='utf-8', codec_errors='replace')
+try:
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=120)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: login prompt not reached')
+        child.close(force=True); sys.exit(1)
+    time.sleep(3); child.sendline('root')
+    idx = child.expect(['assword', 'buildroot login:', pexpect.TIMEOUT], timeout=30)
+    if idx == 0:
+        time.sleep(1); child.sendline('1234')
+        idx2 = child.expect([r'[\$#] ', 'Login incorrect', pexpect.TIMEOUT], timeout=30)
+        if idx2 != 0:
+            print('LINUX_TEST_FAIL: login failed')
+            child.close(force=True); sys.exit(1)
+    elif idx == 1:
+        time.sleep(3); child.sendline('root')
+        idx = child.expect(['assword', pexpect.TIMEOUT], timeout=30)
+        if idx != 0:
+            print('LINUX_TEST_FAIL: no password prompt on retry')
+            child.close(force=True); sys.exit(1)
+        time.sleep(1); child.sendline('1234')
+        idx2 = child.expect([r'[\$#] ', pexpect.TIMEOUT], timeout=30)
+        if idx2 != 0:
+            print('LINUX_TEST_FAIL: login failed on retry')
+            child.close(force=True); sys.exit(1)
+    else:
+        print('LINUX_TEST_FAIL: no password prompt')
+        child.close(force=True); sys.exit(1)
+    time.sleep(1); child.sendline('uname -r')
+    idx = child.expect(['6\\.19', pexpect.TIMEOUT], timeout=10)
+    if idx != 0:
+        print('LINUX_TEST_FAIL: uname did not return expected kernel')
+        child.close(force=True); sys.exit(1)
+    print('Verification Passed')
+    child.close(force=True)
+except Exception as e:
+    print(f'LINUX_TEST_FAIL: {e}')
+    try: child.close(force=True)
+    except: pass
+    sys.exit(1)
+PYTEST
+
+    local rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        echo -e "${GREEN}Check linux_4vcpu_1partion_amd64 PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check linux_4vcpu_1partion_amd64 FAILED${NC}"
+        return 1
+    fi
+}
+
+# Run the Mixed-OS demo test (amd64 only, requires KVM)
+# FreeRTOS para-virt + Linux hw-virt under PRTOS VMX.
+function run_test_mix_os_demo_amd64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/mix_os_demo_amd64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    local kvm_ok=0
+    if test -w /dev/kvm 2>/dev/null; then
+        kvm_ok=1
+    elif grep -q "^kvm:.*\b$(whoami)\b" /etc/group 2>/dev/null; then
+        if sg kvm -c "test -w /dev/kvm" 2>/dev/null; then
+            kvm_ok=2
+        fi
+    fi
+
+    if [[ ${kvm_ok} -eq 0 ]]; then
+        echo -e "${YELLOW}KVM not accessible - cannot run mix_os_demo_amd64${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/mix_os_demo_amd64 [${ARCH}]"
+    cd "${test_dir}"
+
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check mix_os_demo_amd64 FAILED${NC} (build error)"
+        return 1
+    fi
+
+    export KVM_OK=${kvm_ok}
+
+    python3 -u << 'PYTEST' 2>&1
+import pexpect, sys, time, os
+kvm_ok = int(os.environ.get('KVM_OK', '1'))
+sg_pre = "sg kvm -c '" if kvm_ok == 2 else ""
+sg_post = "'" if kvm_ok == 2 else ""
+cmd = (f"{sg_pre}qemu-system-x86_64 "
+       "-enable-kvm -cpu host "
+       "-m 512 -smp 4 "
+       "-nographic -no-reboot "
+       "-cdrom resident_sw.iso "
+       "-serial mon:stdio "
+       f"-boot d{sg_post}")
+child = pexpect.spawn('/bin/bash', ['-c', cmd],
+                      timeout=400, encoding='utf-8', codec_errors='replace')
+try:
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=180)
+    if idx != 0:
+        print('MIX_OS_TEST_FAIL: login prompt not reached')
+        child.close(force=True); sys.exit(1)
+    boot_output = child.before if child.before else ''
+    rtos_found = 'RTOS' in boot_output
+    if not rtos_found:
+        print('MIX_OS_TEST_FAIL: no FreeRTOS output on serial')
+        child.close(force=True); sys.exit(1)
+    print('FreeRTOS serial output detected')
+    logged_in = False
+    for attempt in range(3):
+        time.sleep(3)
+        child.sendline('root')
+        idx = child.expect(['assword', 'buildroot login:', pexpect.TIMEOUT], timeout=30)
+        if idx == 0:
+            time.sleep(1); child.sendline('1234')
+            idx2 = child.expect([r'[\$#] ', 'Login incorrect', pexpect.TIMEOUT], timeout=30)
+            if idx2 == 0:
+                logged_in = True
+                break
+        elif idx == 1:
+            continue
+    if not logged_in:
+        print('MIX_OS_TEST_FAIL: login failed after retries')
+        child.close(force=True); sys.exit(1)
+    time.sleep(1); child.sendline('uname -r')
+    idx = child.expect(['6\\.19', pexpect.TIMEOUT], timeout=10)
+    if idx != 0:
+        print('MIX_OS_TEST_FAIL: uname did not return expected kernel')
+        child.close(force=True); sys.exit(1)
+    print('Verification Passed')
+    child.close(force=True)
+except Exception as e:
+    print(f'MIX_OS_TEST_FAIL: {e}')
+    try: child.close(force=True)
+    except: pass
+    sys.exit(1)
+PYTEST
+
+    local rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        echo -e "${GREEN}Check mix_os_demo_amd64 PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check mix_os_demo_amd64 FAILED${NC}"
+        return 1
+    fi
+}
+
 # Run a single test case
 # Arguments: case_name
 # Returns: 0 on PASS, 1 on FAIL
@@ -802,6 +1006,14 @@ function run_test() {
     fi
     if [[ "${case_name}" == "mix_os_demo_riscv64" ]]; then
         run_test_mix_os_demo_riscv64
+        return $?
+    fi
+    if [[ "${case_name}" == "linux_4vcpu_1partion_amd64" ]]; then
+        run_test_linux_4vcpu_1partion_amd64
+        return $?
+    fi
+    if [[ "${case_name}" == "mix_os_demo_amd64" ]]; then
+        run_test_mix_os_demo_amd64
         return $?
     fi
 
@@ -894,6 +1106,8 @@ function builder_to_case() {
         check-linux_4vcpu_1partion_riscv64) echo "linux_4vcpu_1partion_riscv64" ;;
         check-mix_os_demo1) echo "mix_os_demo1" ;;
         check-mix_os_demo_riscv64) echo "mix_os_demo_riscv64" ;;
+        check-linux_4vcpu_1partion_amd64) echo "linux_4vcpu_1partion_amd64" ;;
+        check-mix_os_demo_amd64) echo "mix_os_demo_amd64" ;;
         check-[0-9]*)         echo "example.${builder#check-}" ;;
         *)                    echo "" ;;
     esac

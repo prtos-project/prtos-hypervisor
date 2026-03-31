@@ -87,7 +87,7 @@ silentoldconfig: links Kconfig.ver
 menuconfig: links Kconfig.ver
 	@$(PRTOS_PATH)/scripts/kconfig/mconf $(KCONFIG)
 
-$(defconfig-targets): links Kconfig.ver
+$(filter-out defconfig, $(defconfig-targets)): links Kconfig.ver
 	@$(PRTOS_PATH)/scripts/kconfig/conf -D $(PRTOS_PATH)/core/kernel/$(ARCH)/$@ $(KCONFIG)
 defconfig: links Kconfig.ver
 	@$(PRTOS_PATH)/scripts/kconfig/conf -D $(PRTOS_PATH)/core/kernel/$(ARCH)/defconfig $(KCONFIG)

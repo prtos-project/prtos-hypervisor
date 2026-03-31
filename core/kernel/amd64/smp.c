@@ -94,7 +94,8 @@ static inline void __VBOOT setup_ap_stack(prtos_u32_t ncpu) {
 void __VBOOT setup_smp(void) {
     extern const prtos_u8_t smp_start16[], smp_start16_end[];
     extern volatile prtos_u8_t ap_ready[];
-    prtos_u32_t start_eip, ncpu;
+    prtos_address_t start_eip;
+    prtos_u32_t ncpu;
 
     start_eip = SMP_RM_START_ADDR;
 

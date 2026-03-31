@@ -123,7 +123,7 @@ void setup_stage2_mmu(kthread_t *k) {
     struct prtos_conf_memory_area *areas;
     prtos_u64_t ipa, pa, end_ipa;
     prtos_s32_t l1_idx, l2_idx, l3_idx, area, i;
-    prtos_u64_t l2_pa_0, l2_pa_1, pct_pa;
+    prtos_u64_t l2_pa_0, l2_pa_1;
     prtos_s32_t part_id = KID2PARTID(k->ctrl.g->id);
     prtos_s32_t vcpu_id = KID2VCPUID(k->ctrl.g->id);
 

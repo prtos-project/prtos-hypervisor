@@ -29,6 +29,10 @@
 #include <arch/processor.h>
 #include <arch/paging.h>
 
+/* Forward declarations */
+void flush_tlb(void);
+void flush_tlb_entry(prtos_address_t addr);
+
 /* PTE flags */
 #define PTE_V    (1UL << 0)
 #define PTE_R    (1UL << 1)

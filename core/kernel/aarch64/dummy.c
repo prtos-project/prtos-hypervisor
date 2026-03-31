@@ -160,8 +160,8 @@ void __init xsm_fixup_ops(struct xsm_ops *ops)
      * This allows us to walk over struct xsm_ops as if it were an array of
      * unsigned longs.
      */
-    unsigned long *dst = _p(ops);
-    const unsigned long *src = _p(&dummy_ops);
+    unsigned long *dst __attribute__((unused)) = _p(ops);
+    const unsigned long *src __attribute__((unused)) = _p(&dummy_ops);
 
     // for ( ; dst < (unsigned long *)(ops + 1); src++, dst++ )
     // {

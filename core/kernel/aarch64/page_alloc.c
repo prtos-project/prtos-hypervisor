@@ -1948,7 +1948,6 @@ static unsigned long avail_heap_pages(
 
 void __init end_boot_allocator(void)
 {
-    unsigned int i;
 
     // /* Pages that are free now go to the domain sub-allocator. */
     // for ( i = 0; i < nr_bootmem_regions; i++ )

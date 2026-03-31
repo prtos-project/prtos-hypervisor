@@ -2,7 +2,7 @@
 
 ## 简介
 
-PRTOS是一款轻量级、开源嵌入式嵌入式Type 1 Hypervisor，旨在通过虚拟化技术实现安全高效的嵌入式实时系统。它允许不同的应用程序通过分区的时间和空间隔离来共享相同的硬件平台。PRTOS对系统资源进行分区虚拟化，包括CPU、内存和I/O设备，以确保系统安全，并防止应用程序之间的干扰。PRTOS采用分离内核架构实现，其中PRTOS内核在特权模式下运行，并为硬件和分区之间提供抽象层。
+PRTOS是一款轻量级、开源嵌入式嵌入式Type 1 Hypervisor，旨在通过虚拟化技术实现安全高效的嵌入式实时系统。它允许不同的应用程序通过分区的时间和空间隔离来共享相同的硬件平台。PRTOS对系统资源进行分区虚拟化，包括CPU、内存和I/O设备，以确保系统安全，并防止应用程序之间的干扰。PRTOS采用分离内核架构实现，其中PRTOS内核在特权模式下运行，并为硬件和分区之间提供抽象层。PRTOS在ARMv8（aarch64）平台上利用硬件辅助虚拟化扩展，在AMD64（x86_64）平台上利用Intel VT-x硬件虚拟化技术，在32位x86平台上则采用半虚拟化技术。
 
 PRTOS的分区被定义为独立的执行环境，可以独立且安全地运行。它们按照预定义的循环调度表进行调度，分区之间的通信通过消息传递实现。PRTOS支持两种类型的分区：系统分区和标准分区，只有系统分区具有控制系统和其他分区状态的能力。
 
@@ -42,9 +42,9 @@ PRTOS Hypervisor源代码目录结构如下图所示：
 - [x] QEMU 32位 X86平台
 - [x] QEMU ARMv8 仿真平台
 - [x] QEMU RISC-V 仿真平台
+- [x] QEMU 64位 X86平台 (AMD64)
 
 **计划支持平台**
-- [x] QEMU 64bit X86 platform(AMD64)
 - [x] 树莓派4b/5b单板机
 
 ## **开发和运行环境搭建**
@@ -74,7 +74,7 @@ cp prtos_config.x86 prtos_config
 make defconfig
 make
 cd user/bail/examples/helloworld
-make run.aarch64
+make run.x86
 ```
 输出如下:
 ```
@@ -159,9 +159,46 @@ processor       : 3
 
 ```
 
+### AMD64 (x86_64) 平台
+#### AMD64 (x86_64) 平台依赖包安装
+
+```
+# AMD64 模拟器
+sudo apt-get install -y qemu-system-x86 grub-pc-bin
+
+```
+
+#### PRTOS 编译和运行`linux`示例
+```
+git clone https://github.com/prtos-project/prtos-hypervisor.git
+cd prtos-hypervisor
+cp prtos_config.amd64 prtos_config
+make defconfig
+make
+cd user/bail/examples/linux_4vcpu_1partion_amd64
+make run.amd64
+```
+以用户名`root`, 密码`1234`登录，输出如下：
+```
+
+Welcome to Buildroot
+buildroot login: root
+Password:
+# uname -a
+Linux buildroot 6.19.9 #1 SMP PREEMPT amd64 GNU/Linux
+#
+# cat /proc/cpuinfo | grep processor
+processor       : 0
+processor       : 1
+processor       : 2
+processor       : 3
+#
+
+```
+
 ### 自动运行所有平台测试集的命令：
 ```
-chenweis@chenweis-M9-PRO:~/aarch64_port/prtos-hypervisor$ bash scripts/run_test.sh -h
+bash scripts/run_test.sh -h
 Usage:
 run_test.sh [options] <command>
 
@@ -178,8 +215,10 @@ Commands:
                          linux (aarch64 only),
                          linux_4vcpu_1partion (aarch64 only),
                          linux_4vcpu_1partion_riscv64 (riscv64 only),
+                         linux_4vcpu_1partion_amd64 (amd64 only),
                          mix_os_demo1 (aarch64 only),
-                         mix_os_demo_riscv64 (riscv64 only)
+                         mix_os_demo_riscv64 (riscv64 only),
+                         mix_os_demo_amd64 (amd64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -212,13 +251,17 @@ The test report of run `bash scripts/run_test.sh --arch x86 check-all` should be
   freertos_hw_virt     SKIP
   freertos_para_virt_riscv SKIP
   freertos_hw_virt_riscv SKIP
+  freertos_para_virt_amd64 SKIP
+  freertos_hw_virt_amd64 SKIP
   linux                SKIP
   linux_4vcpu_1partion SKIP
   linux_4vcpu_1partion_riscv64 SKIP
+  linux_4vcpu_1partion_amd64 SKIP
   mix_os_demo1         SKIP
   mix_os_demo_riscv64  SKIP
+  mix_os_demo_amd64    SKIP
 --------------------------------------
-  Total: 20  Pass: 11  Fail: 0  Skip: 9
+  Total: 24  Pass: 11  Fail: 0  Skip: 13
 ======================================
 
 ```
@@ -244,13 +287,17 @@ The test report of run `bash scripts/run_test.sh --arch aarch64 check-all` shoul
   freertos_hw_virt     PASS
   freertos_para_virt_riscv SKIP
   freertos_hw_virt_riscv SKIP
+  freertos_para_virt_amd64 SKIP
+  freertos_hw_virt_amd64 SKIP
   linux                PASS
   linux_4vcpu_1partion PASS
   linux_4vcpu_1partion_riscv64 SKIP
+  linux_4vcpu_1partion_amd64 SKIP
   mix_os_demo1         PASS
   mix_os_demo_riscv64  SKIP
+  mix_os_demo_amd64    SKIP
 --------------------------------------
-  Total: 20  Pass: 16  Fail: 0  Skip: 4
+  Total: 24  Pass: 16  Fail: 0  Skip: 8
 ======================================
 ```
 
@@ -274,13 +321,51 @@ The test report of run `bash scripts/run_test.sh --arch riscv64 check-all` shoul
   freertos_hw_virt     SKIP
   freertos_para_virt_riscv PASS
   freertos_hw_virt_riscv PASS
+  freertos_para_virt_amd64 SKIP
+  freertos_hw_virt_amd64 SKIP
   linux                SKIP
   linux_4vcpu_1partion SKIP
   linux_4vcpu_1partion_riscv64 PASS
+  linux_4vcpu_1partion_amd64 SKIP
   mix_os_demo1         SKIP
   mix_os_demo_riscv64  PASS
+  mix_os_demo_amd64    SKIP
 --------------------------------------
-  Total: 20  Pass: 15  Fail: 0  Skip: 5
+  Total: 24  Pass: 15  Fail: 0  Skip: 9
+======================================
+```
+
+The test report of run `bash scripts/run_test.sh --arch amd64 check-all` should be:
+```
+======================================
+  Test Report [amd64]
+======================================
+  example.001          PASS
+  example.002          PASS
+  example.003          PASS
+  example.004          PASS
+  example.005          PASS
+  example.006          PASS
+  example.007          PASS
+  example.008          PASS
+  example.009          PASS
+  helloworld           PASS
+  helloworld_smp       PASS
+  freertos_para_virt   SKIP
+  freertos_hw_virt     SKIP
+  freertos_para_virt_riscv SKIP
+  freertos_hw_virt_riscv SKIP
+  freertos_para_virt_amd64 PASS
+  freertos_hw_virt_amd64 PASS
+  linux                SKIP
+  linux_4vcpu_1partion SKIP
+  linux_4vcpu_1partion_riscv64 SKIP
+  linux_4vcpu_1partion_amd64 PASS
+  mix_os_demo1         SKIP
+  mix_os_demo_riscv64  SKIP
+  mix_os_demo_amd64    PASS
+--------------------------------------
+  Total: 24  Pass: 15  Fail: 0  Skip: 9
 ======================================
 ```
 

@@ -190,7 +190,6 @@ static inline prtos_s32_t test_sp(prtos_address_t *sp, prtos_u32_t size) {
 #define ERRCODE_TAB 0x27d00UL
 void fix_stack(cpu_ctxt_t *ctxt, partition_control_table_t *part_ctrl_table, prtos_s32_t irq_nr, prtos_s32_t vector, prtos_s32_t trap) {
     prtos_word_t ip, iflags;
-    local_processor_t *info = GET_LOCAL_PROCESSOR();
     struct x86_gate *idt_entry;
     prtos_address_t *sp = 0;
     prtos_u16_t cs;

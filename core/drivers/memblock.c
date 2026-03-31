@@ -26,7 +26,7 @@ static prtos_s32_t reset_mem_block(const kdevice_t *kdev) {
     return 0;
 }
 
-static prtos_s32_t read_mem_block(const kdevice_t *kdev, prtos_u8_t *buffer, prtos_s_size_t len) {
+static prtos_s32_t read_mem_block(const kdevice_t *kdev, prtos_u8_t *buffer, prtos_s32_t len) {
     prtos_u8_t *ptr;
     prtos_s32_t e;
     ASSERT(buffer);
@@ -50,7 +50,7 @@ static prtos_s32_t read_mem_block(const kdevice_t *kdev, prtos_u8_t *buffer, prt
     return len;
 }
 
-static prtos_s32_t write_mem_block(const kdevice_t *kdev, prtos_u8_t *buffer, prtos_s_size_t len) {
+static prtos_s32_t write_mem_block(const kdevice_t *kdev, prtos_u8_t *buffer, prtos_s32_t len) {
     prtos_u8_t *ptr;
     ASSERT(buffer);
     if (((prtos_s_size_t)prtos_conf_phys_mem_area_table[mem_block_data[kdev->sub_id].cfg->physical_memory_areas_offset].size -
@@ -93,7 +93,7 @@ static const kdevice_t *get_mem_block(prtos_u32_t sub_id) {
 }
 
 prtos_s32_t __VBOOT init_mem_block(void) {
-#if defined(CONFIG_MMU)
+#if defined(CONFIG_MMU) && !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
     prtos_s32_t i, num_of_pages;
 #endif
     prtos_s32_t e;

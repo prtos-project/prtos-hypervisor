@@ -138,7 +138,9 @@ __hypercall prtos_s32_t resume_vcpu_sys(prtos_id_t vcpu_id) {
 __hypercall prtos_s32_t reset_vcpu_sys(prtos_id_t vcpu_id, prtos_address_t ptd_level_1_table, prtos_address_t entry_point, prtos_u32_t status) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     partition_t *partition = get_partition(info->sched.current_kthread);
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
     struct phys_page *ptd_level_1_page;
+#endif
 
     if (vcpu_id >= partition->cfg->num_of_vcpus) return PRTOS_INVALID_PARAM;
 

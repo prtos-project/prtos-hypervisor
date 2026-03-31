@@ -47,6 +47,9 @@
 #define _PHYS2VIRT(x) ((prtos_u64_t)(x) + (prtos_u64_t)CONFIG_PRTOS_OFFSET - (prtos_u64_t)CONFIG_PRTOS_LOAD_ADDR)
 
 extern prtos_address_t _page_tables[];
+
+void flush_tlb(void);
+void flush_tlb_entry(prtos_address_t addr);
 #else
 #define _VIRT2PHYS(x) ((x) - CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR)
 #define _PHYS2VIRT(x) ((x) + CONFIG_PRTOS_OFFSET - CONFIG_PRTOS_LOAD_ADDR)
@@ -75,6 +78,7 @@ extern prtos_address_t _page_tables[];
 #define SET_PTD_NOT_PRESENT(x) ((x) & ~_PG_ARCH_VALID)
 #define SET_PTE_NOT_PRESENT(x) ((x) & ~_PG_ARCH_VALID)
 #define SET_PTE_RONLY(x) ((x) & ~_PG_ARCH_WRITE)
+#define SET_PTE_UNCACHED(x) (x)  /* RISC-V Sv39 has no per-PTE cache-disable bit */
 #define GET_PTD_ADDR(x) ((x) & PAGE_MASK)
 #define GET_PTE_ADDR(x) ((x) & PAGE_MASK)
 #define GET_USER_PTD_ENTRIES(type) PTDL1ENTRIES

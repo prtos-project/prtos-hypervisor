@@ -239,6 +239,7 @@ static int cf_check cpu_callback(struct notifier_block *nfb, unsigned long actio
 int init_tasklet_softirq_tasklet_prtos(int cpu) {
     INIT_LIST_HEAD(&per_cpu(tasklet_list, cpu));
     INIT_LIST_HEAD(&per_cpu(softirq_tasklet_list, cpu));
+    return 0;
 }
 
 static struct notifier_block cpu_nfb = {

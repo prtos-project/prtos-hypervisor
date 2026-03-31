@@ -5619,8 +5619,8 @@ static int cf_check cpu_lockdebug_callback(struct notifier_block *nfb,
         //                                               lock_depth_size);
 
         if ( !per_cpu(locks_taken, cpu) ) {
-            per_cpu(locks_taken, cpu) = &array[64 * (lock_index++)];
-            printk("per_cpu(locks_taken, cpu): 0x%x\n", (unsigned int)per_cpu(locks_taken, cpu));
+            per_cpu(locks_taken, cpu) = (const union lock_debug **)&array[64 * (lock_index++)];
+            printk("per_cpu(locks_taken, cpu): 0x%lx\n", (unsigned long)per_cpu(locks_taken, cpu));
         }
         if(lock_index >= 64 * 4)
             printk("lock_index overflow: %d\n", lock_index);
@@ -5650,8 +5650,8 @@ void cpu_lockdebug_init_prtos(int cpu) {
     //                                               lock_depth_size);
 
     if (!per_cpu(locks_taken, cpu)) {
-        per_cpu(locks_taken, cpu) = &array[64 * (lock_index++)];
-        printk("per_cpu(locks_taken, cpu): 0x%x\n", (unsigned int)per_cpu(locks_taken, cpu));
+        per_cpu(locks_taken, cpu) = (const union lock_debug **)&array[64 * (lock_index++)];
+        printk("per_cpu(locks_taken, cpu): 0x%lx\n", (unsigned long)per_cpu(locks_taken, cpu));
     }
     if (lock_index >= 64 * 4) printk("lock_index overflow: %d\n", lock_index);
 

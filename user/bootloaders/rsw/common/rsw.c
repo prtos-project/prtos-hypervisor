@@ -21,7 +21,7 @@ void halt_system(void) {
     _halt_system();
 }
 
-static int prots_conf_vaddr_to_paddr(struct prtos_conf_memory_area *memory_areas, prtos_s32_t num_of_areas, prtos_address_t v_addr, prtos_address_t *p_addr) {
+static int __attribute__((unused)) prots_conf_vaddr_to_paddr(struct prtos_conf_memory_area *memory_areas, prtos_s32_t num_of_areas, prtos_address_t v_addr, prtos_address_t *p_addr) {
     prtos_s32_t e;
     for (e = 0; e < num_of_areas; e++) {
         if ((memory_areas[e].mapped_at <= v_addr) && (((memory_areas[e].mapped_at + memory_areas[e].size) - 1) >= v_addr)) {
@@ -133,6 +133,37 @@ void rsw_main(void) {
     // Loading partitions
     for (e = 1; e < container.hdr->num_of_partitions; e++) {
         struct prtos_image_hdr *part_hdr;
+        {
+            prtos_u8_t *pef_ptr = (prtos_u8_t *)(container.file_table[container.partition_table[e].file].offset + prtos_pef_container_ptr);
+            struct pef_hdr *ph = (struct pef_hdr *)pef_ptr;
+            xprintf("[RSW] Partition[%d]: file_idx=%d, offset=0x%x, pef_ptr=0x%x\n",
+                    e, container.partition_table[e].file,
+                    (prtos_u32_t)container.file_table[container.partition_table[e].file].offset,
+                    (prtos_u32_t)(prtos_address_t)pef_ptr);
+            xprintf("[RSW] PEF sig=0x%x file_size=%d flags=0x%x\n",
+                    ph->signature, (prtos_u32_t)ph->file_size, ph->flags);
+            /* Manually compute digest to debug */
+            {
+                prtos_u8_t dbg_digest[16];
+                struct digest_ctx dbg_ctx;
+                prtos_u32_t off_d = (prtos_u32_t)(prtos_address_t)&((struct pef_hdr *)0)->digest;
+                prtos_u32_t off_p = (prtos_u32_t)(prtos_address_t)&((struct pef_hdr *)0)->payload;
+                prtos_u32_t fs = (prtos_u32_t)ph->file_size;
+                prtos_u32_t len3 = fs - off_p;
+                xprintf("[RSW] off_digest=%d off_payload=%d fs=%d len3=%d\n", off_d, off_p, fs, len3);
+                for (i = 0; i < 16; i++) dbg_digest[i] = 0;
+                digest_init(&dbg_ctx);
+                digest_update(&dbg_ctx, pef_ptr, off_d);
+                digest_update(&dbg_ctx, dbg_digest, 16);
+                digest_update(&dbg_ctx, &pef_ptr[off_p], len3);
+                digest_final(dbg_digest, &dbg_ctx);
+                xprintf("[RSW] computed: ");
+                for (i = 0; i < 16; i++) xprintf("%x ", dbg_digest[i]);
+                xprintf("\n[RSW] expected: ");
+                for (i = 0; i < 16; i++) xprintf("%x ", ph->digest[i]);
+                xprintf("\n");
+            }
+        }
         if ((ret = parse_pef_file((prtos_u8_t *)(container.file_table[container.partition_table[e].file].offset + prtos_pef_container_ptr), &pef_file)) !=
             PEF_OK) {
             xprintf("[RSW] Error %d when parsing PEF file\n", ret);

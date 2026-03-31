@@ -35,6 +35,11 @@
 #include <asm_vgic.h>
 #include <asm_acpi.h>
 
+/* Forward declaration */
+int request_irq_prtos(unsigned int irq, unsigned int irqflags,
+                void (*handler)(int irq, void *dev_id),
+                const char *devname, void *dev_id);
+
 DEFINE_PER_CPU(uint64_t, lr_mask);
 
 #undef GIC_DEBUG
@@ -1991,8 +1996,8 @@ static struct rdist_region rdist_region_prtos;
 
 static void __init gicv3_dt_init_prtos(void)
 {
-    struct rdist_region *rdist_regs;
-    int res, i;
+    struct rdist_region *rdist_regs __attribute__((unused));
+    int res __attribute__((unused)), i __attribute__((unused));
     // const struct dt_device_node *node = gicv3_info.node;
 
     // res = dt_device_get_paddr(node, 0, &dbase, NULL);
@@ -3474,7 +3479,7 @@ void do_IRQ(struct cpu_user_regs *regs, unsigned int irq, int is_fiq)
     struct irqaction *action;
     const struct cpu_user_regs *old_regs = set_irq_regs(regs);
 
-    unsigned int cpu = smp_processor_id();
+    unsigned int cpu __attribute__((unused)) = smp_processor_id();
     perfc_incr(irqs);
 
     /* Statically assigned SGIs do not come down this path */

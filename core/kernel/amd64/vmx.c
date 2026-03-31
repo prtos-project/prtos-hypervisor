@@ -21,6 +21,7 @@
 #include <stdc.h>
 #include <vmmap.h>
 #include <arch/asm.h>
+#include <arch/io.h>
 #include <arch/paging.h>
 #include <arch/segments.h>
 #include <arch/vmx.h>
@@ -42,6 +43,7 @@ static void vmx_check_pending_irq(struct vmx_state *vmx);
 static void vpit_tick(struct vmx_state *vmx, prtos_u64_t now_us);
 static void vpic_raise_irq(struct vpic_state *vpic, int irq);
 static int  vpic_get_pending_vector(struct vmx_state *vmx);
+static void vuart_poll_host(struct vmx_state *vmx);
 
 /* External: assembly VM entry points */
 extern int vmx_guest_enter(struct vmx_state *vmx);
@@ -160,36 +162,71 @@ int vmx_is_enabled(void) {
  * EPT Setup
  * ================================================================ */
 
-static void vmx_setup_ept(struct vmx_state *vmx, prtos_u64_t phys_start, prtos_u64_t size,
+static void vmx_setup_ept(struct vmx_state *vmx, struct prtos_conf_memory_area *mem_areas,
+                          prtos_s32_t num_areas,
                           void *pml4_page, void *pdpt_page, void *pd_page) {
     prtos_u64_t *pml4 = (prtos_u64_t *)pml4_page;
     prtos_u64_t *pdpt = (prtos_u64_t *)pdpt_page;
     prtos_u64_t *pd = (prtos_u64_t *)pd_page;
     prtos_u64_t addr;
+    prtos_s32_t i;
+
+    /* Determine if this partition needs the full 1GB identity map + LAPIC/IOAPIC.
+     * Linux partitions need this; FreeRTOS/bare-metal typically don't.
+     * Heuristic: if total memory >= 128MB, enable full mapping. */
+    prtos_u64_t total_mem = 0;
+    for (i = 0; i < num_areas; i++)
+        total_mem += mem_areas[i].size;
+    int needs_full_map = (total_mem >= 0x8000000ULL);  /* 128MB */
 
     memset(pml4, 0, PAGE_SIZE);
     vmx->ept_pml4 = pml4;
 
     memset(pdpt, 0, PAGE_SIZE);
-
-    /* PML4[index] → PDPT */
-    {
-        int pml4_idx = (phys_start >> 39) & 0x1FF;
-        pml4[pml4_idx] = _VIRT2PHYS((prtos_u64_t)(unsigned long)pdpt) | EPT_RWX;
-    }
-
     memset(pd, 0, PAGE_SIZE);
 
-    /* PDPT[index] → PD */
-    {
-        int pdpt_idx = (phys_start >> 30) & 0x1FF;
-        pdpt[pdpt_idx] = _VIRT2PHYS((prtos_u64_t)(unsigned long)pd) | EPT_RWX;
+    /* PML4[0] → PDPT (all areas assumed in first 512GB) */
+    pml4[0] = _VIRT2PHYS((prtos_u64_t)(unsigned long)pdpt) | EPT_RWX;
+
+    /* PDPT[0] → PD for first 1GB */
+    pdpt[0] = _VIRT2PHYS((prtos_u64_t)(unsigned long)pd) | EPT_RWX;
+
+    /* Map all partition memory areas using 2MB pages: GPA = HPA (identity map) */
+    for (i = 0; i < num_areas; i++) {
+        prtos_u64_t phys_start = mem_areas[i].start_addr;
+        prtos_u64_t size = mem_areas[i].size;
+        for (addr = phys_start; addr < phys_start + size; addr += LPAGE_SIZE) {
+            int pd_idx = (addr >> 21) & 0x1FF;
+            pd[pd_idx] = (addr & ~(LPAGE_SIZE - 1)) | EPT_RWX | EPT_MEM_TYPE_WB | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
+        }
     }
 
-    /* Map partition memory using 2MB pages: GPA = HPA (identity map) */
-    for (addr = phys_start; addr < phys_start + size; addr += LPAGE_SIZE) {
-        int pd_idx = (addr >> 21) & 0x1FF;
-        pd[pd_idx] = (addr & ~(LPAGE_SIZE - 1)) | EPT_RWX | EPT_MEM_TYPE_WB | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
+    if (needs_full_map) {
+        prtos_u64_t *pd_high;
+
+        /* Allocate PD for 3-4GB range to map LAPIC (0xFEE00000) and IOAPIC (0xFEC00000) */
+        GET_MEMAZ(pd_high, PAGE_SIZE, PAGE_SIZE);
+        memset(pd_high, 0, PAGE_SIZE);
+        pdpt[3] = _VIRT2PHYS((prtos_u64_t)(unsigned long)pd_high) | EPT_RWX;
+
+        /* Map the entire first 1GB (all 512 PD entries) as identity mapped.
+         * This ensures the guest can access BIOS data, ACPI tables, MP tables,
+         * PCI config space, and other firmware-provided structures that QEMU/KVM
+         * places throughout the physical address space below 1GB. */
+        for (i = 0; i < 512; i++) {
+            if (!pd[i]) {
+                pd[i] = ((prtos_u64_t)i << 21) | EPT_RWX | EPT_MEM_TYPE_WB | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
+            }
+        }
+
+        /* Map LAPIC (0xFEE00000) and IOAPIC (0xFEC00000) in 3-4GB PD range.
+         * These are MMIO regions, use UC memory type. */
+        {
+            int ioapic_idx = (0xFEC00000 >> 21) & 0x1FF;
+            int lapic_idx  = (0xFEE00000 >> 21) & 0x1FF;
+            pd_high[ioapic_idx] = 0xFEC00000ULL | EPT_RWX | EPT_MEM_TYPE_UC | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
+            pd_high[lapic_idx]  = 0xFEE00000ULL | EPT_RWX | EPT_MEM_TYPE_UC | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
+        }
     }
 
     /* Set EPTP: WB memory type, 4-level walk, PML4 physical address */
@@ -206,7 +243,8 @@ int vmx_setup_partition(void *kthread_ptr) {
     struct vmx_state *vmx;
     void *vmcs_region;
     prtos_u32_t rev_id;
-    struct prtos_conf_memory_area *mem_area;
+    struct prtos_conf_memory_area *mem_areas;
+    prtos_s32_t num_areas;
     prtos_u64_t part_phys_start, part_size, entry_point;
     void *ept_pml4, *ept_pdpt, *ept_pd;
 
@@ -216,10 +254,11 @@ int vmx_setup_partition(void *kthread_ptr) {
     GET_MEMAZ(vmx, sizeof(struct vmx_state), ALIGNMENT);
     k->ctrl.g->karch.vmx = vmx;
 
-    /* Get partition physical memory info */
-    mem_area = &prtos_conf_phys_mem_area_table[p->cfg->physical_memory_areas_offset];
-    part_phys_start = mem_area->start_addr;
-    part_size = mem_area->size;
+    /* Get partition physical memory info (all areas) */
+    mem_areas = &prtos_conf_phys_mem_area_table[p->cfg->physical_memory_areas_offset];
+    num_areas = p->cfg->num_of_physical_memory_areas;
+    part_phys_start = mem_areas[0].start_addr;
+    part_size = mem_areas[0].size;
 
     /* The RSW already loaded partition segments to their target physical addresses
      * via load_pef_file() with proper vaddr_to_paddr translation.
@@ -229,17 +268,30 @@ int vmx_setup_partition(void *kthread_ptr) {
         extern prtos_address_t _page_tables[];
         prtos_u64_t *pd = (prtos_u64_t *)((unsigned long)_page_tables + 2 * PAGE_SIZE);
         prtos_u64_t addr;
+        prtos_s32_t i;
 
-        /* Add identity mapping for partition physical area in hypervisor PD.
+        /* Add identity mapping for all partition physical areas in hypervisor PD.
          * The PD covers the first 1GB (PML4[0]→PDPT[0]→PD), with each entry
-         * mapping 2MB. Partition must be in the first 1GB. */
-        for (addr = part_phys_start; addr < part_phys_start + part_size; addr += LPAGE_SIZE) {
-            prtos_u32_t idx = addr >> PD_SHIFT;
-            if (idx < 512 && !pd[idx])
-                pd[idx] = addr | _PG_ARCH_PRESENT | _PG_ARCH_RW | _PG_ARCH_PSE;
+         * mapping 2MB. All areas must be in the first 1GB. */
+        for (i = 0; i < num_areas; i++) {
+            for (addr = mem_areas[i].start_addr; addr < mem_areas[i].start_addr + mem_areas[i].size; addr += LPAGE_SIZE) {
+                prtos_u32_t idx = addr >> PD_SHIFT;
+                if (idx < 512 && !pd[idx])
+                    pd[idx] = addr | _PG_ARCH_PRESENT | _PG_ARCH_RW | _PG_ARCH_PSE;
+            }
         }
         /* Flush TLB */
         load_cr3(save_cr3());
+    }
+
+    kprintf("[VMX] EPT setup: num_areas=%d\n", num_areas);
+    {
+        prtos_s32_t ai;
+        for (ai = 0; ai < num_areas; ai++) {
+            kprintf("[VMX]   area[%d]: start=0x%llx size=0x%llx\n", ai,
+                    (unsigned long long)mem_areas[ai].start_addr,
+                    (unsigned long long)mem_areas[ai].size);
+        }
     }
 
     /* Allocate EPT pages from reserved memory pool */
@@ -247,8 +299,8 @@ int vmx_setup_partition(void *kthread_ptr) {
     GET_MEMAZ(ept_pdpt, PAGE_SIZE, PAGE_SIZE);
     GET_MEMAZ(ept_pd, PAGE_SIZE, PAGE_SIZE);
 
-    /* Setup EPT using allocated pages */
-    vmx_setup_ept(vmx, part_phys_start, part_size, ept_pml4, ept_pdpt, ept_pd);
+    /* Setup EPT using allocated pages - maps all memory areas */
+    vmx_setup_ept(vmx, mem_areas, num_areas, ept_pml4, ept_pdpt, ept_pd);
 
     /* Allocate VMCS region from reserved memory pool */
     GET_MEMAZ(vmcs_region, PAGE_SIZE, PAGE_SIZE);
@@ -286,7 +338,7 @@ int vmx_setup_partition(void *kthread_ptr) {
     }
 
     {
-        prtos_u64_t proc2 = SECONDARY_EXEC_ENABLE_EPT | SECONDARY_EXEC_UNRESTRICTED;
+        prtos_u64_t proc2 = SECONDARY_EXEC_ENABLE_EPT | SECONDARY_EXEC_ENABLE_RDTSCP | SECONDARY_EXEC_UNRESTRICTED;
         proc2 = vmx_adjust_controls(proc2, MSR_IA32_VMX_PROCBASED_CTLS2);
         vmx_vmwrite(VMCS_SECONDARY_EXEC_CTRL, proc2);
     }
@@ -316,7 +368,8 @@ int vmx_setup_partition(void *kthread_ptr) {
 
     /* ---- VM-exit controls ---- */
     {
-        prtos_u64_t exit_ctls = VM_EXIT_HOST_ADDR_SPACE_SIZE | VM_EXIT_ACK_INTR_ON_EXIT | VM_EXIT_SAVE_PREEMPT_TIMER;
+        prtos_u64_t exit_ctls = VM_EXIT_HOST_ADDR_SPACE_SIZE | VM_EXIT_ACK_INTR_ON_EXIT |
+                                VM_EXIT_SAVE_PREEMPT_TIMER | VM_EXIT_SAVE_IA32_EFER | VM_EXIT_LOAD_IA32_EFER;
         exit_ctls = vmx_adjust_controls(exit_ctls, MSR_IA32_VMX_TRUE_EXIT);
         vmx_vmwrite(VMCS_EXIT_CONTROLS, exit_ctls);
     }
@@ -324,7 +377,7 @@ int vmx_setup_partition(void *kthread_ptr) {
     /* ---- VM-entry controls ---- */
     {
         /* Guest starts in 32-bit protected mode (IA-32e mode NOT active) */
-        prtos_u64_t entry_ctls = 0;
+        prtos_u64_t entry_ctls = VM_ENTRY_LOAD_IA32_EFER;
         entry_ctls = vmx_adjust_controls(entry_ctls, MSR_IA32_VMX_TRUE_ENTRY);
         vmx_vmwrite(VMCS_ENTRY_CONTROLS, entry_ctls);
     }
@@ -533,6 +586,7 @@ void __attribute__((noreturn)) vmx_run_guest(void *kthread_ptr) {
         {
             prtos_u32_t reason = (prtos_u32_t)vmx_vmread(VMCS_EXIT_REASON) & 0xFFFF;
 
+
             switch (reason) {
             case EXIT_REASON_EXCEPTION_NMI: {
                 /* Exception or NMI intercepted by exception bitmap */
@@ -583,6 +637,7 @@ void __attribute__((noreturn)) vmx_run_guest(void *kthread_ptr) {
                 /* VMX preemption timer expired - check PIT and reload timer */
                 prtos_u64_t now = get_sys_clock_usec();
                 vpit_tick(vmx, now);
+                vuart_poll_host(vmx);
                 vmx_vmwrite(VMCS_VMX_PREEMPT_TIMER_VALUE, vmx->preempt_timer_val);
                 break;
             }
@@ -594,9 +649,14 @@ void __attribute__((noreturn)) vmx_run_guest(void *kthread_ptr) {
                     vmx->guest_regs[VMX_REG_RAX] = efer & 0xFFFFFFFF;
                     vmx->guest_regs[VMX_REG_RDX] = efer >> 32;
                 } else {
-                    /* Pass through other MSRs */
-                    prtos_u32_t lo, hi;
-                    __asm__ __volatile__("rdmsr" : "=a"(lo), "=d"(hi) : "c"(msr));
+                    /* Try pass-through; if MSR doesn't exist, return 0 */
+                    prtos_u32_t lo = 0, hi = 0;
+                    __asm__ __volatile__(
+                        "1: rdmsr; jmp 2f\n"
+                        "3: xorl %%eax,%%eax; xorl %%edx,%%edx; jmp 2f\n"
+                        ASM_EXPTABLE(1b, 3b)
+                        "2:\n"
+                        : "=a"(lo), "=d"(hi) : "c"(msr) );
                     vmx->guest_regs[VMX_REG_RAX] = lo;
                     vmx->guest_regs[VMX_REG_RDX] = hi;
                 }
@@ -612,10 +672,15 @@ void __attribute__((noreturn)) vmx_run_guest(void *kthread_ptr) {
                 if (msr == 0xC0000080) {  /* IA32_EFER */
                     vmx_vmwrite(VMCS_GUEST_IA32_EFER, value);
                 } else {
-                    /* Pass through other MSRs */
+                    /* Try pass-through; silently ignore if MSR doesn't exist */
                     prtos_u32_t lo = (prtos_u32_t)value;
                     prtos_u32_t hi = (prtos_u32_t)(value >> 32);
-                    __asm__ __volatile__("wrmsr" :: "a"(lo), "d"(hi), "c"(msr));
+                    __asm__ __volatile__(
+                        "1: wrmsr; jmp 2f\n"
+                        "3: jmp 2f\n"
+                        ASM_EXPTABLE(1b, 3b)
+                        "2:\n"
+                        :: "a"(lo), "d"(hi), "c"(msr) );
                 }
                 vmx_vmwrite(VMCS_GUEST_RIP,
                     vmx_vmread(VMCS_GUEST_RIP) + vmx_vmread(VMCS_EXIT_INSTRUCTION_LEN));
@@ -727,6 +792,26 @@ void __attribute__((noreturn)) vmx_run_guest(void *kthread_ptr) {
                 for (;;) { __asm__ __volatile__("cli; hlt"); }
                 break;
 
+            case 55: /* EXIT_REASON_XSETBV */ {
+                /* Guest executing XSETBV to set XCR0 (AVX/SSE state).
+                 * XCR0 is not directly settable via VMCS. We need host CR4.OSXSAVE=1
+                 * to execute XSETBV. Enable it temporarily if needed. */
+                prtos_u32_t xcr_idx = (prtos_u32_t)vmx->guest_regs[VMX_REG_RCX];
+                prtos_u32_t lo = (prtos_u32_t)vmx->guest_regs[VMX_REG_RAX];
+                prtos_u32_t hi = (prtos_u32_t)vmx->guest_regs[VMX_REG_RDX];
+                prtos_u64_t cr4 = save_cr4();
+                if (!(cr4 & (1ULL << 18))) {  /* CR4.OSXSAVE = bit 18 */
+                    load_cr4(cr4 | (1ULL << 18));
+                }
+                __asm__ __volatile__("xsetbv" :: "c"(xcr_idx), "a"(lo), "d"(hi));
+                if (!(cr4 & (1ULL << 18))) {
+                    load_cr4(cr4);
+                }
+                vmx_vmwrite(VMCS_GUEST_RIP,
+                    vmx_vmread(VMCS_GUEST_RIP) + vmx_vmread(VMCS_EXIT_INSTRUCTION_LEN));
+                break;
+            }
+
             default:
                 kprintf("[VMX] Unhandled VM exit reason %d at RIP=0x%llx qual=0x%llx\n",
                         reason, (unsigned long long)vmx_vmread(VMCS_GUEST_RIP),
@@ -778,13 +863,15 @@ static void vpit_write(struct vmx_state *vmx, prtos_u16_t port, prtos_u8_t val) 
         prtos_u8_t access  = (val >> 4) & 0x3;
         prtos_u8_t mode    = (val >> 1) & 0x7;
 
-        if (channel != 0) return;  /* Only emulate channel 0 */
+        /* Emulate channels 0 and 2 (Linux uses ch2 for calibration) */
+        if (channel != 0 && channel != 2) return;
         pit->mode = mode;
         pit->access = access;
         pit->write_lsb = 0;
+        pit->read_lsb = 0;
         pit->latch_state = 0;
-    } else if (port == 0x40) {
-        /* Channel 0 data */
+    } else if (port == 0x40 || port == 0x42) {
+        /* Channel 0 or 2 data */
         if (pit->access == 1) {
             /* Lobyte only */
             pit->reload = val;
@@ -813,9 +900,47 @@ static void vpit_write(struct vmx_state *vmx, prtos_u16_t port, prtos_u8_t val) 
 }
 
 static prtos_u8_t vpit_read(struct vmx_state *vmx, prtos_u16_t port) {
-    (void)vmx;
-    (void)port;
-    /* Reading PIT counter is rarely used by FreeRTOS; return 0 */
+    struct vpit_state *pit = &vmx->vpit;
+
+    if (port == 0x43) return 0;  /* control word is write-only */
+
+    if (port == 0x40 || port == 0x42) {
+        /* Read channel 0 (or 2) counter. Compute current count based on time elapsed. */
+        if (pit->active && pit->reload > 0) {
+            prtos_u64_t now = get_sys_clock_usec();
+            /* Elapsed microseconds since last reload */
+            prtos_u64_t elapsed_us;
+            if (now >= pit->next_tick_us - pit->period_us)
+                elapsed_us = now - (pit->next_tick_us - pit->period_us);
+            else
+                elapsed_us = 0;
+            /* Convert elapsed us to PIT ticks: ticks = elapsed_us * PIT_FREQ_HZ / 1000000 */
+            prtos_u64_t elapsed_ticks = elapsed_us * PIT_FREQ_HZ / 1000000ULL;
+            prtos_u32_t cur_count;
+            if (elapsed_ticks >= pit->reload)
+                cur_count = 0;
+            else
+                cur_count = pit->reload - (prtos_u32_t)elapsed_ticks;
+
+            /* Return low or high byte depending on access mode and latch state */
+            if (pit->access == 1) {
+                return (prtos_u8_t)(cur_count & 0xFF);
+            } else if (pit->access == 2) {
+                return (prtos_u8_t)((cur_count >> 8) & 0xFF);
+            } else if (pit->access == 3) {
+                /* Lo/Hi: alternate between low and high byte */
+                if (!pit->read_lsb) {
+                    pit->read_lsb = 1;
+                    return (prtos_u8_t)(cur_count & 0xFF);
+                } else {
+                    pit->read_lsb = 0;
+                    return (prtos_u8_t)((cur_count >> 8) & 0xFF);
+                }
+            }
+        }
+        return 0;
+    }
+
     return 0;
 }
 
@@ -847,15 +972,26 @@ static void vpic_write(struct vpic_state *vpic, prtos_u16_t port, prtos_u8_t val
             vpic->imr[chip] = 0;
             vpic->isr[chip] = 0;
             vpic->irr[chip] = 0;
-        } else if (val == 0x20) {
-            /* Non-specific EOI (OCW2) */
-            if (vpic->isr[chip]) {
-                /* Clear highest-priority in-service bit */
-                int i;
-                for (i = 0; i < 8; i++) {
-                    if (vpic->isr[chip] & (1 << i)) {
-                        vpic->isr[chip] &= ~(1 << i);
-                        break;
+        } else if ((val & 0x18) == 0x08) {
+            /* OCW3: bits 4:3 = 01 */
+            vpic->read_isr[chip] = (val & 0x03) == 0x03 ? 1 : 0;
+        } else if ((val & 0x18) == 0x00) {
+            /* OCW2: bits 4:3 = 00. Bits 7:5 = R SL EOI */
+            int eoi = (val >> 5) & 1;
+            int sl  = (val >> 6) & 1;
+            int irq = val & 0x07;
+            if (eoi) {
+                if (sl) {
+                    /* Specific EOI: clear ISR for specified IRQ */
+                    vpic->isr[chip] &= ~(1 << irq);
+                } else {
+                    /* Non-specific EOI: clear highest-priority ISR bit */
+                    int i;
+                    for (i = 0; i < 8; i++) {
+                        if (vpic->isr[chip] & (1 << i)) {
+                            vpic->isr[chip] &= ~(1 << i);
+                            break;
+                        }
                     }
                 }
             }
@@ -887,6 +1023,9 @@ static prtos_u8_t vpic_read(struct vpic_state *vpic, prtos_u16_t port) {
     if (is_data) {
         return vpic->imr[chip];
     } else {
+        /* Command port read: depends on OCW3 state */
+        if (vpic->read_isr[chip])
+            return vpic->isr[chip];
         return vpic->irr[chip];
     }
 }
@@ -934,6 +1073,37 @@ static int vpic_get_pending_vector(struct vmx_state *vmx) {
  * Virtual UART (16550) Emulation
  * ================================================================ */
 
+static void vuart_update_irq(struct vmx_state *vmx) {
+    struct vuart_state *uart = &vmx->vuart;
+    int raise = 0;
+
+    /* THRE interrupt: IER bit 1 and THR is empty (always true - we instantly consume) */
+    if (uart->ier & 0x02)
+        raise = 1;
+
+    /* Data available interrupt: IER bit 0 and data in rx buffer */
+    if ((uart->ier & 0x01) && (uart->rx_head != uart->rx_tail))
+        raise = 1;
+
+    if (raise)
+        vpic_raise_irq(&vmx->vpic, 4);
+}
+
+static void vuart_poll_host(struct vmx_state *vmx) {
+    struct vuart_state *uart = &vmx->vuart;
+    /* Poll host UART for incoming data */
+    while (in_byte(0x3FD) & 0x01) {
+        prtos_u8_t ch = in_byte(0x3F8);
+        prtos_u8_t next = (uart->rx_head + 1) % sizeof(uart->rx_buf);
+        if (next != uart->rx_tail) {
+            uart->rx_buf[uart->rx_head] = ch;
+            uart->rx_head = next;
+        }
+    }
+    if (uart->rx_head != uart->rx_tail)
+        vuart_update_irq(vmx);
+}
+
 static void vuart_write(struct vmx_state *vmx, prtos_u16_t port, prtos_u8_t val) {
     struct vuart_state *uart = &vmx->vuart;
     prtos_u16_t offset = port - 0x3F8;
@@ -950,8 +1120,11 @@ static void vuart_write(struct vmx_state *vmx, prtos_u16_t port, prtos_u8_t val)
             extern void console_put_char(prtos_u8_t c);
             console_put_char((prtos_u8_t)val);
         }
+        uart->thr_empty = 1;
+        vuart_update_irq(vmx);
         break;
-    case 1: uart->ier = val; break;
+    case 1: uart->ier = val; vuart_update_irq(vmx); break;
+    case 2: uart->fcr = val; break;
     case 3: uart->lcr = val; break;
     case 4: uart->mcr = val; break;
     case 7: uart->scratch = val; break;
@@ -968,12 +1141,31 @@ static prtos_u8_t vuart_read(struct vmx_state *vmx, prtos_u16_t port) {
     }
 
     switch (offset) {
-    case 0: return 0;            /* RBR: no data */
+    case 0: {                    /* RBR: receive buffer */
+        if (uart->rx_head != uart->rx_tail) {
+            prtos_u8_t ch = uart->rx_buf[uart->rx_tail];
+            uart->rx_tail = (uart->rx_tail + 1) % sizeof(uart->rx_buf);
+            return ch;
+        }
+        return 0;
+    }
     case 1: return uart->ier;
-    case 2: return 0x01;         /* IIR: no interrupt pending */
+    case 2: {                    /* IIR: interrupt identification */
+        /* Priority: 1) RX data available, 2) THRE */
+        if ((uart->ier & 0x01) && (uart->rx_head != uart->rx_tail))
+            return 0x04;         /* IIR: RX data available (priority 2) */
+        if (uart->ier & 0x02)
+            return 0x02;         /* IIR: THRE interrupt (priority 3) */
+        return 0x01;             /* No interrupt pending */
+    }
     case 3: return uart->lcr;
     case 4: return uart->mcr;
-    case 5: return 0x60;         /* LSR: THR empty + transmitter empty */
+    case 5: {                    /* LSR */
+        prtos_u8_t lsr = 0x60;  /* THR empty + transmitter empty */
+        if (uart->rx_head != uart->rx_tail)
+            lsr |= 0x01;        /* Data ready */
+        return lsr;
+    }
     case 6: return 0;            /* MSR */
     case 7: return uart->scratch;
     }
@@ -999,14 +1191,37 @@ static void vmx_handle_io_exit(kthread_t *k, struct vmx_state *vmx) {
 
         if (port >= 0x40 && port <= 0x43)
             val = vpit_read(vmx, port);
+        else if (port == 0x61) {
+            /* Speaker/PIT gate register.
+             * Bit 0: PIT channel 2 gate (written by guest)
+             * Bit 5: PIT channel 2 OUT (read-only, set when counter reaches 0) */
+            prtos_u8_t v = vmx->port61;
+            struct vpit_state *pit = &vmx->vpit;
+            if (pit->active && pit->reload > 0) {
+                prtos_u64_t now = get_sys_clock_usec();
+                prtos_u64_t elapsed_us;
+                if (now >= pit->next_tick_us - pit->period_us)
+                    elapsed_us = now - (pit->next_tick_us - pit->period_us);
+                else
+                    elapsed_us = 0;
+                prtos_u64_t elapsed_ticks = elapsed_us * PIT_FREQ_HZ / 1000000ULL;
+                if (elapsed_ticks >= pit->reload)
+                    v |= 0x20;  /* Set OUT bit - counter expired */
+                else
+                    v &= ~0x20;  /* Clear OUT bit - still counting */
+            }
+            val = v;
+        }
         else if (port == 0x20 || port == 0x21 || port == 0xA0 || port == 0xA1)
             val = vpic_read(&vmx->vpic, port);
         else if (port >= 0x3F8 && port <= 0x3FF)
             val = vuart_read(vmx, port);
         else if (port == 0x64)
             val = 0;  /* keyboard status: no data */
-        else if (port == 0xCF8 || port == 0xCFC)
+        else if (port == 0xCF8 || (port >= 0xCFC && port <= 0xCFF))
             val = 0xFF; /* PCI: nothing here */
+        else
+            val = 0xFF;
 
         /* Set result in guest EAX */
         vmx->guest_regs[VMX_REG_RAX] = (vmx->guest_regs[VMX_REG_RAX] & ~0xFFULL) | val;
@@ -1015,6 +1230,8 @@ static void vmx_handle_io_exit(kthread_t *k, struct vmx_state *vmx) {
 
         if (port >= 0x40 && port <= 0x43)
             vpit_write(vmx, port, val);
+        else if (port == 0x61)
+            vmx->port61 = val;  /* Speaker/PIT gate register */
         else if (port == 0x20 || port == 0x21 || port == 0xA0 || port == 0xA1)
             vpic_write(&vmx->vpic, port, val);
         else if (port >= 0x3F8 && port <= 0x3FF)
@@ -1031,13 +1248,28 @@ static void vmx_handle_cpuid_exit(struct vmx_state *vmx) {
     prtos_u32_t leaf = (prtos_u32_t)vmx->guest_regs[VMX_REG_RAX];
     prtos_u32_t subleaf = (prtos_u32_t)vmx->guest_regs[VMX_REG_RCX];
 
-    eax = leaf;
-    ecx = subleaf;
-    __asm__ __volatile__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
-                                 : "0"(eax), "2"(ecx));
+    /* Hide KVM hypervisor signature so guest doesn't try KVM paravirt features.
+     * Leaves 0x40000000-0x400000FF are KVM-specific. Return zeros. */
+    if (leaf >= 0x40000000 && leaf <= 0x400000FF) {
+        eax = 0; ebx = 0; ecx = 0; edx = 0;
+    } else {
+        eax = leaf;
+        ecx = subleaf;
+        __asm__ __volatile__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                                     : "0"(eax), "2"(ecx));
+    }
 
     /* Hide VMX capability from guest */
-    if (leaf == 1) ecx &= ~(1 << 5);
+    if (leaf == 1) {
+        ecx &= ~(1 << 5);   /* VMX */
+        ecx &= ~(1 << 31);  /* hypervisor present bit - hide from guest */
+    }
+
+    /* Hide INVPCID (leaf 7, subleaf 0, EBX bit 10) - not emulated */
+    if (leaf == 7 && subleaf == 0) ebx &= ~(1 << 10);
+
+    /* Hide XSAVES/XRSTORS (leaf 0xD, subleaf 1, EAX bit 3) - not enabled in VMCS */
+    if (leaf == 0xD && subleaf == 1) eax &= ~(1 << 3);
 
     vmx->guest_regs[VMX_REG_RAX] = eax;
     vmx->guest_regs[VMX_REG_RBX] = ebx;
@@ -1076,12 +1308,6 @@ static void vmx_handle_hlt_exit(kthread_t *k, struct vmx_state *vmx) {
 
 static void vmx_check_pending_irq(struct vmx_state *vmx) {
     int vector;
-
-    /* NOTE: Do NOT call vpit_tick here. PIT ticks are raised only in
-     * specific exit handlers (preemption timer, external interrupt, HLT).
-     * Calling vpit_tick here would inject a new PIT interrupt immediately
-     * after the guest's ISR sends EOI, causing nested interrupts that
-     * corrupt FreeRTOS's ullPortInterruptNesting counter. */
 
     /* Get pending vector from virtual PIC */
     vector = vpic_get_pending_vector(vmx);

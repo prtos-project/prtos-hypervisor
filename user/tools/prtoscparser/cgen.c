@@ -38,7 +38,7 @@ static inline void generate_region_table(FILE *out_file) {
     fprintf(out_file, "const struct prtos_conf_memory_region prtos_conf_mem_reg_table[] = {\n");
 
     for (e = 0; e < prtos_conf.num_of_regions; e++) {
-#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_amd64)
         fprintf(out_file,
                 ADDNTAB(1, "[%d] = {\n") ADDNTAB(2, ".start_addr = 0x%" PRINT_PREF "llx,\n") ADDNTAB(2, ".size = %" PRINT_PREF "llu,\n")
                     ADDNTAB(2, ".flags = 0x%x,\n") ADDNTAB(1, "},\n"),
@@ -60,7 +60,7 @@ static inline void generate_phys_mem_area_table(FILE *out_file) {
     for (i = 0; i < prtos_conf.num_of_physical_memory_areas; i++) {
         fprintf(out_file, ADDNTAB(1, "[%d] = {\n"), i);
         fprintf(out_file, ADDNTAB(2, ".name_offset = %u,\n"), prtos_conf_mem_area_table[i].name_offset);
-#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_amd64)
         fprintf(out_file, ADDNTAB(2, ".start_addr = 0x%" PRINT_PREF "llx,\n"), prtos_conf_mem_area_table[i].start_addr);
         fprintf(out_file, ADDNTAB(2, ".mapped_at = 0x%" PRINT_PREF "llx,\n"), prtos_conf_mem_area_table[i].mapped_at);
         fprintf(out_file, ADDNTAB(2, ".size = %" PRINT_PREF "llu,\n"), prtos_conf_mem_area_table[i].size);
@@ -325,7 +325,7 @@ static inline void generate_system_devices(FILE *out_file) {
 
 static inline void generate_prtos_config(FILE *out_file) {
     fprintf(out_file, "struct prtos_conf_rsw_info prtos_conf_rsw_info;\n\n");
-#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_amd64)
     fprintf(out_file,
             "const struct prtos_conf prtos_conf __attribute__ ((section(\".rodata.hdr\"))) = {\n" ADDNTAB(1, ".signature = PRTOSC_SIGNATURE,\n")
                 ADDNTAB(1, ".data_size = (prtos_u_size_t)_data_size,\n") ADDNTAB(1, ".size = (prtos_u_size_t)_prtos_c_size,\n")
@@ -410,7 +410,7 @@ static void generate_rsv_mem(FILE *out_file) {
         }
     }
 
-#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_amd64)
     /* Reserve kthread + guest for each secondary CPU idle thread (SMP) */
     for (i = 1; i < prtos_conf.hpv.num_of_cpus; i++) {
         rsv_block(_KTHREAD_T_SIZEOF, ALIGNMENT, "secondary idle kthread");

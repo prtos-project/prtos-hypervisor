@@ -32,8 +32,9 @@ prtos_s32_t __VBOOT init_smp(void) {
     return x86_mp_conf.num_of_cpu;
 }
 
+static prtos_u32_t apic_wait_for_delivery(void) __attribute__((unused));
 static prtos_u32_t apic_wait_for_delivery(void) {
-    prtos_u32_t timeout, send_pending;
+    prtos_u32_t timeout __attribute__((unused)), send_pending;
 
     // send_pending = 1;
     // for (timeout = 0; timeout < 1000 && (send_pending != 0); timeout++) {
@@ -44,8 +45,9 @@ static prtos_u32_t apic_wait_for_delivery(void) {
     return send_pending;
 }
 
+static void wake_up_ap(prtos_u32_t start_eip, prtos_u32_t cpu_id) __attribute__((unused));
 static void wake_up_ap(prtos_u32_t start_eip, prtos_u32_t cpu_id) {
-    prtos_u32_t i, send_status, accept_status, max_lvt;
+    prtos_u32_t i __attribute__((unused)), send_status __attribute__((unused)), accept_status __attribute__((unused)), max_lvt __attribute__((unused));
 
     // lapic_write(APIC_ICR_HIGH, SET_APIC_DEST_FIELD(cpu_id));
     // lapic_write(APIC_ICR_LOW, APIC_INT_LEVELTRIG | APIC_INT_ASSERT | APIC_DM_INIT);

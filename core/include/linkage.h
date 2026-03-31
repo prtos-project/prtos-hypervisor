@@ -29,6 +29,7 @@
     ASM_ALIGN;                \
     SYMBOL_NAME_LABEL(name)
 
+#undef __STR
 #define __STR(x) #x
 #define TO_STR(x) __STR(x)
 

@@ -469,7 +469,7 @@ static int gicr_mmio_read(struct prtos_vgic_state *vgic, int vcpu_id,
     }
 
     /* SGI_base registers (offset 0x10000+) */
-    prtos_u64_t sgi_off = offset - GICR_SGI_OFFSET;
+    prtos_u64_t sgi_off __attribute__((unused)) = offset - GICR_SGI_OFFSET;
 
     if (offset == GICR_IGROUPR0) {
         prtos_u32_t reg = 0;

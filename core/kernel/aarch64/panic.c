@@ -14,6 +14,7 @@
 #include <stdc.h>
 
 #ifdef CONFIG_DEBUG
+static void stack_backtrace(prtos_word_t bp) __attribute__((unused));
 static void stack_backtrace(prtos_word_t bp) {
 #if 0
     prtos_s32_t e=1;

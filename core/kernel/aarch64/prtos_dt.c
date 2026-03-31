@@ -3399,6 +3399,8 @@ static int map_dt_irq_to_domain(const struct dt_device_node *dev,
  * the child resources available to domain 0.
  */
 static int map_device_children(const struct dt_device_node *dev,
+                               struct map_range_data *mr_data) __attribute__((unused));
+static int map_device_children(const struct dt_device_node *dev,
                                struct map_range_data *mr_data)
 {
     if ( dt_device_type_is_equal(dev, "pci") )

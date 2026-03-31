@@ -253,26 +253,18 @@ static inline void cpu_id(prtos_u32_t op, prtos_u32_t *eax, prtos_u32_t *ebx, pr
 #define FNINIT()
 #define CLTS()
 static inline void set_wp(void) {
-    prtos_u32_t tmpreg;
 }
 
 static inline void clear_wp(void) {
-    prtos_u32_t tmpreg;
 }
 
 static inline prtos_s32_t asm_rw_check(prtos_address_t param, prtos_u_size_t size, prtos_u32_t aligment) {
-    prtos_address_t addr;
-    prtos_s32_t ret = 1;
-    prtos_u8_t tmp;
-
+    (void)param; (void)size; (void)aligment;
     return 0;  // Have write permission
 }
 
 static inline prtos_s32_t asm_ronly_check(prtos_address_t param, prtos_u_size_t size, prtos_u32_t aligment) {
-    prtos_address_t addr;
-    prtos_s32_t ret = 1;
-    prtos_u8_t tmp;
-
+    (void)param; (void)size; (void)aligment;
     return 0;  // Have write permission
 }
 
