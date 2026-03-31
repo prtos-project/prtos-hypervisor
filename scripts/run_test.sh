@@ -24,17 +24,17 @@ ALL_CASES=(
     "example.009:2:15"
     "helloworld:1:15"
     "helloworld_smp:2:20:x86,aarch64,riscv64,amd64"
-    "freertos_para_virt:1:20:aarch64"
-    "freertos_hw_virt:0:30:aarch64"
+    "freertos_para_virt_aarch64:1:20:aarch64"
+    "freertos_hw_virt_aarch64:0:30:aarch64"
     "freertos_para_virt_riscv:1:20:riscv64"
     "freertos_hw_virt_riscv:0:30:riscv64"
     "freertos_para_virt_amd64:1:20:amd64"
     "freertos_hw_virt_amd64:0:30:amd64"
-    "linux:0:180:aarch64"
-    "linux_4vcpu_1partion:0:360:aarch64"
+    "linux_aarch64:0:180:aarch64"
+    "linux_4vcpu_1partion_aarch64:0:360:aarch64"
     "linux_4vcpu_1partion_riscv64:0:360:riscv64"
     "linux_4vcpu_1partion_amd64:0:360:amd64"
-    "mix_os_demo1:0:420:aarch64"
+    "mix_os_demo_aarch64:0:420:aarch64"
     "mix_os_demo_riscv64:0:420:riscv64"
     "mix_os_demo_amd64:0:420:amd64"
 )
@@ -58,13 +58,13 @@ Commands:
   check-<case>           Check a specific test case.
                          Available: helloworld, helloworld_smp,
                          example.001 ~ example.009,
-                         freertos_para_virt (aarch64 only),
-                         freertos_hw_virt (aarch64 only),
-                         linux (aarch64 only),
-                         linux_4vcpu_1partion (aarch64 only),
+                         freertos_para_virt_aarch64 (aarch64 only),
+                         freertos_hw_virt_aarch64 (aarch64 only),
+                         linux_aarch64 (aarch64 only),
+                         linux_4vcpu_1partion_aarch64 (aarch64 only),
                          linux_4vcpu_1partion_riscv64 (riscv64 only),
                          linux_4vcpu_1partion_amd64 (amd64 only),
-                         mix_os_demo1 (aarch64 only),
+                         mix_os_demo_aarch64 (aarch64 only),
                          mix_os_demo_riscv64 (riscv64 only),
                          mix_os_demo_amd64 (amd64 only)
   check-all              Check all test cases.
@@ -185,17 +185,17 @@ function lookup_case() {
 # Run the FreeRTOS hw_virt test case (aarch64 only)
 # Builds native (unmodified) FreeRTOS under PRTOS hw-virt, checks for timer output.
 # Returns: 0 on PASS, 1 on FAIL
-function run_test_freertos_hw_virt() {
-    local test_dir="${MONOREPO_ROOT}/user/bail/examples/freertos_hw_virt"
+function run_test_freertos_hw_virt_aarch64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/freertos_hw_virt_aarch64"
     if [[ ! -d "${test_dir}" ]]; then
         echo -e "${RED}Test directory not found: ${test_dir}${NC}"
         return 1
     fi
 
-    echo "+++ Checking examples/freertos_hw_virt [${ARCH}]"
+    echo "+++ Checking examples/freertos_hw_virt_aarch64 [${ARCH}]"
     cd "${test_dir}"
 
-    local output_file="${test_dir}/freertos_hw_virt.output"
+    local output_file="${test_dir}/freertos_hw_virt_aarch64.output"
     rm -f "${output_file}"
 
     make ${MAKE_RUN_TARGET} > "${output_file}" 2>&1 &
@@ -211,10 +211,10 @@ function run_test_freertos_hw_virt() {
     stop_count=$(grep -c "Stop$" "${output_file}" 2>/dev/null) || stop_count=0
 
     if [[ ${stop_count} -ge 5 ]]; then
-        echo -e "${GREEN}Check freertos_hw_virt PASS${NC}"
+        echo -e "${GREEN}Check freertos_hw_virt_aarch64 PASS${NC}"
         return 0
     else
-        echo -e "${RED}Check freertos_hw_virt FAILED${NC} (expected >=5 'Stop' lines, got ${stop_count})"
+        echo -e "${RED}Check freertos_hw_virt_aarch64 FAILED${NC} (expected >=5 'Stop' lines, got ${stop_count})"
         cat "${output_file}" 2>/dev/null || true
         return 1
     fi
@@ -321,21 +321,21 @@ function run_test_freertos_hw_virt_amd64() {
 # Run the Linux test case (aarch64 only)
 # Uses pexpect to boot, login (root/1234), and verify 2 vCPUs.
 # Returns: 0 on PASS, 1 on FAIL
-function run_test_linux() {
-    local test_dir="${MONOREPO_ROOT}/user/bail/examples/linux"
+function run_test_linux_aarch64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/linux_aarch64"
     if [[ ! -d "${test_dir}" ]]; then
         echo -e "${RED}Test directory not found: ${test_dir}${NC}"
         return 1
     fi
 
-    echo "+++ Checking examples/linux [${ARCH}]"
+    echo "+++ Checking examples/linux_aarch64 [${ARCH}]"
     cd "${test_dir}"
 
     # Build the Linux partition
     make clean > /dev/null 2>&1
     make > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}Check linux FAILED${NC} (build error)"
+        echo -e "${RED}Check linux_aarch64 FAILED${NC} (build error)"
         return 1
     fi
 
@@ -398,10 +398,10 @@ PYTEST
 
     local rc=$?
     if [[ ${rc} -eq 0 ]]; then
-        echo -e "${GREEN}Check linux PASS${NC}"
+        echo -e "${GREEN}Check linux_aarch64 PASS${NC}"
         return 0
     else
-        echo -e "${RED}Check linux FAILED${NC}"
+        echo -e "${RED}Check linux_aarch64 FAILED${NC}"
         return 1
     fi
 }
@@ -409,21 +409,21 @@ PYTEST
 # Run the Linux 4-vCPU test case (aarch64 only)
 # Uses pexpect to boot, login (root/1234), and verify 4 vCPUs.
 # Returns: 0 on PASS, 1 on FAIL
-function run_test_linux_4vcpu_1partion() {
-    local test_dir="${MONOREPO_ROOT}/user/bail/examples/linux_4vcpu_1partion"
+function run_test_linux_4vcpu_1partion_aarch64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/linux_4vcpu_1partion_aarch64"
     if [[ ! -d "${test_dir}" ]]; then
         echo -e "${RED}Test directory not found: ${test_dir}${NC}"
         return 1
     fi
 
-    echo "+++ Checking examples/linux_4vcpu_1partion [${ARCH}]"
+    echo "+++ Checking examples/linux_4vcpu_1partion_aarch64 [${ARCH}]"
     cd "${test_dir}"
 
     # Build the Linux partition
     make clean > /dev/null 2>&1
     make > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}Check linux_4vcpu_1partion FAILED${NC} (build error)"
+        echo -e "${RED}Check linux_4vcpu_1partion_aarch64 FAILED${NC} (build error)"
         return 1
     fi
 
@@ -486,10 +486,10 @@ PYTEST
 
     local rc=$?
     if [[ ${rc} -eq 0 ]]; then
-        echo -e "${GREEN}Check linux_4vcpu_1partion PASS${NC}"
+        echo -e "${GREEN}Check linux_4vcpu_1partion_aarch64 PASS${NC}"
         return 0
     else
-        echo -e "${RED}Check linux_4vcpu_1partion FAILED${NC}"
+        echo -e "${RED}Check linux_4vcpu_1partion_aarch64 FAILED${NC}"
         return 1
     fi
 }
@@ -498,21 +498,21 @@ PYTEST
 # FreeRTOS on vCPU0 + Linux on vCPU1-3.
 # Verifies: RTOS prints status, Linux boots with 3 vCPUs, login works.
 # Returns: 0 on PASS, 1 on FAIL
-function run_test_mix_os_demo1() {
-    local test_dir="${MONOREPO_ROOT}/user/bail/examples/mix_os_demo1"
+function run_test_mix_os_demo_aarch64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/mix_os_demo_aarch64"
     if [[ ! -d "${test_dir}" ]]; then
         echo -e "${RED}Test directory not found: ${test_dir}${NC}"
         return 1
     fi
 
-    echo "+++ Checking examples/mix_os_demo1 [${ARCH}]"
+    echo "+++ Checking examples/mix_os_demo_aarch64 [${ARCH}]"
     cd "${test_dir}"
 
     # Build both partitions
     make clean > /dev/null 2>&1
     make > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}Check mix_os_demo1 FAILED${NC} (build error)"
+        echo -e "${RED}Check mix_os_demo_aarch64 FAILED${NC} (build error)"
         return 1
     fi
 
@@ -590,10 +590,10 @@ PYTEST
 
     local rc=$?
     if [[ ${rc} -eq 0 ]]; then
-        echo -e "${GREEN}Check mix_os_demo1 PASS${NC}"
+        echo -e "${GREEN}Check mix_os_demo_aarch64 PASS${NC}"
         return 0
     else
-        echo -e "${RED}Check mix_os_demo1 FAILED${NC}"
+        echo -e "${RED}Check mix_os_demo_aarch64 FAILED${NC}"
         return 1
     fi
 }
@@ -976,16 +976,16 @@ function run_test() {
     local case_name="$1"
 
     # Custom test runners for special cases
-    if [[ "${case_name}" == "linux" ]]; then
-        run_test_linux
+    if [[ "${case_name}" == "linux_aarch64" ]]; then
+        run_test_linux_aarch64
         return $?
     fi
-    if [[ "${case_name}" == "linux_4vcpu_1partion" ]]; then
-        run_test_linux_4vcpu_1partion
+    if [[ "${case_name}" == "linux_4vcpu_1partion_aarch64" ]]; then
+        run_test_linux_4vcpu_1partion_aarch64
         return $?
     fi
-    if [[ "${case_name}" == "freertos_hw_virt" ]]; then
-        run_test_freertos_hw_virt
+    if [[ "${case_name}" == "freertos_hw_virt_aarch64" ]]; then
+        run_test_freertos_hw_virt_aarch64
         return $?
     fi
     if [[ "${case_name}" == "freertos_hw_virt_riscv" ]]; then
@@ -996,8 +996,8 @@ function run_test() {
         run_test_freertos_hw_virt_amd64
         return $?
     fi
-    if [[ "${case_name}" == "mix_os_demo1" ]]; then
-        run_test_mix_os_demo1
+    if [[ "${case_name}" == "mix_os_demo_aarch64" ]]; then
+        run_test_mix_os_demo_aarch64
         return $?
     fi
     if [[ "${case_name}" == "linux_4vcpu_1partion_riscv64" ]]; then
@@ -1095,16 +1095,16 @@ function builder_to_case() {
     case "${builder}" in
         check-helloworld)     echo "helloworld" ;;
         check-helloworld_smp) echo "helloworld_smp" ;;
-        check-freertos_para_virt)       echo "freertos_para_virt" ;;
-        check-freertos_hw_virt) echo "freertos_hw_virt" ;;
+        check-freertos_para_virt_aarch64) echo "freertos_para_virt_aarch64" ;;
+        check-freertos_hw_virt_aarch64) echo "freertos_hw_virt_aarch64" ;;
         check-freertos_para_virt_riscv) echo "freertos_para_virt_riscv" ;;
         check-freertos_hw_virt_riscv) echo "freertos_hw_virt_riscv" ;;
         check-freertos_para_virt_amd64) echo "freertos_para_virt_amd64" ;;
         check-freertos_hw_virt_amd64) echo "freertos_hw_virt_amd64" ;;
-        check-linux)          echo "linux" ;;
-        check-linux_4vcpu_1partion) echo "linux_4vcpu_1partion" ;;
+        check-linux_aarch64)          echo "linux_aarch64" ;;
+        check-linux_4vcpu_1partion_aarch64) echo "linux_4vcpu_1partion_aarch64" ;;
         check-linux_4vcpu_1partion_riscv64) echo "linux_4vcpu_1partion_riscv64" ;;
-        check-mix_os_demo1) echo "mix_os_demo1" ;;
+        check-mix_os_demo_aarch64) echo "mix_os_demo_aarch64" ;;
         check-mix_os_demo_riscv64) echo "mix_os_demo_riscv64" ;;
         check-linux_4vcpu_1partion_amd64) echo "linux_4vcpu_1partion_amd64" ;;
         check-mix_os_demo_amd64) echo "mix_os_demo_amd64" ;;

@@ -1,5 +1,5 @@
 /*
- * Boot stub for Linux guest running in PRTOS partition 1 (mix_os_demo1).
+ * Boot stub for Linux guest running in PRTOS partition 1 (mix_os_demo_aarch64).
  *
  * Memory layout (IPA space, base = 0x10000000):
  *   0x10000000  PRTOS image header + boot stub

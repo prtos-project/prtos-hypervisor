@@ -19,7 +19,7 @@
   Note: Linux is partition 0 so that the hypervisor routes serial
   console input to it by default (console_rx starts at dom0).
 -->
-<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="mix_os_demo1">
+<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="mix_os_demo_aarch64">
     <HwDescription>
         <MemoryLayout>
             <Region type="ram" start="0x0" size="2048MB" />

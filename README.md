@@ -3,11 +3,14 @@
 ## Introduction
 ------------
 
-**PRTOS Hypervisor** is a lightweight, open-source embedded hypervisor which aims at providing strong isolation and real-time guarantees. PRTOS provides a minimal implementation of separation kernel hypervisor architecture. 
+**PRTOS Hypervisor** is an open-source, lightweight embedded Type-1 Hypervisor dedicated to building secure and efficient real-time systems through virtualization technology. Utilizing a **Separation Kernel** architecture, PRTOS enables multiple applications to coexist and collaborate securely on a single hardware platform through strict spatial and temporal partitioning. By providing deep virtualization of critical resources—including CPU, memory, and I/O devices—PRTOS ensures system security while completely eliminating mutual interference between applications.
 
-Designed mainly for targeting mixed-criticality systems, prtos strongly focuses on isolation for fault-containment and real-time behavior. Its implementation comprises only a minimal, thin-layer of privileged software leveraging hardware-assisted virtualization based on ARMv8 virtualization extensions on aarch64 platforms and Intel VT-x on amd64 platforms, while utilizing para-virtualization technology on 32-bit x86 platforms. The main goal of PRTOS Hypervisor is to provide a virtualization platform that ensures isolation and predictability for critical applications running on embedded systems. It achieves this by using a type-1 hypervisor architecture, where the hypervisor runs directly on the hardware without the need for an underlying operating system.
+Regarding platform compatibility, PRTOS fully leverages hardware-assisted virtualization extensions on ARMv8 (AArch64), AMD64 (x86_64), and RISC-V (RV64). Furthermore, it provides comprehensive Para-virtualization support for 32-bit x86 as well as the three major 64-bit platforms mentioned above, offering exceptional flexibility for diverse deployment scenarios.
 
-PRTOS Hypervisor stands on the shoulders of giants, drawing inspiration from some classic open-source software projects such as [XtratuM](https://en.wikipedia.org/wiki/XtratuM), [Xen Hypervisor](https://xenproject.org/), [Lguest Hypervisor](http://lguest.ozlabs.org), and [Linux Kernel](https://www.linux.org/). Because of this, PRTOS Hypervisor is also released under the GPL license. Additionally, a book titled [Embedded Hypervisor: Architecture, Principles, and Implemenation](https://item.jd.com/10106992272683.html) has been published, offering a detailed introduction to the design and implementation techniques of PRTOS Hypervisor. This aims to facilitate a better understanding of PRTOS Hypervisor and foster an open community where students and enthusiasts interested in hypervisors can participate, thereby promoting the healthy evolution of PRTOS Hypervisor.
+In PRTOS, partitions are defined as independent execution environments that operate in isolation. These partitions are managed via a predefined cyclic scheduling table for time-division multiplexing, with inter-partition communication (IPC) handled through an efficient message-passing mechanism. The system supports two types of partitions: System Partitions and Standard Partitions, where System Partitions possess the privileged authority to manage global states and other partitions. Additionally, PRTOS integrates a suite of advanced features, including fine-grained error detection, fault management, sophisticated diagnostic techniques, and a highly configurable health monitoring system, alongside real-time tracing services for in-depth debugging and system behavior monitoring.
+
+Adhering to the open-source spirit of "standing on the shoulders of giants," PRTOS draws significant technical inspiration from esteemed projects such as  [XtratuM](https://en.wikipedia.org/wiki/XtratuM), [Xen Hypervisor](https://xenproject.org/), [Lguest Hypervisor](http://lguest.ozlabs.org), and [Linux Kernel](https://www.linux.org/). Consequently, PRTOS is released under the GPL license. To assist developers in exploring its inner workings, the companion book,  [Embedded Hypervisor: Architecture, Principles, and Implemenation](https://item.jd.com/10106992272683.html), provides a detailed exposition of the design and implementation of PRTOS. We cordially invite technology enthusiasts to join the PRTOS open-source community to collectively drive the evolution of the system, particularly in advancing support for ARMv8 and RISC-V architectures and adapting a wider range of partitioned applications.
+
 
 ## PRTOS Hypervisor Architecture
 
@@ -217,13 +220,13 @@ Commands:
   check-<case>           Check a specific test case.
                          Available: helloworld, helloworld_smp,
                          example.001 ~ example.009,
-                         freertos_para_virt (aarch64 only),
-                         freertos_hw_virt (aarch64 only),
-                         linux (aarch64 only),
-                         linux_4vcpu_1partion (aarch64 only),
+                         freertos_para_virt_aarch64 (aarch64 only),
+                         freertos_hw_virt_aarch64 (aarch64 only),
+                         linux_aarch64 (aarch64 only),
+                         linux_4vcpu_1partion_aarch64 (aarch64 only),
                          linux_4vcpu_1partion_riscv64 (riscv64 only),
                          linux_4vcpu_1partion_amd64 (amd64 only),
-                         mix_os_demo1 (aarch64 only),
+                         mix_os_demo_aarch64 (aarch64 only),
                          mix_os_demo_riscv64 (riscv64 only),
                          mix_os_demo_amd64 (amd64 only)
   check-all              Check all test cases.
@@ -254,17 +257,17 @@ The test report of run `bash scripts/run_test.sh --arch x86 check-all` should be
   example.009          PASS
   helloworld           PASS
   helloworld_smp       PASS
-  freertos_para_virt   SKIP
-  freertos_hw_virt     SKIP
+  freertos_para_virt_aarch64 SKIP
+  freertos_hw_virt_aarch64 SKIP
   freertos_para_virt_riscv SKIP
   freertos_hw_virt_riscv SKIP
   freertos_para_virt_amd64 SKIP
   freertos_hw_virt_amd64 SKIP
-  linux                SKIP
-  linux_4vcpu_1partion SKIP
+  linux_aarch64        SKIP
+  linux_4vcpu_1partion_aarch64 SKIP
   linux_4vcpu_1partion_riscv64 SKIP
   linux_4vcpu_1partion_amd64 SKIP
-  mix_os_demo1         SKIP
+  mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    SKIP
 --------------------------------------
@@ -290,17 +293,17 @@ The test report of run `bash scripts/run_test.sh --arch aarch64 check-all` shoul
   example.009          PASS
   helloworld           PASS
   helloworld_smp       PASS
-  freertos_para_virt   PASS
-  freertos_hw_virt     PASS
+  freertos_para_virt_aarch64 PASS
+  freertos_hw_virt_aarch64 PASS
   freertos_para_virt_riscv SKIP
   freertos_hw_virt_riscv SKIP
   freertos_para_virt_amd64 SKIP
   freertos_hw_virt_amd64 SKIP
-  linux                PASS
-  linux_4vcpu_1partion PASS
+  linux_aarch64        PASS
+  linux_4vcpu_1partion_aarch64 PASS
   linux_4vcpu_1partion_riscv64 SKIP
   linux_4vcpu_1partion_amd64 SKIP
-  mix_os_demo1         PASS
+  mix_os_demo_aarch64  PASS
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    SKIP
 --------------------------------------
@@ -325,17 +328,17 @@ The test report of run `bash scripts/run_test.sh --arch riscv64 check-all` shoul
   example.009          PASS
   helloworld           PASS
   helloworld_smp       PASS
-  freertos_para_virt   SKIP
-  freertos_hw_virt     SKIP
+  freertos_para_virt_aarch64 SKIP
+  freertos_hw_virt_aarch64 SKIP
   freertos_para_virt_riscv PASS
   freertos_hw_virt_riscv PASS
   freertos_para_virt_amd64 SKIP
   freertos_hw_virt_amd64 SKIP
-  linux                SKIP
-  linux_4vcpu_1partion SKIP
+  linux_aarch64        SKIP
+  linux_4vcpu_1partion_aarch64 SKIP
   linux_4vcpu_1partion_riscv64 PASS
   linux_4vcpu_1partion_amd64 SKIP
-  mix_os_demo1         SKIP
+  mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  PASS
   mix_os_demo_amd64    SKIP
 --------------------------------------
@@ -360,17 +363,17 @@ The test report of run `bash scripts/run_test.sh --arch amd64 check-all` should 
   example.009          PASS
   helloworld           PASS
   helloworld_smp       PASS
-  freertos_para_virt   SKIP
-  freertos_hw_virt     SKIP
+  freertos_para_virt_aarch64 SKIP
+  freertos_hw_virt_aarch64 SKIP
   freertos_para_virt_riscv SKIP
   freertos_hw_virt_riscv SKIP
   freertos_para_virt_amd64 PASS
   freertos_hw_virt_amd64 PASS
-  linux                SKIP
-  linux_4vcpu_1partion SKIP
+  linux_aarch64        SKIP
+  linux_4vcpu_1partion_aarch64 SKIP
   linux_4vcpu_1partion_riscv64 SKIP
   linux_4vcpu_1partion_amd64 PASS
-  mix_os_demo1         SKIP
+  mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    PASS
 --------------------------------------

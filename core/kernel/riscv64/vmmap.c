@@ -180,10 +180,6 @@ void flush_tlb_entry(prtos_address_t addr) {
     __asm__ __volatile__("sfence.vma %0" : : "r"(addr) : "memory");
 }
 
-prtos_address_t SET_PTE_UNCACHED(prtos_address_t val) {
-    return val;
-}
-
 /* Convert IPA (physical) to virtual address using the VA/PA offset.
  * Mask to valid physical address range to clear sign-extension from
  * 32-bit guest address computations (lw sign-extends to 64 bits). */
