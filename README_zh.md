@@ -369,6 +369,15 @@ The test report of run `bash scripts/run_test.sh --arch amd64 check-all` should 
   Total: 24  Pass: 15  Fail: 0  Skip: 9
 ======================================
 ```
+NOTE：
+在 AMD64 硬件虚拟化测试中，QEMU 需要通过 `-enable-kvm` 选项利用宿主机的 `KVM` 模块进行加速。为确保测试顺利运行，请务必将当前用户加入 `kvm` 权限组：
+
+```
+# 授权并检查
+sudo usermod -a -G kvm $USER
+grep 'kvm' /etc/group  # 确认用户组状态
+```
+
 
 [PRTOS用户手册](http://www.prtos.org/prtos_hypervisor_x86_user_guide/)
 

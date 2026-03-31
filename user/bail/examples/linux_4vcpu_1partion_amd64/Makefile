@@ -93,12 +93,12 @@ include ../run.mk
 run.amd64:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
-	@qemu-system-x86_64 -enable-kvm -cpu host -m 512 -cdrom resident_sw.iso -serial stdio -boot d -smp 4
+	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg -m 512 -cdrom resident_sw.iso -serial stdio -boot d -smp 4
 
 run.amd64.nographic:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
-	@qemu-system-x86_64 -enable-kvm -cpu host -nographic -m 512 -cdrom resident_sw.iso -serial mon:stdio -boot d -smp 4
+	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg -nographic -m 512 -cdrom resident_sw.iso -serial mon:stdio -boot d -smp 4
 
 clean:
 	@rm -f partition *.pef *.prtos_conf container.bin resident_sw resident_sw.iso

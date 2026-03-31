@@ -26,7 +26,7 @@ if ret.returncode != 0:
     sys.exit(1)
 
 cmd = ("sg kvm -c 'qemu-system-x86_64 "
-       "-enable-kvm -cpu host "
+    "-enable-kvm -cpu host,-waitpkg "
        "-m 512 -smp 4 "
        "-nographic -no-reboot "
        "-cdrom resident_sw.iso "

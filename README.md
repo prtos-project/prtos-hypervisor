@@ -379,7 +379,13 @@ The test report of run `bash scripts/run_test.sh --arch amd64 check-all` should 
 --------------------------------------
   Total: 24  Pass: 15  Fail: 0  Skip: 9
 ======================================
-
+```
+NOTE:
+AMD64 hardware virtualization tests require the `-enable-kvm` flag to leverage the host's `KVM` acceleration. Please add your user to the `kvm` group to grant the necessary permissions:
+```
+# Authorization and verification
+sudo usermod -a -G kvm $USER
+grep 'kvm' /etc/group  # Verify group membership
 ```
 
 [PRTOS Hypervisor Programming Guide](http://www.prtos.org/prtos_hypervisor_x86_user_guide/) | [PRTOS Hypervisor Samples](https://github.com/prtos-project/prtos-hypervisor/tree/main/user/bail/examples)

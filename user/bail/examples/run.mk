@@ -85,12 +85,12 @@ run.amd64.nographic:
 run.amd64.kvm:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
-	@qemu-system-x86_64 -enable-kvm -cpu host -m 512 -cdrom resident_sw.iso -serial stdio -boot d -smp 4
+	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg -m 512 -cdrom resident_sw.iso -serial stdio -boot d -smp 4
 
 run.amd64.kvm.nographic:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
-	@qemu-system-x86_64 -enable-kvm -cpu host -nographic -m 512 -cdrom resident_sw.iso -serial mon:stdio -boot d -smp 4
+	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg -nographic -m 512 -cdrom resident_sw.iso -serial mon:stdio -boot d -smp 4
 
 run: run.$(ARCH)
 	
