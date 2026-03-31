@@ -204,11 +204,11 @@ static void __init setup_directmap_mappings(unsigned long base_mfn,
 
 void __init setup_mm(void)
 {
-    const struct membanks *banks = bootinfo_get_mem();
+    const struct membanks *banks __attribute__((unused)) = bootinfo_get_mem();
     paddr_t ram_start = INVALID_PADDR;
     paddr_t ram_end = 0;
     paddr_t ram_size = 0;
-    unsigned int i;
+    unsigned int i __attribute__((unused));
 
     init_pdx();
 
@@ -2041,8 +2041,8 @@ void * __init early_fdt_map(paddr_t fdt_paddr)
 {
     /* We are using 2MB superpage for mapping the FDT */
     paddr_t base_paddr = fdt_paddr & SECOND_MASK;
-    paddr_t offset;
-    void *fdt_virt = fdt_paddr;
+    paddr_t offset = 0;
+    void *fdt_virt = (void *)(unsigned long)fdt_paddr;
     uint32_t size;
     int rc;
 

@@ -29,6 +29,10 @@
 #include <arch/processor.h>
 #include <arch/paging.h>
 
+/* Forward declarations */
+void flush_tlb(void);
+void flush_tlb_entry(prtos_address_t addr);
+
 /* PTE flags */
 #define PTE_V    (1UL << 0)
 #define PTE_R    (1UL << 1)
@@ -174,10 +178,6 @@ void flush_tlb(void) {
 
 void flush_tlb_entry(prtos_address_t addr) {
     __asm__ __volatile__("sfence.vma %0" : : "r"(addr) : "memory");
-}
-
-prtos_address_t SET_PTE_UNCACHED(prtos_address_t val) {
-    return val;
 }
 
 /* Convert IPA (physical) to virtual address using the VA/PA offset.

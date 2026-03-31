@@ -22,11 +22,11 @@ prtos_address_t main_pbl(void) {
     struct prtos_image_hdr *part_hdr;
     prtos_s32_t ret, i;
 
-    prtos_u8_t *img = (prtos_u8_t *)part_ctrl_table_ptr->image_start;
+    prtos_u8_t *img = (prtos_u8_t *)(unsigned long)part_ctrl_table_ptr->image_start;
     if ((ret = parse_pef_file(img, &pef_file)) != PEF_OK) return 0;
     part_hdr = load_pef_file(&pef_file, vaddr_to_paddr, 0, 0);
 
-    img = (prtos_u8_t *)((part_ctrl_table_ptr->image_start + pef_file.hdr->file_size) & (~(PAGE_SIZE - 1))) + PAGE_SIZE;
+    img = (prtos_u8_t *)(unsigned long)((part_ctrl_table_ptr->image_start + pef_file.hdr->file_size) & (~(PAGE_SIZE - 1))) + PAGE_SIZE;
 
     for (i = 0; i < part_hdr->num_of_custom_files; i++) {
         if ((ret = parse_pef_file((prtos_u8_t *)img, &pef_custom_file)) != PEF_OK) return 0;

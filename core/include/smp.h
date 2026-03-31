@@ -37,8 +37,8 @@ extern void setup_smp(void);
 #define smp_halt_all()
 #define CROSS_CPU_SCHED_NOTIFY(cpu) do {} while(0)
 #else
-#ifdef CONFIG_x86
-/* x86: use APIC IPI for cross-CPU notifications; smp_halt_all is in arch/apic.h */
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
+/* x86/amd64: use APIC IPI for cross-CPU notifications; smp_halt_all is in arch/apic.h */
 #define CROSS_CPU_SCHED_NOTIFY(cpu) send_ipi((cpu), NO_SHORTHAND_IPI, SCHED_PENDING_IPI_VECTOR)
 #elif defined(CONFIG_AARCH64)
 #define CROSS_CPU_SCHED_NOTIFY(cpu) do { __asm__ __volatile__("sev" ::: "memory"); } while(0)

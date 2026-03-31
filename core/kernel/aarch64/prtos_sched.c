@@ -2406,6 +2406,8 @@ bool __init allocate_bank_memory(struct kernel_info *kinfo, gfn_t sgfn,
  * if the type is "pci" and then parent type is not "pci".
  */
 static int __init handle_linux_pci_domain(struct kernel_info *kinfo,
+                                          const struct dt_device_node *node) __attribute__((unused));
+static int __init handle_linux_pci_domain(struct kernel_info *kinfo,
                                           const struct dt_device_node *node)
 {
     uint16_t segment;
@@ -7406,7 +7408,7 @@ const struct scheduler *__init sched_get_by_name(const char *sched_name)
 void __init scheduler_init(void)
 {
     struct domain *idle_domain;
-    int i;
+    int i __attribute__((unused));
 
     scheduler_enable();
 

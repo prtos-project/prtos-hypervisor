@@ -108,22 +108,22 @@ static inline void unalign_memcpy(prtos_u8_t *dst, prtos_u8_t *src, prtos_s_size
     prtos_u32_t l_scr_w, l_dst_w;
     prtos_s32_t c1, c2, e;
 
-    for (e = 0, c1 = (prtos_u32_t)src & 0x3, c2 = (prtos_u32_t)dst & 0x3; e < size; src++, dst++, c1 = (c1 + 1) & 0x3, c2 = (c2 + 1) & 0x3, e++) {
-        l_scr_w = src_r((prtos_u32_t *)((prtos_u32_t)src & ~0x3));
+    for (e = 0, c1 = (unsigned long)src & 0x3, c2 = (unsigned long)dst & 0x3; e < size; src++, dst++, c1 = (c1 + 1) & 0x3, c2 = (c2 + 1) & 0x3, e++) {
+        l_scr_w = src_r((prtos_u32_t *)((unsigned long)src & ~0x3UL));
 #ifdef CONFIG_TARGET_LITTLE_ENDIAN
         l_dst_w = l_scr_w & (0xff << ((c1 & 0x3) << 3));
         l_dst_w >>= ((c1 & 0x3) << 3);
         l_dst_w <<= ((c2 & 0x3) << 3);
 
-        l_dst_w |= (dst_r((prtos_u32_t *)((prtos_u32_t)dst & ~0x3)) & ~(0xff << ((c2 & 0x3) << 3)));
+        l_dst_w |= (dst_r((prtos_u32_t *)((unsigned long)dst & ~0x3UL)) & ~(0xff << ((c2 & 0x3) << 3)));
 #else
         l_dst_w = l_scr_w & (0xff000000 >> ((c1 & 0x3) << 3));
         l_dst_w <<= ((c1 & 0x3) << 3);
         l_dst_w >>= ((c2 & 0x3) << 3);
 
-        l_dst_w |= (dst_r((prtos_u32_t *)((prtos_u32_t)dst & ~0x3)) & ~(0xff000000 >> ((c2 & 0x3) << 3)));
+        l_dst_w |= (dst_r((prtos_u32_t *)((unsigned long)dst & ~0x3UL)) & ~(0xff000000 >> ((c2 & 0x3) << 3)));
 #endif
-        dst_w((prtos_u32_t *)((prtos_u32_t)dst & ~0x3), l_dst_w);
+        dst_w((prtos_u32_t *)((unsigned long)dst & ~0x3UL), l_dst_w);
     }
 }
 

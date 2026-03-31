@@ -35,9 +35,9 @@
 #error CONFIG_ID_STRING_LENGTH must be a power of 4 (log2(32))
 #endif
 
-#ifdef CONFIG_x86
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
 #if (CONFIG_PRTOS_LOAD_ADDR & 0x3FFFFF)
-#error prtos must be aligned to a 4MB boundary for a x86 target
+#error prtos must be aligned to a 4MB boundary for a x86/amd64 target
 #endif
 #endif
 

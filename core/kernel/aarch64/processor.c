@@ -70,7 +70,7 @@ local_processor_t *get_local_processor() {
 #define CALIBRATE_CYCLES CLOCK_TICK_RATE / CALIBRATE_MULT
 
 __VBOOT prtos_u32_t calculate_cpu_freq(void) {
-    prtos_u64_t c_start, c_stop, delta;
+    prtos_u64_t c_start = 0, c_stop = 0, delta = 0;
 
 
     return (c_stop - (c_start + delta)) * CALIBRATE_MULT;

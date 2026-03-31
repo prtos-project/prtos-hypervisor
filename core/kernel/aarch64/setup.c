@@ -45,8 +45,8 @@ prtos_u32_t __VBOOT get_gpu_khz(void) {
 }
 
 void __VBOOT setup_arch_common(void) {
+    extern void init_hpet(void);
     // #ifdef CONFIG_HPET
-    //     extern void init_hpet(void);
 
     init_hpet();
     // #endif

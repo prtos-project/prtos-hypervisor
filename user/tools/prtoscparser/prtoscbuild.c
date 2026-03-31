@@ -34,6 +34,15 @@
     "%s "                                                                                                                                                    \
     "-Wl,--entry=0x0,-T%s\n.PHONY: run\n"
 
+#elif defined(CONFIG_amd64)
+
+#define MAKEFILE                                                                                                                                             \
+    "include %s\nrun:a.c.prtos_conf\n\t${TARGET_CC} ${TARGET_CFLAGS_ARCH} -x c %s --include prtos_inc/config.h --include prtos_inc/arch/arch_types.h %s -c " \
+    "-o xml_obj_file.o\n"                                                                                                                                    \
+    "\t${TARGET_LD} ${TARGET_LDFLAGS_ARCH} xml_obj_file.o -nostdlib  -o obj_exc_elf -e 0x0 -T%s\n"                                                           \
+    "\t${TARGET_OBJCOPY} -O binary  obj_exc_elf %s"                                                                                                          \
+    "\n.PHONY: run\n"
+
 #elif defined(CONFIG_AARCH64)
 
 #define MAKEFILE                                                                                                                                             \
@@ -56,7 +65,7 @@
 #error "unsupported architecture"
 #endif
 
-#if defined(CONFIG_x86)  // FIXME: will extract the common part before it is merged finally.
+#if defined(CONFIG_x86)
 static char lds_content[] = "OUTPUT_FORMAT(\"binary\")\n"
                             "SECTIONS\n"
                             "{\n"
@@ -82,6 +91,36 @@ static char lds_content[] = "OUTPUT_FORMAT(\"binary\")\n"
                             " 	/DISCARD/ : {\n"
                             "	   	*(.text)\n"
                             "    	*(.note)\n"
+                            "	    	*(.comment*)\n"
+                            "	}\n"
+                            "}\n";
+#elif defined(CONFIG_amd64)
+static char lds_content[] = "OUTPUT_FORMAT(\"elf64-x86-64\")\n"
+                            "SECTIONS\n"
+                            "{\n"
+                            "         . = 0x0;\n"
+                            "         .data ALIGN (8) : {\n"
+                            "      	     *(.rodata.hdr)\n"
+                            "    	     *(.rodata)\n"
+                            "    	     *(.data)\n"
+                            "                _mem_obj_table = .;\n"
+                            "                *(.data.memobj)\n"
+                            "                QUAD(0);\n"
+                            "        }\n"
+                            "\n"
+                            "        _data_size = .;\n"
+                            "\n"
+                            "        .bss ALIGN (8) : {\n"
+                            "                *(.bss)\n"
+                            "    	     *(.bss.mempool)\n"
+                            "    	}\n"
+                            "\n"
+                            "    	_prtos_c_size = .;\n"
+                            "\n"
+                            " 	/DISCARD/ : {\n"
+                            "	   	*(.text)\n"
+                            "    	*(.note*)\n"
+                            "    	*(.eh_frame)\n"
                             "	    	*(.comment*)\n"
                             "	}\n"
                             "}\n";
@@ -181,7 +220,7 @@ void exec_xml_conf_build(char *path, char *in, char *out) {
 
 #if defined(CONFIG_x86)
     sprintf(make_file, MAKEFILE, config_path, CFLAGS, in, out, lds_file);
-#elif defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#elif defined(CONFIG_amd64) || defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
     sprintf(make_file, MAKEFILE, config_path, CFLAGS, in, lds_file, out);
 #else
 #error "unsupported architecture"

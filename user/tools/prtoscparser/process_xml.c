@@ -426,7 +426,7 @@ static struct attr_xml baud_rate_uart_attr = {BAD_CAST "baudRate", baud_rate_uar
 static struct node_xml uart_device_node = {BAD_CAST "Uart", 0, 0, 0, (struct attr_xml *[]){&id_uart_attr, &name_uart_attr, &baud_rate_uart_attr, 0}, 0};
 #endif
 
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
 static void name_vga_attr_handle(xmlNodePtr node, const xmlChar *val) {
     printf("name_vga_attr_handle: %s\n", val);
     register_device((char *)val, (prtos_dev_t){PRTOS_DEV_VGA_ID, 0}, node->line);
@@ -453,7 +453,7 @@ static struct node_xml devices_node = {BAD_CAST "Devices",
 #if defined(CONFIG_DEV_UART) || defined(CONFIG_DEV_UART_MODULE) || defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)  // FIXME: Here is WA for aarch64 build
                                            &uart_device_node,
 #endif
-#ifdef CONFIG_x86
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
                                            &vga_device_node,
 #endif
                                            0}};

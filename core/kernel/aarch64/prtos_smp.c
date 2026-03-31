@@ -13,6 +13,9 @@
 #include <asm_io.h>
 #include <asm_psci.h>
 
+/* Forward declaration */
+extern int __init psci_init_prtos(void);
+
 struct smp_enable_ops {
         int             (*prepare_cpu)(int cpu);
 };
@@ -421,13 +424,13 @@ static void __init dt_smp_init_cpus_prtos(void)
     register_t mpidr;
     // struct dt_device_node *cpus = dt_find_node_by_path("/cpus");
     // struct dt_device_node *cpu;
-    unsigned int i, j;
+    unsigned int i __attribute__((unused)), j __attribute__((unused));
     unsigned int cpuidx = 1;
     static register_t tmp_map[NR_CPUS] __initdata =
     {
         [0 ... NR_CPUS - 1] = MPIDR_INVALID
     };
-    bool bootcpu_valid = false;
+    bool bootcpu_valid __attribute__((unused)) = false;
     int rc;
 
     mpidr = system_cpuinfo.mpidr.bits & MPIDR_HWID_MASK;
@@ -552,7 +555,7 @@ static void __init dt_smp_init_cpus_prtos(void)
     for( i = 0; i < 4; i++ ) {
         if ( (rc = arch_cpu_init_prtos(i, NULL)) < 0 )
         {
-            printk("cpu%d init failed (hwid %"PRIregister"): %d\n", i, i, rc);
+            printk("cpu%d init failed (hwid %u): %d\n", i, i, rc);
             tmp_map[i] = MPIDR_INVALID;
         }
         else
@@ -1175,7 +1178,7 @@ void cpu_prepare_init_prtos(int cpu) {
 int cpu_up_prtos(unsigned int cpu)
 {
     int err;
-    struct notifier_block *nb = NULL;
+    struct notifier_block *nb __attribute__((unused)) = NULL;
 
     // cpu_hotplug_begin();
 

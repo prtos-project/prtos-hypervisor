@@ -50,10 +50,16 @@ void error_printf(char *fmt, ...) {
     exit(2); /* conventional value for failed execution */
 }
 
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
+#if defined(CONFIG_amd64)
+#define EM_ARCH EM_X86_64
+#define ELF(x) Elf64_##x
+#define PRINT_PREF "ll"
+#else
 #define EM_ARCH EM_386
 #define ELF(x) Elf32_##x
 #define PRINT_PREF
+#endif
 #endif
 
 #ifdef FORCE_ELF32
@@ -104,7 +110,17 @@ static int parse_elf_image(int fd_elf) {
             error_printf("ELF class mismatch: expected 32-bit (ELFCLASS32) but got %s. "
                          "Rebuild prtoseformat for the correct architecture (make distclean && make)",
                          elf_class == ELFCLASS64 ? "64-bit (ELFCLASS64)" : "unknown");
+#elif defined(CONFIG_amd64)
+        if (elf_class != ELFCLASS64)
+            error_printf("ELF class mismatch: expected 64-bit (ELFCLASS64) but got %s. "
+                         "Rebuild prtoseformat for the correct architecture (make distclean && make)",
+                         elf_class == ELFCLASS32 ? "32-bit (ELFCLASS32)" : "unknown");
 #elif defined(CONFIG_AARCH64)
+        if (elf_class != ELFCLASS64)
+            error_printf("ELF class mismatch: expected 64-bit (ELFCLASS64) but got %s. "
+                         "Rebuild prtoseformat for the correct architecture (make distclean && make)",
+                         elf_class == ELFCLASS32 ? "32-bit (ELFCLASS32)" : "unknown");
+#elif defined(CONFIG_riscv64)
         if (elf_class != ELFCLASS64)
             error_printf("ELF class mismatch: expected 64-bit (ELFCLASS64) but got %s. "
                          "Rebuild prtoseformat for the correct architecture (make distclean && make)",
@@ -466,21 +482,21 @@ static void print_header(void) {
             fprintf(stderr, "%02x ", pef_hdr_read->payload[e]);
     fprintf(stderr, "\n");
 // TODO: I haven't figured out a unified way to print values without parse warnings both on 32-bit and 64-bit platforms, so here just use a WA.
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
     fprintf(stderr, TAB "file size: %" PRINT_PREF "u\n", RWORD(pef_hdr_read->file_size));
     fprintf(stderr, TAB "segment table offset: %" PRINT_PREF "u\n", RWORD(pef_hdr_read->segment_table_offset));
     fprintf(stderr, TAB "no. segments: %d\n", RWORD(pef_hdr_read->num_of_segments));
-    fprintf(stderr, TAB "custom_file table offset: %" PRINT_PREF "llu\n", RWORD(pef_hdr_read->custom_file_table_offset));
+    fprintf(stderr, TAB "custom_file table offset: %" PRINT_PREF "u\n", RWORD(pef_hdr_read->custom_file_table_offset));
     fprintf(stderr, TAB "no. custom_files: %d\n", RWORD(pef_hdr_read->num_of_custom_files));
-    fprintf(stderr, TAB "image offset: %" PRINT_PREF "lld\n", RWORD(pef_hdr_read->image_offset));
-    fprintf(stderr, TAB "image length: %" PRINT_PREF "lld\n", RWORD(pef_hdr_read->image_length));
+    fprintf(stderr, TAB "image offset: %" PRINT_PREF "d\n", RWORD(pef_hdr_read->image_offset));
+    fprintf(stderr, TAB "image length: %" PRINT_PREF "d\n", RWORD(pef_hdr_read->image_length));
     if (RWORD(pef_hdr_read->flags) & PEF_TYPE_PARTITION)
-        fprintf(stderr, TAB "page table: [0x%" PRINT_PREF "llx - 0x%" PRINT_PREF "llx]\n", RWORD(pef_hdr_read->page_table),
+        fprintf(stderr, TAB "page table: [0x%" PRINT_PREF "x - 0x%" PRINT_PREF "x]\n", RWORD(pef_hdr_read->page_table),
                 RWORD(pef_hdr_read->page_table) + RWORD(pef_hdr_read->page_table_size));
-    fprintf(stderr, TAB "prtos image's header: 0x%" PRINT_PREF "llx\n", RWORD(pef_hdr_read->prtos_image_hdr));
-    fprintf(stderr, TAB "entry point: 0x%" PRINT_PREF "llx\n", RWORD(pef_hdr_read->entry_point));
+    fprintf(stderr, TAB "prtos image's header: 0x%" PRINT_PREF "x\n", RWORD(pef_hdr_read->prtos_image_hdr));
+    fprintf(stderr, TAB "entry point: 0x%" PRINT_PREF "x\n", RWORD(pef_hdr_read->entry_point));
     if (RWORD(pef_hdr_read->flags) & PEF_COMPRESSED)
-        fprintf(stderr, TAB "compressed image length: %" PRINT_PREF "lld (%.2f%%)\n", RWORD(pef_hdr_read->deflated_image_length),
+        fprintf(stderr, TAB "compressed image length: %" PRINT_PREF "d (%.2f%%)\n", RWORD(pef_hdr_read->deflated_image_length),
                 100.0 * (float)RWORD(pef_hdr_read->deflated_image_length) / (float)RWORD(pef_hdr_read->image_length));
 #else
     fprintf(stderr, TAB "file size: %" PRINT_PREF "llu\n", RWORD(pef_hdr_read->file_size));
@@ -506,12 +522,12 @@ static void print_segments(void) {
     fprintf(stderr, "Segment table: %d segments\n", RWORD(pef_hdr_read->num_of_segments));
     for (e = 0; e < RWORD(pef_hdr_read->num_of_segments); e++) {
 // TODO: I haven't figured out a unified way to print values without parse warnings both on 32-bit and 64-bit platforms, so here just use a WA.
-#if defined(CONFIG_x86)
-        fprintf(stderr, TAB TAB "physical address: 0x%x\n", RWORD(pef_segment_table[e].phys_addr));
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
+        fprintf(stderr, TAB TAB "physical address: 0x%" PRINT_PREF "x\n", RWORD(pef_segment_table[e].phys_addr));
         fprintf(stderr, TAB TAB "virtual address: 0x%" PRINT_PREF "x\n", RWORD(pef_segment_table[e].virt_addr));
         fprintf(stderr, TAB TAB "file size: %" PRINT_PREF "d\n", RWORD(pef_segment_table[e].file_size));
         if (RWORD(pef_hdr_read->flags) & PEF_COMPRESSED)
-            fprintf(stderr, TAB TAB "compressed file size: %" PRINT_PREF "lld (%.2f%%)\n", RWORD(pef_segment_table[e].deflated_file_size),
+            fprintf(stderr, TAB TAB "compressed file size: %" PRINT_PREF "d (%.2f%%)\n", RWORD(pef_segment_table[e].deflated_file_size),
                     100.0 * (float)RWORD(pef_segment_table[e].deflated_file_size) / (float)RWORD(pef_segment_table[e].file_size));
 #else
         fprintf(stderr, TAB "segment %d\n", e);
@@ -532,7 +548,7 @@ static void print_custom_files(void) {
     for (e = 0; e < RWORD(pef_hdr_read->num_of_custom_files); e++) {
         fprintf(stderr, TAB "custom_file %d\n", e);
 // TODO: I haven't figured out a unified way to print values without parse warnings both on 32-bit and 64-bit platforms, so here just use a WA.
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
         fprintf(stderr, TAB TAB "address: 0x%" PRINT_PREF "x\n", RWORD(pef_custom_file_table[e].start_addr));
         if (!RWORD(pef_custom_file_table[e].size))
             fprintf(stderr, TAB TAB "undefined file size\n");

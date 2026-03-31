@@ -32,6 +32,11 @@
 #include <asm_cpufeature.h>
 #include <asm_platform.h>
 
+/* Forward declaration */
+extern int request_irq_prtos(unsigned int irq, unsigned int irqflags,
+                void (*handler)(int irq, void *dev_id),
+                const char *devname, void *dev_id);
+
 uint64_t __read_mostly boot_count;
 
 /* For fine-grained timekeeping, we use the ARM "Generic Timer", a

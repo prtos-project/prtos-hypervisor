@@ -2520,7 +2520,7 @@ bool __initdata iommu_enable = 1;
 bool __read_mostly iommu_enabled;
 bool __read_mostly force_iommu;
 bool __read_mostly iommu_verbose;
-static bool __read_mostly iommu_crash_disable;
+static bool __read_mostly iommu_crash_disable __attribute__((unused));
 
 #define IOMMU_quarantine_none         0 /* aka false */
 #define IOMMU_quarantine_basic        1 /* aka true */

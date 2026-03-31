@@ -10,29 +10,23 @@
 #include <arch/physmm.h>
 
 prtos_u8_t read_by_pass_mmu_byte(void *p_addr) {
-    struct phys_page *page;
-    prtos_u8_t *v_addr, val;
-
     // if ((prtos_address_t)p_addr > CONFIG_PRTOS_OFFSET) return *(prtos_u8_t *)p_addr;
     // page = phis_mm_find_anonymous_page((prtos_address_t)p_addr);
     // v_addr = vcache_map_page((prtos_address_t)p_addr, page);
     // val = *v_addr;
     // vcache_unlock_page(page);
 
-    return val;
+    return 0;
 }
 
 prtos_u32_t read_by_pass_mmu_word(void *p_addr) {
-    struct phys_page *page;
-    prtos_u32_t *v_addr, val;
-
     // if ((prtos_address_t)p_addr > CONFIG_PRTOS_OFFSET) return *(prtos_u32_t *)p_addr;
     // page = phis_mm_find_anonymous_page((prtos_address_t)p_addr);
     // v_addr = vcache_map_page((prtos_address_t)p_addr, page);
     // val = *v_addr;
     // vcache_unlock_page(page);
 
-    return val;
+    return 0;
 }
 
 void write_by_pass_mmu_word(void *p_addr, prtos_u32_t val) {

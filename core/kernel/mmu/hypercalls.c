@@ -262,7 +262,8 @@ static void (*const set_phys_pagtype_handle_table[NR_PPAG])(prtos_address_t, str
 __hypercall prtos_s32_t update_page32_sys(prtos_address_t p_addr, prtos_u32_t val) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     struct phys_page *page;
-    prtos_u32_t addr;
+    prtos_address_t addr;
+    prtos_address_t aval = val;
 
     ASSERT(!hw_is_sti());
     if (p_addr & 3) return PRTOS_INVALID_PARAM;
@@ -272,10 +273,11 @@ __hypercall prtos_s32_t update_page32_sys(prtos_address_t p_addr, prtos_u32_t va
     }
 
     if (update_phys_pag32_handle_table[page->type])
-        if (update_phys_pag32_handle_table[page->type](page, p_addr, &val) < 0) return PRTOS_INVALID_PARAM;
+        if (update_phys_pag32_handle_table[page->type](page, p_addr, &aval) < 0) return PRTOS_INVALID_PARAM;
 
-    addr = (prtos_address_t)vcache_map_page(p_addr, page);
-    write_by_pass_mmu_word((void *)addr, val);
+    val = (prtos_u32_t)aval;
+    addr = (prtos_address_t)(unsigned long)vcache_map_page(p_addr, page);
+    write_by_pass_mmu_word((void *)(unsigned long)addr, val);
     vcache_unlock_page(page);
     return PRTOS_OK;
 }

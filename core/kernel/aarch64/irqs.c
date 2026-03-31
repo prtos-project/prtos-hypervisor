@@ -32,10 +32,12 @@ prtos_s8_t *trap_to_str[] = {
 #endif
 
 #ifdef CONFIG_SMP
+static void smp_halt_all_handle(cpu_ctxt_t *ctxt, void *data) __attribute__((unused));
 static void smp_halt_all_handle(cpu_ctxt_t *ctxt, void *data) {
     halt_system();
 }
 
+static void smp_sched_pending_ipi_handle(cpu_ctxt_t *ctxt, void *data) __attribute__((unused));
 static void smp_sched_pending_ipi_handle(cpu_ctxt_t *ctxt, void *data) {
     set_sched_pending();
 }
@@ -150,6 +152,7 @@ static inline prtos_s32_t test_sp(prtos_address_t *sp, prtos_u32_t size) {
     // ret = asm_rw_check(((prtos_address_t)sp) - size, size, 1);
     // clear_wp();
     // return ret;
+    return 0;
 }
 
 /*
@@ -176,6 +179,7 @@ void fix_stack(cpu_ctxt_t *ctxt, partition_control_table_t *part_ctrl_table, prt
 
 prtos_u32_t hw_irq_get_mask(prtos_s32_t e) {
     // return x86_hw_irqs_mask[GET_CPU_ID()];
+    return 0;
 }
 
 void hw_irq_set_mask(prtos_s32_t e, prtos_u32_t mask) {

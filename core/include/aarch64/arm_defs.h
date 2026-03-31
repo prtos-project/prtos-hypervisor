@@ -490,6 +490,7 @@ alternative_endif
 lr      .req    x30
 
 /* Label macro (C preprocessor style) */
+#undef LABEL
 #define LABEL(name) \
     .globl name; \
     name:

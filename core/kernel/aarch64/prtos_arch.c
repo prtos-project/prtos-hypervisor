@@ -16,6 +16,9 @@
 #include <asm_arm64_sve.h>
 #include <asm_cpufeature.h>
 
+/* Forward declaration */
+extern void static_gic_interrupt(struct cpu_user_regs *regs);
+
 static long switch_mode(struct domain *d, enum domain_type type)
 {
     struct vcpu *v;
@@ -2150,10 +2153,10 @@ void __init init_pdx(void) {
  * on arm32.
  */
 void __init populate_boot_allocator(void) {
-    unsigned int i;
-    const struct membanks *banks = bootinfo_get_mem();
-    const struct membanks *reserved_mem = bootinfo_get_reserved_mem();
-    paddr_t s, e;
+    unsigned int i __attribute__((unused));
+    const struct membanks *banks __attribute__((unused)) = bootinfo_get_mem();
+    const struct membanks *reserved_mem __attribute__((unused)) = bootinfo_get_reserved_mem();
+    paddr_t s __attribute__((unused)), e __attribute__((unused));
 
     //     if ( bootinfo.static_heap )
     //     {
@@ -4860,6 +4863,8 @@ static void patch_alternative(const struct alt_instr *alt,
  * @update_offset: Offset between the region patched and the writable
  * region for the update. 0 if the patched region is writable.
  */
+static int __apply_alternatives(const struct alt_region *region,
+                                paddr_t update_offset) __attribute__((unused));
 static int __apply_alternatives(const struct alt_region *region,
                                 paddr_t update_offset)
 {

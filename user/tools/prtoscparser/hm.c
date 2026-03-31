@@ -41,7 +41,7 @@ char *hm_events[PRTOS_HM_MAX_EVENTS] = {
     FILL_TAB(PRTOS_HM_EV_MEM_PROTECTION),
     FILL_TAB(PRTOS_HM_EV_UNEXPECTED_TRAP),
 
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
     FILL_TAB(PRTOS_HM_EV_X86_DIVIDE_ERROR),
     FILL_TAB(PRTOS_HM_EV_X86_DEBUG),
     FILL_TAB(PRTOS_HM_EV_X86_NMI_INTERRUPT),
@@ -131,7 +131,7 @@ static prtos_u32_t hm_partition_events_and_actions[PRTOS_HM_MAX_EVENTS] = {
                                     TOBIT(PRTOS_HM_AC_HYPERVISOR_WARM_RESET) | TOBIT(PRTOS_HM_AC_SUSPEND) | TOBIT(PRTOS_HM_AC_PARTITION_HALT) |
                                     TOBIT(PRTOS_HM_AC_HYPERVISOR_HALT) | TOBIT(PRTOS_HM_AC_SWITCH_TO_MAINTENANCE),
 
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
     [PRTOS_HM_EV_X86_DIVIDE_ERROR] = TOBIT(PRTOS_HM_AC_IGNORE) | TOBIT(PRTOS_HM_AC_SHUTDOWN) | TOBIT(PRTOS_HM_AC_PARTITION_COLD_RESET) |
                                      TOBIT(PRTOS_HM_AC_PARTITION_WARM_RESET) | TOBIT(PRTOS_HM_AC_HYPERVISOR_COLD_RESET) |
                                      TOBIT(PRTOS_HM_AC_HYPERVISOR_WARM_RESET) | TOBIT(PRTOS_HM_AC_SUSPEND) | TOBIT(PRTOS_HM_AC_PARTITION_HALT) |
@@ -320,7 +320,7 @@ static prtos_u32_t hm_hypervisor_events_and_actions[PRTOS_HM_MAX_EVENTS] = {
                                     TOBIT(PRTOS_HM_AC_HYPERVISOR_WARM_RESET) | TOBIT(PRTOS_HM_AC_SUSPEND) | TOBIT(PRTOS_HM_AC_HYPERVISOR_HALT) |
                                     TOBIT(PRTOS_HM_AC_SWITCH_TO_MAINTENANCE),
 
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
     [PRTOS_HM_EV_X86_DIVIDE_ERROR] =
         TOBIT(PRTOS_HM_AC_HYPERVISOR_COLD_RESET) | TOBIT(PRTOS_HM_AC_HYPERVISOR_WARM_RESET) | TOBIT(PRTOS_HM_AC_HYPERVISOR_HALT) | TOBIT(PRTOS_HM_AC_PROPAGATE),
 
@@ -454,7 +454,7 @@ static struct prtos_conf_hm_slot default_partition_hm_table[PRTOS_HM_MAX_EVENTS]
             .log = PRTOS_HM_LOG_ENABLED,
         },
 
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
     /* hm part default conf x86 */
     [PRTOS_HM_EV_X86_DIVIDE_ERROR] =
         {
@@ -644,7 +644,7 @@ static struct prtos_conf_hm_slot default_hypervisor_hm_table[PRTOS_HM_MAX_EVENTS
             .action = PRTOS_HM_AC_HYPERVISOR_HALT,
             .log = PRTOS_HM_LOG_ENABLED,
         },
-#if defined(CONFIG_x86)
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
     /* hm prtos hyp default conf x86 */
     [PRTOS_HM_EV_X86_DIVIDE_ERROR] =
         {

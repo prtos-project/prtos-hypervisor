@@ -49,7 +49,9 @@ static prtos_address_t alloc_mem(struct prtos_conf_part *cfg, prtos_u_size_t siz
 }
 
 static inline int setup_pbl(partition_t *p, prtos_word_t *p_ptd_level_1_table, prtos_address_t at, prtos_address_t page_table, prtos_u_size_t size) {
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
     extern prtos_u8_t _spbl[], _epbl[];
+#endif
     prtos_address_t addr, v_addr = 0, a, b;
     // struct phys_page *page;
     void *stack;

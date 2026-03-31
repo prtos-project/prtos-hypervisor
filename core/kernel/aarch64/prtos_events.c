@@ -11493,13 +11493,13 @@ static int __init psci_init_0_2(void)
 
 static int __init psci_init_0_2_prtos(void)
 {
-    static const struct dt_device_match psci_ids[] __initconst =
+    static const struct dt_device_match psci_ids[] __initconst __attribute__((unused)) =
     {
         DT_MATCH_COMPATIBLE("arm,psci-0.2"),
         DT_MATCH_COMPATIBLE("arm,psci-1.0"),
         { /* sentinel */ },
     };
-    int ret = 0;
+    int ret __attribute__((unused)) = 0;
     struct arm_smccc_res res;
 
     // if ( acpi_disabled )

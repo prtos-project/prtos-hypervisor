@@ -16,6 +16,11 @@ srcs-$(CONFIG_DEV_UART) += pc_uart.c
 srcs-$(CONFIG_DEV_VGA) += pc_vga.c
 endif
 
+ifdef CONFIG_amd64
+srcs-$(CONFIG_DEV_UART) += pc_uart.c
+srcs-$(CONFIG_DEV_VGA) += pc_vga.c
+endif
+
 ifdef CONFIG_AARCH64
 srcs-$(CONFIG_DEV_UART) += pc_uart.c pl011.c
 endif

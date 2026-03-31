@@ -13,7 +13,7 @@
 trap_handler_t part_trap_handlers_table[TRAPTAB_LENGTH];
 
 static void unexpected_trap(trap_ctxt_t *ctxt) {
-#ifdef CONFIG_x86
+#if defined(CONFIG_x86) || defined(CONFIG_amd64)
     printf("[P%d:%d] Unexpected trap 0x%x (ip: 0x%x)\n", PRTOS_PARTITION_SELF, prtos_get_vcpuid(), ctxt->irq_nr, ctxt->ip);
 #endif
 #ifdef CONFIG_AARCH64
