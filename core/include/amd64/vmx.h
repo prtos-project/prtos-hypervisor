@@ -44,14 +44,17 @@
 #define PIN_BASED_VMX_PREEMPTION      (1U << 6)
 
 /* ---- Primary proc-based VM-execution controls ---- */
+#define CPU_BASED_VIRTUAL_INTR_PENDING (1U << 2)
 #define CPU_BASED_HLT_EXITING         (1U << 7)
 #define CPU_BASED_CR8_LOAD_EXITING    (1U << 19)
 #define CPU_BASED_CR8_STORE_EXITING   (1U << 20)
 #define CPU_BASED_UNCOND_IO_EXITING   (1U << 24)
 #define CPU_BASED_USE_MSR_BITMAPS     (1U << 28)
+#define CPU_BASED_MONITOR_TRAP_FLAG   (1U << 27)
 #define CPU_BASED_ACTIVATE_SEC_CTLS   (1U << 31)
 
 /* ---- Secondary proc-based VM-execution controls ---- */
+#define SECONDARY_EXEC_VIRT_APIC_ACCESS (1U << 0)
 #define SECONDARY_EXEC_ENABLE_EPT     (1U << 1)
 #define SECONDARY_EXEC_ENABLE_RDTSCP  (1U << 3)
 #define SECONDARY_EXEC_UNRESTRICTED   (1U << 7)
@@ -93,6 +96,7 @@
 #define VMCS_IO_BITMAP_B              0x2002
 #define VMCS_MSR_BITMAP               0x2004
 #define VMCS_EPT_POINTER              0x201A
+#define VMCS_APIC_ACCESS_ADDR         0x2014
 
 /* 64-bit guest-state */
 #define VMCS_GUEST_VMCS_LINK_PTR      0x2800
@@ -184,6 +188,7 @@
 #define EXIT_REASON_EXCEPTION_NMI     0
 #define EXIT_REASON_EXTERNAL_INTR     1
 #define EXIT_REASON_TRIPLE_FAULT      2
+#define EXIT_REASON_INTERRUPT_WINDOW  7
 #define EXIT_REASON_CPUID             10
 #define EXIT_REASON_HLT               12
 #define EXIT_REASON_INVLPG            14
@@ -195,6 +200,8 @@
 #define EXIT_REASON_EPT_VIOLATION     48
 #define EXIT_REASON_EPT_MISCONFIG     49
 #define EXIT_REASON_PREEMPTION_TIMER  52
+#define EXIT_REASON_MTF               37
+#define EXIT_REASON_APIC_ACCESS       44
 
 /* ---- VMX preemption timer ---- */
 #define VMCS_VMX_PREEMPT_TIMER_VALUE  0x482E
@@ -298,12 +305,41 @@ struct vuart_state {
     prtos_u8_t  rx_tail;       /* ring tail (read pointer) */
 };
 
-/* VMX state per-partition */
+/* Forward declaration */
+struct vmx_state;
+
+/* VMX shared partition state (one per partition, shared across vCPUs) */
+struct vmx_partition_shared {
+    prtos_u64_t eptp;               /* EPT pointer (PML4 phys | flags) */
+    void *ept_pml4;                 /* virtual address of EPT PML4 */
+
+    /* Virtual devices (shared across all vCPUs of a partition) */
+    struct vpit_state  vpit;
+    struct vpic_state  vpic;
+    struct vuart_state vuart;
+    prtos_u8_t port61;         /* Speaker/PIT gate register (port 0x61) */
+
+    /* Per-vCPU VMX state pointers (for SIPI cross-vCPU wakeup) */
+    prtos_u32_t num_vcpus;
+    struct vmx_state *vcpu_vmx[CONFIG_MAX_NO_VCPUS];
+
+    /* APIC-access page for trapping LAPIC MMIO (used for INIT/SIPI emulation).
+     * NULL if not a Linux (SMP) partition. */
+    void *apic_access_page;
+    prtos_u64_t apic_access_page_phys;
+
+    /* Spinlock protecting APIC-access page during MTF passthrough.
+     * Must be held while APIC-access is disabled and the instruction
+     * is single-stepped via MTF against the APIC-access page RAM. */
+    volatile prtos_u32_t apic_page_lock;
+};
+
+/* VMX state per-vCPU */
 struct vmx_state {
     prtos_u64_t vmcs_phys;          /* physical address of VMCS region */
     void *vmcs_virt;                /* virtual address of VMCS region */
-    prtos_u64_t eptp;               /* EPT pointer (PML4 phys | flags) */
-    void *ept_pml4;                 /* virtual address of EPT PML4 */
+    prtos_u64_t eptp;               /* EPT pointer (copy from shared, for fast access) */
+    void *ept_pml4;                 /* virtual address of EPT PML4 (shared) */
 
     /* Guest GP registers (not saved in VMCS automatically) */
     prtos_u64_t guest_regs[16];     /* rax,rcx,rdx,rbx,rsp_dummy,rbp,rsi,rdi,r8-r15 */
@@ -313,15 +349,43 @@ struct vmx_state {
     /* VMX preemption timer reload value (~1ms) */
     prtos_u32_t preempt_timer_val;
 
-    /* Pending interrupt injection */
-    prtos_u8_t  pending_irq;        /* 1 = has pending IRQ to inject */
-    prtos_u8_t  pending_vector;     /* vector to inject */
+    /* Inter-vCPU IPI delivery — bitmap for vectors 0xE0-0xFF (bit N = vector 0xE0+N) */
+    volatile prtos_u32_t ipi_pending_bitmap;
 
-    /* Virtual devices */
+    /* SMP / SIPI support */
+    prtos_u8_t  wait_for_sipi;      /* 1 = secondary vCPU waiting for SIPI */
+    prtos_u8_t  sipi_received;      /* 1 = SIPI was received, vector is valid */
+    prtos_u8_t  sipi_vector;        /* SIPI vector page (entry = vector * 0x1000) */
+    prtos_u8_t  vcpu_id;            /* vCPU index within partition */
+    prtos_u8_t  lapic_mtf_pending;  /* 1 = MTF active for LAPIC passthrough */
+    prtos_u8_t  lapic_icr_pending;  /* 1 = ICR_LOW write pending via MTF */
+    prtos_u8_t  lapic_access_is_write; /* 1 = current MTF is for a write */
+    prtos_u16_t lapic_access_offset;   /* LAPIC register offset being accessed */
+
+    /* Pointer to shared partition state (EPT, virtual devices) */
+    struct vmx_partition_shared *shared;
+
+    /* Back-pointer to the owning kthread (for un-halting APs on SIPI) */
+    void *kthread_ptr;
+
+    /* Virtual devices (aliases for vCPU 0 compatibility — access via shared ptr) */
     struct vpit_state  vpit;
     struct vpic_state  vpic;
     struct vuart_state vuart;
     prtos_u8_t port61;         /* Speaker/PIT gate register (port 0x61) */
+
+    /* Virtual LAPIC timer */
+    struct {
+        prtos_u32_t lvt_timer;       /* LVT Timer register (0x320) */
+        prtos_u32_t initial_count;   /* Initial Count register (0x380) */
+        prtos_u32_t divide_config;   /* Divide Configuration register (0x3E0) */
+        prtos_u32_t current_count;   /* Current Count register (0x390) */
+        prtos_u64_t next_fire_us;    /* system clock time of next fire */
+        prtos_u64_t period_us;       /* timer period in microseconds */
+        prtos_u64_t switch_out_us;   /* timestamp when vCPU was last switched out */
+        prtos_u8_t  active;          /* 1 = timer is running */
+        prtos_u8_t  pending;         /* 1 = timer interrupt pending */
+    } vlapic_timer;
 };
 
 /* Register indices in guest_regs[] */
@@ -391,6 +455,7 @@ static inline int vmx_vmxon(prtos_u64_t *vmxon_region_phys) {
 extern int vmx_init(void);
 extern int vmx_is_enabled(void);
 extern int vmx_setup_partition(void *kthread);
+extern int vmx_setup_secondary_vcpu(void *kthread, void *vcpu0_kthread);
 extern void vmx_run_guest(void *kthread) __attribute__((noreturn));
 extern void vmx_switch_pre(void *old_kthread);
 extern void vmx_switch_post(void *new_kthread);

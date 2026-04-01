@@ -151,7 +151,7 @@ _boot:
 /* Command line string */
 	.section .rodata
 _cmdline:
-	.asciz "console=ttyS0,115200 earlyprintk=serial,ttyS0,115200,keep loglevel=7 nokaslr nosmp noapic nolapic"
+	.asciz "console=ttyS0,115200 earlyprintk=serial,ttyS0,115200,keep loglevel=7 nokaslr noapic"
 
 /* Embedded bzImage */
 	.section .bzimage, "ax", @progbits
