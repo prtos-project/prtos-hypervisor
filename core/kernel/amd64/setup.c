@@ -29,6 +29,12 @@ void __VBOOT setup_arch_local(prtos_s32_t cpu_id) {
 #else
     SET_CPU_HWID(cpu_id);
 #endif
+#ifdef CONFIG_VMX
+    if (cpu_id > 0) {
+        extern int vmx_init_ap(void);
+        vmx_init_ap();
+    }
+#endif
 }
 
 void __VBOOT early_setup_arch_common(void) {

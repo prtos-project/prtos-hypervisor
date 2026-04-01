@@ -146,20 +146,36 @@ void arch_vmx_rsv_mem(FILE *out_file) {
     /* Per hw-virt partition: detect using same heuristic as kernel (mem >= 64MB) */
     for (i = 0; i < prtos_conf.num_of_partitions; i++) {
         prtos_u64_t total_mem = 0;
-        int ma;
+        int ma, nvcpus, v;
         for (ma = 0; ma < (int)prtos_conf_partition_table[i].num_of_physical_memory_areas; ma++)
             total_mem += prtos_conf_mem_area_table[prtos_conf_partition_table[i].physical_memory_areas_offset + ma].size;
         if (total_mem >= (64ULL * 1024 * 1024)) {
-            /* VMCS region: 1 page */
-            rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX VMCS region");
+            nvcpus = (int)prtos_conf_partition_table[i].num_of_vcpus;
+            if (nvcpus < 1) nvcpus = 1;
+
+            /* Shared partition state (one per partition) */
+            rsv_block(_STRUCT_VMX_PARTITION_SHARED_SIZEOF, ALIGNMENT, "VMX partition shared");
+
+            /* Per-vCPU: VMCS region (1 page each) + vmx_state struct */
+            for (v = 0; v < nvcpus; v++) {
+                rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX VMCS region");
+                rsv_block(_STRUCT_VMX_STATE_SIZEOF, ALIGNMENT, "VMX state");
+            }
+
             /* EPT PML4: 1 page */
             rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PML4");
             /* EPT PDPT: 1 page */
             rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PDPT");
             /* EPT PD: 1 page */
             rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PD");
-            /* vmx_state struct */
-            rsv_block(_STRUCT_VMX_STATE_SIZEOF, ALIGNMENT, "VMX state");
+
+            /* For partitions with >= 128MB memory (needs_full_map in kernel):
+             * EPT PD for 3-4GB range (LAPIC/IOAPIC) + LAPIC PT + APIC-access page */
+            if (total_mem >= (128ULL * 1024 * 1024)) {
+                rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PD high");
+                rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX APIC access page");
+                rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX LAPIC PT");
+            }
         }
     }
 }

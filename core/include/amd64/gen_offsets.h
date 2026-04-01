@@ -81,6 +81,7 @@ static inline void generate_offsets(void) {
 #endif
 #ifdef CONFIG_VMX
     DEFINE2(struct_vmx_state, sizeof(struct vmx_state), );
+    DEFINE2(struct_vmx_partition_shared, sizeof(struct vmx_partition_shared), );
 #endif
 }
 
