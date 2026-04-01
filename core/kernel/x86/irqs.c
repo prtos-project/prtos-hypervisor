@@ -3,7 +3,7 @@
  *
  * IRQS' code
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #include <assert.h>
 #include <bitwise.h>

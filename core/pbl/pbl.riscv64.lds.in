@@ -3,7 +3,7 @@
  *
  * ld script to build the riscv64 PBL
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <config.h>

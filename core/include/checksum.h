@@ -3,7 +3,7 @@
  *
  * checksum algorithm
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_CHECKSUM_H_

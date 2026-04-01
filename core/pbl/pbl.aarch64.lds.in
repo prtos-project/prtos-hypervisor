@@ -3,7 +3,7 @@
  *
  * ld script to build the x86 version
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <config.h>

@@ -3,7 +3,7 @@
  *
  * A boot rsw
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <prtos.h>

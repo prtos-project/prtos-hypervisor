@@ -3,7 +3,7 @@
  *
  * checks definitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _CHECKS_H_

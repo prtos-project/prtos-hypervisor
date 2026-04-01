@@ -3,7 +3,7 @@
  *
  * I/O port stubs for aarch64 (x86 port I/O not applicable)
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_IO_H_

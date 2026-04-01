@@ -13,7 +13,7 @@
  * in the frame area so that vm_map_page() can directly write entries
  * without dynamic allocation (following the x86 pattern).
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

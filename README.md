@@ -1,6 +1,6 @@
 **English** | [中文](README_zh.md)
 
-## Introduction
+## 1. Introduction
 ------------
 
 **PRTOS Hypervisor** is an open-source, lightweight embedded Type-1 Hypervisor dedicated to building secure and efficient real-time systems through virtualization technology. Utilizing a **Separation Kernel** architecture, PRTOS enables multiple applications to coexist and collaborate securely on a single hardware platform through strict spatial and temporal partitioning. By providing deep virtualization of critical resources—including CPU, memory, and I/O devices—PRTOS ensures system security while completely eliminating mutual interference between applications.
@@ -12,14 +12,14 @@ In PRTOS, partitions are defined as independent execution environments that oper
 Adhering to the open-source spirit of "standing on the shoulders of giants," PRTOS draws significant technical inspiration from esteemed projects such as  [XtratuM](https://en.wikipedia.org/wiki/XtratuM), [Xen Hypervisor](https://xenproject.org/), [Lguest Hypervisor](http://lguest.ozlabs.org), and [Linux Kernel](https://www.linux.org/). Consequently, PRTOS is released under the GPL license. To assist developers in exploring its inner workings, the companion book,  [Embedded Hypervisor: Architecture, Principles, and Implemenation](https://item.jd.com/10106992272683.html), provides a detailed exposition of the design and implementation of PRTOS. We cordially invite technology enthusiasts to join the PRTOS open-source community to collectively drive the evolution of the system, particularly in advancing support for ARMv8 and RISC-V architectures and adapting a wider range of partitioned applications.
 
 
-## PRTOS Hypervisor Architecture
+## 2. PRTOS Hypervisor Architecture
 
 PRTOS is a lightweight real-time hypervisor，Its architecture is as follows:
 
 ![architecturezh](./doc/figures/prtos_architecture_zh.jpg)
 
 
-## PRTOS Hypervisor Features
+## 3. PRTOS Hypervisor Features
 
  - Real-time capabilities: PRTOS Hypervisor is specifically designed for real-time and safety-critical applications, providing deterministic and predictable execution of tasks.
 
@@ -54,12 +54,12 @@ PRTOS is a lightweight real-time hypervisor，Its architecture is as follows:
 **NOTE**:BAIL(Bare-metal Application Interface Library) is a minimal partition developing environment for the development of "C" programs directly on top of PRTOS hypervisor. BAIL provides the basic and minimal services to setup a basic "C" execution environment. BAIL is useful for those partitions that are do not need an operating systems and want to do function test for PRTOS hypercall APIs.
 
 
-# Getting Started
+# 4. Getting Started
 
 
-## **Development and Runtime Environment Setup**
+## 4.1 **Development and Runtime Environment Setup**
 
-### Common Dependencies Installation
+### 4.1.1 Common Dependencies Installation
 ```
 # Basic compilation tools, version control, and scripting environment
 sudo apt-get update
@@ -69,8 +69,8 @@ python3-dev python3-setuptools python3-libxml2 \
 libncurses5-dev libncurses-dev libssl-dev libxml2-dev libxml2-utils libgnutls28-dev \
 gdb-multiarch
 ```
-### x86 (i386/32-bit) Platform
-#### Dependency Installation for x86 (i386/32-bit)
+### 4.1.2 x86 (i386/32-bit) Platform
+#### 4.1.2.1 Dependency Installation for x86 (i386/32-bit)
 
 ```
 # 32-bit cross-compilation support, multi-arch libraries, and i386 emulator
@@ -78,8 +78,9 @@ sudo apt-get install -y gcc-multilib g++-multilib qemu-system-i386 \
 grub-pc-bin
 ```
 
-#### Compiling and Running PRTOS `helloworld` Example
+#### 4.1.2.2 Compiling and Running PRTOS `helloworld` Example
 ```
+git clone https://github.com/prtos-project/prtos-hypervisor.git
 cd prtos-hypervisor
 cp prtos_config.x86 prtos_config
 make defconfig
@@ -99,15 +100,15 @@ P0 ("Partition0":0:1) flags: [ SYSTEM ]:
 
 ```
 
-### ARMv8 (AARCH64) Platform
-#### Dependency Installation for ARMv8 (AARCH64)
+### 4.1.3 ARMv8 (AArch64) Platform
+#### 4.1.3.1 Dependency Installation for ARMv8 (AArch64)
 
 ```
 sudo apt-get install -y gcc-aarch64-linux-gnu qemu-system-aarch64
 sudo apt-get install u-boot-tools
 
 ```
-#### Compiling and Running PRTOS `linux-smp` partition with 4 `vCPU`
+#### 4.1.3.2 Compiling and Running PRTOS `linux-smp` partition with 4 `vCPU`
 
 ```
 git clone https://github.com/prtos-project/prtos-hypervisor.git
@@ -115,7 +116,7 @@ cd prtos-hypervisor
 cp prtos_config.aarch64 prtos_config
 make defconfig
 make
-cd user/bail/examples/linux_4vcpu_1partion
+cd user/bail/examples/linux_4vcpu_1partion_aarch64/
 make run.aarch64
 ```
 Log in with username `root` and password `1234`. The output is as follows:
@@ -136,15 +137,15 @@ processor       : 3
 
 ```
 
-### RISC-V 64 Platform
-#### Dependency Installation for RISC-V 64
+### 4.1.4 RISC-V 64 Platform
+#### 4.1.4.1 Dependency Installation for RISC-V 64
 
 ```
 sudo apt-get install -y gcc-riscv64-linux-gnu device-tree-compiler qemu-system-misc
 
 ```
 
-#### Compiling and Running PRTOS `linux-smp` partition with 4 `vCPU`
+#### 4.1.4.2 Compiling and Running PRTOS `linux-smp` partition with 4 `vCPU`
 ```
 git clone https://github.com/prtos-project/prtos-hypervisor.git
 cd prtos-hypervisor
@@ -170,8 +171,8 @@ processor       : 3
 
 ```
 
-### AMD64 (x86_64) Platform
-#### Dependency Installation for AMD64 (x86_64)
+### 4.1.5 AMD64 (x86_64) Platform
+#### 4.1.5.1 Dependency Installation for AMD64 (x86_64)
 
 ```
 sudo apt-get install -y qemu-system-x86 grub-pc-bin
@@ -184,7 +185,7 @@ sudo usermod -a -G kvm $USER
 grep 'kvm' /etc/group  # Verify group membership
 ```
 
-#### Compiling and Running PRTOS `linux-smp` partition with 4 `vCPU`
+#### 4.1.5.2 Compiling and Running PRTOS `linux-smp` partition with 4 `vCPU`
 ```
 git clone https://github.com/prtos-project/prtos-hypervisor.git
 cd prtos-hypervisor
@@ -192,7 +193,7 @@ cp prtos_config.amd64 prtos_config
 make defconfig
 make
 cd user/bail/examples/linux_4vcpu_1partion_amd64
-make run.amd64
+run.amd64.kvm.nographic
 ```
 Log in with username `root` and password `1234`. The output is as follows:
 
@@ -212,7 +213,7 @@ processor       : 3
 
 ```
 
-## **Commands to Automatically Run Test Suites for All Platforms**
+## 4.2 **Commands to Automatically Run Test Suites for All Platforms**
 ```
 bash scripts/run_test.sh -h
 Usage:
@@ -244,7 +245,7 @@ Examples:
   run_test.sh check-helloworld              # Run x86 helloworld test
 
 ```
-## **Expected Test Reports**
+## 4.3 **Expected Test Reports**
 
 
 The test report of run `bash scripts/run_test.sh --arch x86 check-all` should be:
@@ -391,10 +392,10 @@ The test report of run `bash scripts/run_test.sh --arch amd64 check-all` should 
 
 [Debug the PRTOS Hypervisor and assistant tools](doc/debug/how_to_debug_prtos_hypervisor_and_assistant_tools.md)
 
-# Community
+# 5. Community
 
 PRTOS Hypervisor is very grateful for the support from all community developers, and if you have any ideas, suggestions or questions in the process of using PRTOS Hypervisor, PRTOS Hypervisor can be reached by the following means, and we are also updating PRTOS Hypervisor in real time on these channels. At the same time, any questions can be asked in the [issue section of PRTOS Hypervisor repository](https://github.com/prtos-project/prtos-hypervisor/issues) or [PRTOS Hypervisor forum](http://www.prtos.org), and community members will answer them.
 
-# Contribution
+# 6. Contribution
 
 If you are interested in PRTOS Hypervisor and want to join in the development of PRTOS Hypervisor and become a code contributor,please refer to the [Code Contribution Guide](doc/contribution_guide/contribution_guide.md).

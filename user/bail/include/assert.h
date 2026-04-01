@@ -3,7 +3,7 @@
  *
  * Assert definition
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _BAIL_ASSERT_H_

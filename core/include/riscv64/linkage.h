@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit linkage macros
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_LINKAGE_H_

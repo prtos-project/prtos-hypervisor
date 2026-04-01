@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit IRQ definitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_IRQS_H_

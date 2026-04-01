@@ -3,7 +3,7 @@
  *
  * Memory for structures
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <prtosconf.h>

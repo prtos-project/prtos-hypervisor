@@ -3,7 +3,7 @@
  *
  * MD5 algorithm
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_MD5_H_

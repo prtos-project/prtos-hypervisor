@@ -3,7 +3,7 @@
  *
  * Access rules from PRTOS to partition address space
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_GACCESS_H_

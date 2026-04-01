@@ -6,7 +6,7 @@
  * The multiboot specification can be found at:
  * http://www.gnu.org/software/grub/manual/multiboot/
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _MULTIBOOT_H_

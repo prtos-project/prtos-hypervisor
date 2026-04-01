@@ -3,7 +3,7 @@
  *
  * prtos system calls definitions for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <prtos_inc/hypercalls.h>

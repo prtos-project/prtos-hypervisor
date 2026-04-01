@@ -3,7 +3,7 @@
  *
  * Virtual memory map
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

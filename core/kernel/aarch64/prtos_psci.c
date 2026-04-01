@@ -5,7 +5,7 @@
  * hw-virt partitions.  Handles SMC-based PSCI calls from Linux
  * guests for secondary vCPU startup and power management.
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <kthread.h>

@@ -4,7 +4,7 @@
  * ARMv8 system clock and timer implementation for PRTOS.
  * Provides sys_hw_clock and get_sys_hw_timer() used by core/kernel/ktimer.c.
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

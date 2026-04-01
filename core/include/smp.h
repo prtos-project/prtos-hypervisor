@@ -3,7 +3,7 @@
  *
  * SMP related stuff
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_SMP_H_

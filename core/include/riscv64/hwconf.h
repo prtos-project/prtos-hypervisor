@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit hardware configuration
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_HWCONF_H_

@@ -3,7 +3,7 @@
  *
  * Extracts information from the PRTOS binary
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <string.h>

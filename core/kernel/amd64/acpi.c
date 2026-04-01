@@ -3,7 +3,7 @@
  *
  * Advanced Configuration and Power Interface
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #include <arch/acpi.h>
 #include <arch/paging.h>

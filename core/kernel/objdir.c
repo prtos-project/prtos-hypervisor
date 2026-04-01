@@ -3,7 +3,7 @@
  *
  * Object directory
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <rsvmem.h>

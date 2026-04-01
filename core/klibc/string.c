@@ -3,7 +3,7 @@
  *
  * String related functions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <stdc.h>

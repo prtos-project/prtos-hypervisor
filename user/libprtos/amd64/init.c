@@ -3,7 +3,7 @@
  *
  * Initialisation of the libprtos for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <prtos.h>

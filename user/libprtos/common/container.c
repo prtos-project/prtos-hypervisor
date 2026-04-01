@@ -3,7 +3,7 @@
  *
  * Container definition
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <container.h>

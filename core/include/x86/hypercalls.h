@@ -3,7 +3,7 @@
  *
  * Processor-related hypercalls definition
  *
- * www.prtos.org
+ * http://www.prtos.org/
  *
  */
 

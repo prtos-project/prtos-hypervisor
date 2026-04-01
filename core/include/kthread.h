@@ -3,7 +3,7 @@
  *
  * Kernel and Guest kthreads
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_KTHREAD_H_

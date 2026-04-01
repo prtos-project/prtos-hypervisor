@@ -3,7 +3,7 @@
  *
  * convertion definitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _CONV_H_

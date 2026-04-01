@@ -3,7 +3,7 @@
  *
  * Communication port object definitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_OBJ_COMMPORTS_H_

@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit assembly macros and functions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_ASM_H_

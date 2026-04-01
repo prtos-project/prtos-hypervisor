@@ -3,7 +3,7 @@
  *
  * Interrupt/trap entry points for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <linkage.h>

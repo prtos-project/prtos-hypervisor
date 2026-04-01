@@ -3,7 +3,7 @@
  *
  * checks implementation
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #define _RSV_PHYS_PAGES_

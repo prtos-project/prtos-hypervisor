@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit architecture-specific string operations
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <stdc.h>

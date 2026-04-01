@@ -3,7 +3,7 @@
  *
  * Kernel, Guest context (ARCH dependent part) for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

@@ -3,7 +3,7 @@
  *
  * Config parameters for both, PRTOS and partitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_PRTOSCONF_H_

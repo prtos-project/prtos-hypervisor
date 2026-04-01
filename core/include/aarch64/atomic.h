@@ -3,7 +3,7 @@
  *
  * atomic operations
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_ATOMIC_H_

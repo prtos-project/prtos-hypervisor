@@ -3,7 +3,7 @@
  *
  * VGA text mode
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_VTEXT_H_

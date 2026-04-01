@@ -5,7 +5,7 @@
  * GRUB enters via multiboot in 32-bit protected mode.
  * We set up page tables, enable long mode, then call rsw_main in 64-bit.
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include "multiboot.h"

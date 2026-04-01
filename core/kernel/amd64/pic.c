@@ -3,7 +3,7 @@
  *
  * The PC's PIC
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <kdevice.h>

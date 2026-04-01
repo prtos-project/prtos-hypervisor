@@ -3,7 +3,7 @@
  *
  * ld script to build the amd64 version
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <config.h>

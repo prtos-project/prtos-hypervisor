@@ -3,7 +3,7 @@
  *
  * ACPI interface
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_ACPI_H_

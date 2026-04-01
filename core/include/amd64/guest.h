@@ -3,7 +3,7 @@
  *
  * Guest shared info for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_GUEST_H_

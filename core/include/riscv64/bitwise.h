@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit basic bit operations
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_BITWISE_H_

@@ -1,7 +1,7 @@
 /*
  * FILE: hwconf.h
  *
- * www.prtos.org
+ * http://www.prtos.org/
  *
  */
 #ifndef _PRTOS_ARCH_HWCONF_H_

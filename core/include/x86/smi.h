@@ -3,7 +3,7 @@
  *
  * System Management Mode (SMM)
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_SMI_H_

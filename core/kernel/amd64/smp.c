@@ -3,7 +3,7 @@
  *
  * Symmetric multi-processor
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #include <arch/paging.h>
 #include <assert.h>

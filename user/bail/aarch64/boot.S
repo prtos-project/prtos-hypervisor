@@ -7,7 +7,7 @@
  * SMP-aware: only vCPU0 zeroes BSS; each vCPU gets its own stack.
  * Mirrors the x86 boot.S logic for multi-vCPU partitions.
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #include <prtos.h>
 

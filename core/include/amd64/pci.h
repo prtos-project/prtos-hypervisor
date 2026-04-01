@@ -3,7 +3,7 @@
  *
  * PCI related
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_PCI_H_

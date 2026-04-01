@@ -3,7 +3,7 @@
  *
  * Physical memory manager
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <physmm.h>

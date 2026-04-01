@@ -3,7 +3,7 @@
  *
  * Deferred hypercalls
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <prtos.h>

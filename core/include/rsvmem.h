@@ -3,7 +3,7 @@
  *
  * Memory for structure initialisation
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_RSVMEM_H_

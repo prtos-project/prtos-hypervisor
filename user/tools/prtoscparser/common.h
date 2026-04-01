@@ -3,7 +3,7 @@
  *
  * Common definitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _COMMON_H_

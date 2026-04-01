@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit IRQ handling
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

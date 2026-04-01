@@ -3,7 +3,7 @@
  *
  * Entry point of PRTOS in amd64 (virtual address space)
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <linkage.h>

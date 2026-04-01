@@ -3,7 +3,7 @@
  *
  * Generic code to access the serial device on x86 platform
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifdef CONFIG_OUTPUT_ENABLED

@@ -3,7 +3,7 @@
  *
  * Virtual memory map management for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

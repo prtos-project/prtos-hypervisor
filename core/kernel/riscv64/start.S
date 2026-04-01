@@ -12,7 +12,7 @@
  *   5. Remove identity mapping
  *   6. Call setup_kernel() in virtual address space
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <linkage.h>

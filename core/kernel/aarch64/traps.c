@@ -3,7 +3,7 @@
  *
  * AArch64 PRTOS hypercall and IRQ dispatch hooks
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

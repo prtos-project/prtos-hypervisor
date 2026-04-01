@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit timer driver (uses SBI for timer access)
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <kthread.h>

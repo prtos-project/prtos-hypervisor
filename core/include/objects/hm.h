@@ -3,7 +3,7 @@
  *
  * Health Monitor definitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_OBJ_HM_H_

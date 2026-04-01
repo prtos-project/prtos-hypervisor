@@ -3,7 +3,7 @@
  *
  * PC UART Driver
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <kdevice.h>

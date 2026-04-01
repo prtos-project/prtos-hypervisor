@@ -3,7 +3,7 @@
  *
  * Scheduling related stuffs
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_SCHED_H_

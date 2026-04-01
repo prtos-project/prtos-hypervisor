@@ -3,7 +3,7 @@
  *
  * ASM offsets for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef __GEN_OFFSETS_H_

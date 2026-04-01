@@ -3,7 +3,7 @@
  *
  * compression functions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _LIBPEF_COMPRESS_H_

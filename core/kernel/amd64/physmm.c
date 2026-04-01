@@ -3,7 +3,7 @@
  *
  * Physical memory manager for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <physmm.h>

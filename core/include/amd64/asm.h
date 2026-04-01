@@ -3,7 +3,7 @@
  *
  * Assembly macros and functions for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_ASM_H_

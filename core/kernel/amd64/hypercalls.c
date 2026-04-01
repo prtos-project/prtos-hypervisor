@@ -3,7 +3,7 @@
  *
  * prtos's hypercalls for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

@@ -3,7 +3,7 @@
  *
  * Standard buffered input/output
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <stdc.h>

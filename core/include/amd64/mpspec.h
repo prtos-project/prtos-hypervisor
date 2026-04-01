@@ -3,7 +3,7 @@
  *
  * Intel's MP specification
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_MPSPEC_H_

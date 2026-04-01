@@ -3,7 +3,7 @@
  *
  * prtos's XML configuration parser to C
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PARSER_H_

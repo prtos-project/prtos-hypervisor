@@ -3,7 +3,7 @@
  *
  * prtoscparser written with XML2 libs
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <errno.h>

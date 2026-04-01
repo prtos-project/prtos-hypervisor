@@ -3,7 +3,7 @@
  *
  * I/O stubs for RISC-V 64-bit (no x86-style port I/O)
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_IO_H_

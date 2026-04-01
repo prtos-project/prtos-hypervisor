@@ -3,7 +3,7 @@
  *
  * Processor functions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_PROCESSOR_H_

@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit arch kernel thread
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_KTHREAD_H_

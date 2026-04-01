@@ -3,7 +3,7 @@
  *
  * hypervisor management functions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _LIB_PRTOS_HYPERVISOR_H_

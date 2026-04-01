@@ -3,7 +3,7 @@
  *
  * string functions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _BAIL_STRING_H_

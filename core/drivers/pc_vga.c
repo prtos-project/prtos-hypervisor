@@ -3,7 +3,7 @@
  *
  * X86 PC screen driver
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #ifdef CONFIG_DEV_VGA
 #include <boot.h>

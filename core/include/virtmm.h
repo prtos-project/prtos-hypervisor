@@ -3,7 +3,7 @@
  *
  * Virtual memory manager
  *
- * www.prtos.org
+ * http://www.prtos.org/
  *
  */
 

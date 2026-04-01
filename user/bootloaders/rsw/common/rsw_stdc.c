@@ -1,7 +1,7 @@
 /*
  * rsw_std_c.c
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <rsw_stdc.h>

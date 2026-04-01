@@ -3,7 +3,7 @@
  *
  * Validates a partition pef against a xml pef file
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #define _GNU_SOURCE

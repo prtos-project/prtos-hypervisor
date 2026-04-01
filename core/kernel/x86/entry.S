@@ -3,7 +3,7 @@
  *
  * Interrupts' code
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <linkage.h>

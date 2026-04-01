@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit processor management
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

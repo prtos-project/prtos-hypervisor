@@ -3,7 +3,7 @@
  *
  * Intel VT-x (VMX) definitions for amd64 hardware-assisted virtualization
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_VMX_H_

@@ -4,7 +4,7 @@
  * RISC-V 64 RSW boot entry point
  * Sets up a valid stack and jumps to the C code
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 .section .text.boot, "ax"

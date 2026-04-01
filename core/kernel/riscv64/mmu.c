@@ -7,7 +7,7 @@
  * Page tables are pre-allocated via GET_MEMAZ in kthread.c and stored
  * in karch fields (s2_root, s2_l1[], s2_l2[]), following the aarch64 pattern.
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

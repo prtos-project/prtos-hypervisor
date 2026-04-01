@@ -3,7 +3,7 @@
  *
  * Communication wrappers
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <prtos.h>

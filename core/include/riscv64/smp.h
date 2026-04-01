@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit SMP related stuff
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_SMP_H_

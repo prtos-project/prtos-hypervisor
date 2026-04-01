@@ -3,7 +3,7 @@
  *
  * proccessor per-stuffs
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_LOCAL_H_

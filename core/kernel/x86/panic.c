@@ -3,7 +3,7 @@
  *
  * Code executed in a panic situation
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <kthread.h>

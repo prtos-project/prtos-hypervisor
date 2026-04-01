@@ -1,7 +1,7 @@
 /*
  * FILE: irqs.h
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _BAIL_ARCH_IRQS_H_

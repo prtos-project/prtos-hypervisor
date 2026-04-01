@@ -3,7 +3,7 @@
  *
  * AArch64 stage-2 (IPA→PA) MMU setup for PRTOS partitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <kthread.h>

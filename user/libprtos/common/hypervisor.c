@@ -3,7 +3,7 @@
  *
  * Hypervisor related functions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <prtos.h>

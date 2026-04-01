@@ -3,7 +3,7 @@
  *
  * TSC driver
  *
- * www.prtos.org
+ * http://www.prtos.org/
  *
  */
 

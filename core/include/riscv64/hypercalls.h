@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit processor-related hypercalls definition
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_HYPERCALLS_H_

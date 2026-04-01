@@ -3,7 +3,7 @@
  *
  * limits
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _BAIL_LIMITS_H_

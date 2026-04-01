@@ -3,7 +3,7 @@
  *
  * prtos conf implementation
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <errno.h>

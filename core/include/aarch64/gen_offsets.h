@@ -3,7 +3,7 @@
  *
  * ASM offsets, this file only can be included from asm-offset.c
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef __GEN_OFFSETS_H_

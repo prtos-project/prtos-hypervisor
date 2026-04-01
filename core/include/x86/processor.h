@@ -3,7 +3,7 @@
  *
  * Processor
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _ARCH_PRTOS_PROCESSOR_H_

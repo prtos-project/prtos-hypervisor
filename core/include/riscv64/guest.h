@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit guest shared info
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_GUEST_H_
