@@ -3,7 +3,7 @@
  *
  * Kernel devices's management
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <kdevice.h>

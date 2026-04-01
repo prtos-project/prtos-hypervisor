@@ -4,7 +4,7 @@
  * Create a pack holding the image of prtos and partitions to be written
  * into the ROM
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #define _GNU_SOURCE

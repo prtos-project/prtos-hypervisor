@@ -7,7 +7,7 @@
  * Emulates GICD and GICR MMIO registers via stage-2 data abort traps.
  * Uses GICv3 ICH_LR registers for hardware virtual interrupt injection.
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <kthread.h>

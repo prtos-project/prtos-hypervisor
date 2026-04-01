@@ -3,7 +3,7 @@
  *
  * Atomic operations (architecture dependent)
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _ARCH_LIB_PRTOS_ATOMIC_OPS_H_

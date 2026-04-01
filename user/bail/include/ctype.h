@@ -3,7 +3,7 @@
  *
  * c types
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _BAIL_CTYPE_H_

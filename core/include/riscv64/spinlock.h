@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit spin locks
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_SPINLOCK_H_

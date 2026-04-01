@@ -3,7 +3,7 @@
  *
  * prtos's timer interface
  *
- * www.prtos.org
+ * http://www.prtos.org/
  *
  */
 

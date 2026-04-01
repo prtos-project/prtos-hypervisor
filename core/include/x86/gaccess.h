@@ -3,7 +3,7 @@
  *
  * Guest shared info
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_GACCESS_H_

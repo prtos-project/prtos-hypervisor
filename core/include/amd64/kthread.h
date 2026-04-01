@@ -3,7 +3,7 @@
  *
  * Arch kernel thread for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_KTHREAD_H_

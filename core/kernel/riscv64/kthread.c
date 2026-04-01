@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit kernel thread arch-dependent code
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

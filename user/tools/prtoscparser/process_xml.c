@@ -1,7 +1,7 @@
 /*
  * FILE: process_xml.c
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <string.h>

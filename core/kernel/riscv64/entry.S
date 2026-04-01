@@ -4,7 +4,7 @@
  * RISC-V 64-bit trap entry/exit for PRTOS hypervisor
  * Handles traps from both HS-mode (hypervisor) and VS-mode (guest)
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <arch/asm_offsets.h>

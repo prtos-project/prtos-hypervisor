@@ -3,7 +3,7 @@
  *
  * Memory block management
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

@@ -6,7 +6,7 @@
  * Provides: VMX initialization, VMCS setup, EPT management,
  *           VM-exit handling, and virtual device emulation (PIT/PIC/UART).
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifdef CONFIG_VMX

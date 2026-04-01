@@ -6,7 +6,7 @@
  * Linux guests for secondary vCPU startup (HSM), IPI, remote
  * fence, and base extension probing.
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <irqs.h>

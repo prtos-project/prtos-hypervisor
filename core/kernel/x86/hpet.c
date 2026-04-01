@@ -3,7 +3,7 @@
  *
  * High Precision Event Timer
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #ifdef CONFIG_HPET
 

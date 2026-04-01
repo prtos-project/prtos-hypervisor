@@ -3,7 +3,7 @@
  *
  * Independent part of interrupt handling
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <audit.h>

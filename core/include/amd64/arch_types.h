@@ -3,7 +3,7 @@
  *
  * Types defined by the amd64 architecture
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_TYPES_H_

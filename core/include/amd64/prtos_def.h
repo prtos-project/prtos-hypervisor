@@ -3,7 +3,7 @@
  *
  * PRTOS amd64 hardware configuration
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _ARCH_PRTOS_DEF_H_

@@ -3,7 +3,7 @@
  *
  * endianess handling functions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _ENDIANESS_H_

@@ -1,7 +1,7 @@
 /*
  * std_c.c
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <stdarg.h>

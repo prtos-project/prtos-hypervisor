@@ -3,7 +3,7 @@
  *
  * Code executed in a panic situation for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <kthread.h>

@@ -3,7 +3,7 @@
  *
  * ix86 UART driver
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_UART_H_

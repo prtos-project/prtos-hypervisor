@@ -3,7 +3,7 @@
  *
  * Physical memory manager
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_PHYSMM_H_

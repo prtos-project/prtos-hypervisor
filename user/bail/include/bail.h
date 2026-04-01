@@ -3,7 +3,7 @@
  *
  * BAIL definitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _BAIL_H_

@@ -3,7 +3,7 @@
  *
  * Types defined by the RISC-V 64-bit architecture
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_TYPES_H_

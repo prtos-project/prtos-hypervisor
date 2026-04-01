@@ -3,7 +3,7 @@
  *
  * standard library functions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _BAIL_STDLIB_H_

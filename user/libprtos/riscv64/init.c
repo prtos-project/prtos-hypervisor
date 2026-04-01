@@ -3,7 +3,7 @@
  *
  * Initialisation of the libprtos
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <prtos.h>

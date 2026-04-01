@@ -3,7 +3,7 @@
  *
  * KLib's standard C functions definition
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_STDC_H_

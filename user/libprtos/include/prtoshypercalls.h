@@ -3,7 +3,7 @@
  *
  * Generic hypercall definition
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _LIB_PRTOS_HYPERCALLS_H_

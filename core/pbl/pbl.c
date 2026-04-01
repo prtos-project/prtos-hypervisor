@@ -3,7 +3,7 @@
  *
  * Partition loader code
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #undef _PRTOS_KERNEL_

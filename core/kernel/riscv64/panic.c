@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit panic handling
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <kthread.h>

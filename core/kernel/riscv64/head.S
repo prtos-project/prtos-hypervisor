@@ -13,7 +13,7 @@
  *
  * After the kernel transitions to virtual addresses, the identity map is removed.
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <linkage.h>

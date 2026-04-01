@@ -3,7 +3,7 @@
  *
  * RISC-V 64 RSW serial output via 16550 UART (QEMU virt)
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #define UART_BASE   ((volatile unsigned char *)0x10000000UL)

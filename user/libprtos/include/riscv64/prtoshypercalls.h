@@ -3,7 +3,7 @@
  *
  * Arch hypercalls definition for RISC-V 64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _ARCH_LIB_PRTOS_HYPERCALLS_H_

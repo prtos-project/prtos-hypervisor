@@ -3,7 +3,7 @@
  *
  * configuration of BAIL
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _BAIL_CONFIG_H_

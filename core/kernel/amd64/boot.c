@@ -3,7 +3,7 @@
  *
  * Setting up and starting up the kernel (arch dependent part)
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

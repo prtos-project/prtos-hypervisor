@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit trap handler (C part)
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

@@ -3,7 +3,7 @@
  *
  * System/partition status
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_OBJ_STATUS_H_

@@ -3,7 +3,7 @@
  *
  * Audit events definition
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_AUDIT_H_

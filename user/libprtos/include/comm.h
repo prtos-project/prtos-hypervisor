@@ -3,7 +3,7 @@
  *
  * Comm ports
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _LIB_PRTOS_COMM_H_

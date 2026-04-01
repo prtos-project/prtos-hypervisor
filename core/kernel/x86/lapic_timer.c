@@ -4,7 +4,7 @@
  * Local & IO Advanced Programming Interrupts Controller (APIC)
  * IO-APIC 82093AA
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

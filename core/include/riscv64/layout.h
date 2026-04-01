@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit memory layout for QEMU virt machine
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef __LAYOUT_H__

@@ -3,7 +3,7 @@
  *
  * Entry point of the PRTOS in the x86 architecture version
  *
- * www.prtos.org
+ * http://www.prtos.org/
 */
 
 #include <linkage.h>

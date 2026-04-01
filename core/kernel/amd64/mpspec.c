@@ -3,7 +3,7 @@
  *
  * Intel multiprocessor specification based table parsing
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #include <arch/paging.h>
 #include <assert.h>

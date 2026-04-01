@@ -3,7 +3,7 @@
  *
  * architecture dependent stuff
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #define _RSV_IO_PORTS_

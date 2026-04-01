@@ -3,7 +3,7 @@
  * 
  * ld script to build aarch64
  * 
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 OUTPUT_FORMAT("elf64-littleaarch64", "elf64-bigaarch64",

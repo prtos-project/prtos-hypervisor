@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit SMP support using SBI HSM extension
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <processor.h>

@@ -3,7 +3,7 @@
  *
  * tracing subsystem
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _LIB_PRTOS_STATUS_H_

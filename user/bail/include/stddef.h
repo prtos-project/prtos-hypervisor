@@ -3,7 +3,7 @@
  *
  * stddef file
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _BAIL_STDDEF_H_

@@ -3,7 +3,7 @@
  *
  * Hypercalls definition
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_HYPERCALLS_H_

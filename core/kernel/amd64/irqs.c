@@ -3,7 +3,7 @@
  *
  * IRQS' code for amd64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #include <assert.h>
 #include <bitwise.h>

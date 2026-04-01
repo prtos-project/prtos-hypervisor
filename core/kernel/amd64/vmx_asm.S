@@ -7,7 +7,7 @@
  * at offset GREGS_OFF (32) into struct vmx_state:
  *   vmcs_phys(8) + vmcs_virt(8) + eptp(8) + ept_pml4(8) = 32 bytes
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 /* Offset of guest_regs[] within struct vmx_state */

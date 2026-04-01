@@ -3,7 +3,7 @@
  *
  * pit driver
  *
- * www.prtos.org
+ * http://www.prtos.org/
  *
  */
 #ifdef CONFIG_PC_PIT_TIMER

@@ -3,7 +3,7 @@
  *
  * PRTOS Config Definitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_CONF_H_

@@ -9,7 +9,7 @@
  * and populates the .hypercallstab section used by the linker to build
  * hypercalls_table[].
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <hypercalls.h>

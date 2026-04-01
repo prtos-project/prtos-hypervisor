@@ -3,7 +3,7 @@
  *
  * The PC's PIC
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_PIC_H_

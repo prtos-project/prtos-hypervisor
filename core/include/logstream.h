@@ -3,7 +3,7 @@
  *
  * Log Stream
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_LOGSTREAM_H_

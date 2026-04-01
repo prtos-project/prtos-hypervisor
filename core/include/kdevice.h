@@ -3,7 +3,7 @@
  *
  * kernel devices
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_KDEVICE_H_

@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit hypercall table
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <hypercalls.h>

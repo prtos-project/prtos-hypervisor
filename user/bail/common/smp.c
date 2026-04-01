@@ -3,7 +3,7 @@
  *
  * Generic routines smp
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <prtos.h>

@@ -5,7 +5,7 @@
  *
  * Version: prtos-1.0.0
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_VMMAP_H_

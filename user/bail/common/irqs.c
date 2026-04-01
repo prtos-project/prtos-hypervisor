@@ -3,7 +3,7 @@
  *
  * Generic traps' handler
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <prtos.h>

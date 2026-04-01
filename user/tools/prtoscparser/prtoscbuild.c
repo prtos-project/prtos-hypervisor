@@ -3,7 +3,7 @@
  *
  * Compile the c code
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <stddef.h>

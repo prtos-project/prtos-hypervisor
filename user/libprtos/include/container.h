@@ -3,7 +3,7 @@
  *
  * Container definition
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _LIB_PRTOS_CONTAINER_H_

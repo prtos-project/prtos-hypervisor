@@ -3,7 +3,7 @@
  *
  * Generic boot code for amd64, sets up a valid stack and jumps to C code
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #include <prtos.h>
 #include <prtos_inc/arch/asm_offsets.h>

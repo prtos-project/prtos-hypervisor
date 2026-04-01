@@ -1,7 +1,7 @@
 /*
  * FILE: end_xsd.S
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 .section .rodata.xsd, "a"

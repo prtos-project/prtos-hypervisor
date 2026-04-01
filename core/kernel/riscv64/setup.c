@@ -3,7 +3,7 @@
  *
  * Setting up and starting up the kernel (RISC-V 64-bit arch dependent part)
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <assert.h>

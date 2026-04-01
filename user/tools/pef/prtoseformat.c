@@ -1,7 +1,7 @@
 /*
  * FILE: main.c
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #define _GNU_SOURCE

@@ -3,7 +3,7 @@
  *
  * RISC-V 64 BAIL architecture initialization
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #include <prtos.h>
 #include <irqs.h>

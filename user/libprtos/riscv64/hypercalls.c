@@ -3,7 +3,7 @@
  *
  * prtos system calls definitions for RISC-V 64
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <prtos_inc/hypercalls.h>

@@ -4,7 +4,7 @@
  * Definition of some macros to ease the interoperatibility between
  * assembly and C
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_LINKAGE_H_

@@ -3,7 +3,7 @@
  *
  * Memory block driver
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_MEMBLOCK_DRV_H_

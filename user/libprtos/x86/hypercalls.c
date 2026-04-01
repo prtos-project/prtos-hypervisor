@@ -3,7 +3,7 @@
  *
  * prtos system calls definitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 //#include <prtoshypercalls.h>

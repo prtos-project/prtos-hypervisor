@@ -3,7 +3,7 @@
  *
  * RISC-V 64-bit config parameters
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_ARCH_PRTOSCONF_H_

@@ -3,7 +3,7 @@
  *
  * prtos's executable format helper functions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _LIB_PRTOS_PEF_H_

@@ -3,7 +3,7 @@
  *
  * Standard library definitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <stdc.h>

@@ -3,7 +3,7 @@
  *
  * Guest header file
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _LIB_PRTOS_H_

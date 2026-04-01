@@ -1,7 +1,7 @@
 /*
  * FILE: pef.h
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PEF_H_

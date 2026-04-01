@@ -3,7 +3,7 @@
  *
  * Reserve memory
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <stdlib.h>

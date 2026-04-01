@@ -8,7 +8,7 @@
  * These definitions were extracted from the minimal set required by
  * start.S, head.S, and entry.S for the PRTOS aarch64 port.
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_AARCH64_ARM_DEFS_H_

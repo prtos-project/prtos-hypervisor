@@ -3,7 +3,7 @@
  *
  * Architecture initialization functions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #include <prtos.h>
 #include <stdio.h>

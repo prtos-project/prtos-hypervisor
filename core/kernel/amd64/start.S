@@ -3,7 +3,7 @@
  *
  * Entry point for amd64 PRTOS - transitions from 32-bit to 64-bit long mode
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <config.h>

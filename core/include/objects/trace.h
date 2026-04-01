@@ -3,7 +3,7 @@
  *
  * Tracing object definitions
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_OBJ_TRACE_H_

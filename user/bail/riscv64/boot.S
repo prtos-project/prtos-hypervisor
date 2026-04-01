@@ -6,7 +6,7 @@
  *
  * SMP-aware: only vCPU0 zeroes BSS; each vCPU gets its own stack.
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 #include <prtos.h>
 

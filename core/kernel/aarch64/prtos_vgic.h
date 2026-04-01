@@ -5,7 +5,7 @@
  * hw-virt partitions (Linux guests).  Separate from PRTOS's VGIC which
  * requires full domain/vcpu infrastructure.
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #ifndef _PRTOS_VGIC_H_

@@ -1,7 +1,7 @@
 /*
  * FILE: pef.c
  *
- * www.prtos.org
+ * http://www.prtos.org/
  */
 
 #include <pef.h>
