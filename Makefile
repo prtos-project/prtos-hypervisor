@@ -112,7 +112,7 @@ clean:
 	@$(RM) -f $(PRTOS_PATH)/core/build.info $(PRTOS_PATH)/user/tools/prtoscparser/prtos_conf.xsd $(PRTOS_PATH)/$(DISTRO).run
 	@exec echo -e "> Done";
 
-DISTRO	= prtos-$(PRTOSVERSION)
+DISTRO	= prtos_$(ARCH)_$(PRTOSVERSION)
 DISTRO_TMP=/tmp/$(DISTRO)-$$PPID
 DISTRO_TAR = $(DISTRO).tar.bz2
 $(DISTRO_TAR): prtos

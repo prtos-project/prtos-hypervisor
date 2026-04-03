@@ -18,7 +18,7 @@ ALL_CASES=(
     "example.003:3:12"
     "example.004:1:15"
     "example.005:1:8"
-    "example.006:1:20"
+    "example.006:1:30"
     "example.007:1:40"
     "example.008:2:15:x86,aarch64,riscv64,amd64"
     "example.009:2:15"
