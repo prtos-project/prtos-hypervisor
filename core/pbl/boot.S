@@ -48,3 +48,26 @@ start_stack:
 .global end_stack
 end_stack:
 #endif
+
+#ifdef CONFIG_AARCH64
+.global _start, start
+_start:
+start:
+        // x0 contains part_ctrl_table_ptr (set by caller)
+        // Setup stack pointer
+        ldr x1, =end_stack
+        mov sp, x1
+        
+        bl main_pbl
+        
+        // Jump to returned address (in x0)
+        br x0
+1:
+        b 1b
+.bss
+.global start_stack
+start_stack:
+        .zero STACK_SIZE
+.global end_stack
+end_stack:
+#endif

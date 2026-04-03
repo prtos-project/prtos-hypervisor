@@ -20,6 +20,17 @@ path.mk:
 	@exec echo -e "export PRTOS_PATH" >> path.mk
 	@cat path.mk >> prtos_config
 	@$(RM) -f path.mk
+else ifeq ($(HOST_ARCH),aarch64)
+path.mk:
+	@exec echo -e "\n# Automatically added by PRTOS" > path.mk
+	@exec echo -e "# Please don't modify" >> path.mk
+	@exec echo -e "HOST_CFLAGS_ARCH=" >> path.mk
+	@exec echo -e "HOST_ASFLAGS_ARCH=" >> path.mk
+	@exec echo -e "HOST_LDFLAGS_ARCH=" >> path.mk
+	@exec echo -e "PRTOS_PATH=`pwd`" >> path.mk
+	@exec echo -e "export PRTOS_PATH" >> path.mk
+	@cat path.mk >> prtos_config
+	@$(RM) -f path.mk
 else
 path.mk:
 	@exec echo -e "\n# Automatically added by PRTOS" > path.mk
