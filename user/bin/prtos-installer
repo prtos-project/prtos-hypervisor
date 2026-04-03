@@ -84,6 +84,10 @@ function chktargetgcc(){
 	fi
 	
 	arch=`echo $ARCH | sed -n 's|\(^.....\).*|\1|p'`
+	# amd64 uses the native x86_64 toolchain
+	if test "$ARCH" = "amd64"; then
+		arch="x86_6"
+	fi
 	if ! $targetgcc -dumpmachine | grep -q "^$arch"; then
 		eprint Error Target toolchain: $targetgcc does not match "$arch" arch
 	fi

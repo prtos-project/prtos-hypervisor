@@ -10,26 +10,35 @@ ARCH=""
 BUILDER=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Test case definitions: name, expected_verification_count, timeout_seconds
-# Format: "case_name:expected_count:timeout"
-# For cases not listed here, defaults will be used
-CASE_CONFIGS=(
+# Complete test case list: name, expected_verification_count, timeout_seconds[, arch_list]
+# Format: "case_name:expected_count:timeout" or "case_name:expected_count:timeout:arch1,arch2,..."
+# Cases without arch_list run on all architectures.
+ALL_CASES=(
     "example.001:2:20"
     "example.002:1:8"
     "example.003:3:12"
     "example.004:1:15"
     "example.005:1:8"
-    "example.006:1:20"
+    "example.006:1:30"
     "example.007:1:40"
-    "example.008:2:15"
+    "example.008:2:15:x86,aarch64,riscv64,amd64"
     "example.009:2:15"
     "helloworld:1:15"
-    "helloworld_smp:2:15"
+    "helloworld_smp:2:20:x86,aarch64,riscv64,amd64"
+    "freertos_para_virt_aarch64:1:20:aarch64"
+    "freertos_hw_virt_aarch64:0:30:aarch64"
+    "freertos_para_virt_riscv:1:20:riscv64"
+    "freertos_hw_virt_riscv:0:30:riscv64"
+    "freertos_para_virt_amd64:1:20:amd64"
+    "freertos_hw_virt_amd64:0:30:amd64"
+    "linux_aarch64:0:180:aarch64"
+    "linux_4vcpu_1partion_aarch64:0:360:aarch64"
+    "linux_4vcpu_1partion_riscv64:0:360:riscv64"
+    "linux_4vcpu_1partion_amd64:0:360:amd64"
+    "mix_os_demo_aarch64:0:420:aarch64"
+    "mix_os_demo_riscv64:0:420:riscv64"
+    "mix_os_demo_amd64:0:420:amd64"
 )
-
-# Default values for test cases not in CASE_CONFIGS
-DEFAULT_EXPECT=1
-DEFAULT_TIMEOUT=15
 
 # Colors for output
 RED='\033[0;31m'
@@ -44,7 +53,7 @@ ${PROGNAME} [options] <command>
 
 Options:
   -h|--help              Display this help and exit.
-  --arch <x86|aarch64>   Target architecture (default: x86).
+  --arch <x86|aarch64|riscv64|amd64>   Target architecture (default: x86).
 
 Commands:
   check-<case>           Check a specific test case.
@@ -89,8 +98,8 @@ if [[ -z "${ARCH}" ]]; then
 fi
 
 # Validate architecture
-if [[ "${ARCH}" != "x86" && "${ARCH}" != "aarch64" ]]; then
-    echo "Error: unsupported architecture '${ARCH}'. Use 'x86' or 'aarch64'."
+if [[ "${ARCH}" != "x86" && "${ARCH}" != "aarch64" && "${ARCH}" != "riscv64" && "${ARCH}" != "amd64" ]]; then
+    echo "Error: unsupported architecture '${ARCH}'. Use 'x86', 'aarch64', 'riscv64', or 'amd64'."
     exit 1
 fi
 
@@ -102,6 +111,14 @@ if [[ "${ARCH}" == "x86" ]]; then
     QEMU="qemu-system-i386"
     MAKE_RUN_TARGET="run.x86.nographic"
     CONFIG_FILE="prtos_config.x86"
+elif [[ "${ARCH}" == "riscv64" ]]; then
+    QEMU="qemu-system-riscv64"
+    MAKE_RUN_TARGET="run.riscv64"
+    CONFIG_FILE="prtos_config.riscv64"
+elif [[ "${ARCH}" == "amd64" ]]; then
+    QEMU="qemu-system-x86_64"
+    MAKE_RUN_TARGET="run.amd64.nographic"
+    CONFIG_FILE="prtos_config.amd64"
 else
     QEMU="qemu-system-aarch64"
     MAKE_RUN_TARGET="run.aarch64"
@@ -120,62 +137,62 @@ function clean() {
     ${MAKE} distclean 2>/dev/null
 }
 
-# function build_prtos() {
-#     cd "${MONOREPO_ROOT}"
-#     cp "${CONFIG_FILE}" prtos_config
-#     ${MAKE} defconfig
-#     ${MAKE}
-#     if [[ $? -ne 0 ]]; then
-#         echo -e "${RED}ERROR: Failed to build PRTOS for ${ARCH}${NC}"
-#         exit 1
-#     fi
-# }
+function build_prtos() {
+    cd "${MONOREPO_ROOT}"
+    cp "${CONFIG_FILE}" prtos_config
+    ${MAKE} defconfig
+    ${MAKE}
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}ERROR: Failed to build PRTOS for ${ARCH}${NC}"
+        exit 1
+    fi
+}
 
-# Lookup test case config: sets CASE_EXPECT and CASE_TIMEOUT
-# Returns 0 always (uses defaults if case not found)
+# In SDK context, build_prtos is not needed — each example builds itself.
+# Uncomment the function call in check-all/check-* if using from source tree.
+
+# Lookup test case config: sets CASE_EXPECT, CASE_TIMEOUT, CASE_ARCH
+# Returns 0 if found, 1 if not found
 function lookup_case() {
     local case_name="$1"
-    CASE_EXPECT="${DEFAULT_EXPECT}"
-    CASE_TIMEOUT="${DEFAULT_TIMEOUT}"
-    
-    for entry in "${CASE_CONFIGS[@]}"; do
+    CASE_EXPECT=""
+    CASE_TIMEOUT=""
+    CASE_ARCH=""
+
+    for entry in "${ALL_CASES[@]}"; do
         local name="${entry%%:*}"
         local rest="${entry#*:}"
         local expect="${rest%%:*}"
-        local timeout="${rest#*:}"
+        rest="${rest#*:}"
+        local timeout="${rest%%:*}"
+        local arch=""
+        if [[ "${rest}" == *:* ]]; then
+            arch="${rest#*:}"
+        fi
         if [[ "${name}" == "${case_name}" ]]; then
             CASE_EXPECT="${expect}"
             CASE_TIMEOUT="${timeout}"
+            CASE_ARCH="${arch}"
             return 0
         fi
     done
-    # Case not found in configs, use defaults
-    echo -e "${YELLOW}Note: Using default config for ${case_name} (expect=${DEFAULT_EXPECT}, timeout=${DEFAULT_TIMEOUT})${NC}"
-    return 0
+    return 1
 }
 
-# Discover all test cases from bail-examples directory
-function discover_all_cases() {
-    local test_dir="${MONOREPO_ROOT}/bail-examples"
-    if [[ ! -d "${test_dir}" ]]; then
-        echo -e "${RED}Error: Test directory not found: ${test_dir}${NC}"
-        exit 1
+# Check if the current ARCH is in a comma-separated list of archs
+# Returns 0 if ARCH is in the list (or list is empty meaning all archs)
+function arch_matches() {
+    local arch_list="$1"
+    if [[ -z "${arch_list}" ]]; then
+        return 0  # empty list means all archs
     fi
-    
-    local cases=()
-    for dir in "${test_dir}"/*/; do
-        if [[ -d "${dir}" ]]; then
-            local case_name="$(basename "${dir}")"
-            # Skip if not a valid test case (must have Makefile)
-            if [[ -f "${dir}/Makefile" ]]; then
-                cases+=("${case_name}")
-            fi
+    local IFS=','
+    for a in ${arch_list}; do
+        if [[ "${a}" == "${ARCH}" ]]; then
+            return 0
         fi
     done
-    
-    # Sort the cases
-    IFS=$'\n' sorted_cases=($(sort <<<"${cases[*]}")); unset IFS
-    echo "${sorted_cases[@]}"
+    return 1
 }
 
 # Run a single test case
@@ -208,7 +225,8 @@ function run_test() {
     wait ${qemu_pid} 2>/dev/null
 
     local halted_num
-    halted_num=$(grep -c "Verification Passed$" "${output_file}" 2>/dev/null || echo 0)
+    halted_num=$(tr -d '\r' < "${output_file}" 2>/dev/null | grep -c "Verification Passed$") || true
+    halted_num="${halted_num:-0}"
 
     if [[ ${halted_num} -eq ${CASE_EXPECT} ]]; then
         echo -e "${GREEN}Check ${case_name} PASS${NC}"
@@ -266,14 +284,20 @@ function builder_to_case() {
 
 case "${BUILDER}" in
 list-cases)
-    echo "Available test cases in bail-examples/:"
+    echo "Available test cases:"
     echo "----------------------------------------"
-    all_cases=($(discover_all_cases))
-    for case_name in "${all_cases[@]}"; do
-        echo "  ${case_name}"
+    for entry in "${ALL_CASES[@]}"; do
+        _name="${entry%%:*}"
+        _rest="${entry#*:}"; _rest="${_rest#*:}"; _arch=""
+        if [[ "${_rest}" == *:* ]]; then _arch="${_rest#*:}"; fi
+        if [[ -n "${_arch}" ]]; then
+            echo "  ${_name} [${_arch} only]"
+        else
+            echo "  ${_name}"
+        fi
     done
     echo ""
-    echo "Total: ${#all_cases[@]} test cases"
+    echo "Total: ${#ALL_CASES[@]} test cases"
 ;;
 
 check-all)
@@ -281,12 +305,23 @@ check-all)
     echo "+++ Building PRTOS for ${ARCH}"
     # build_prtos
 
-    all_cases=($(discover_all_cases))
-    for case_name in "${all_cases[@]}"; do
-        if run_test "${case_name}"; then
-            record_result "${case_name}" "PASS"
+    for entry in "${ALL_CASES[@]}"; do
+        _case_name="${entry%%:*}"
+        lookup_case "${_case_name}"
+        # Skip if this case doesn't apply to the current architecture
+        if ! arch_matches "${CASE_ARCH}"; then
+            record_result "${_case_name}" "SKIP"
+            continue
+        fi
+        # Skip if test directory doesn't exist in bail-examples
+        if [[ ! -d "${MONOREPO_ROOT}/bail-examples/${_case_name}" ]]; then
+            record_result "${_case_name}" "SKIP"
+            continue
+        fi
+        if run_test "${_case_name}"; then
+            record_result "${_case_name}" "PASS"
         else
-            record_result "${case_name}" "FAIL"
+            record_result "${_case_name}" "FAIL"
         fi
     done
 
