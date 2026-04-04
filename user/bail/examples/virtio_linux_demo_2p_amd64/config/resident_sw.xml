@@ -1,0 +1,121 @@
+<!--
+  PRTOS Configuration: Virtio Linux Demo (amd64) - 2 Partitions
+
+  Architecture (3-layer):
+    L0: Host Linux + QEMU (x86_64, KVM)
+    L1: PRTOS Type-1 Hypervisor
+    L2: System Partition (Virtio Backend) + Guest Partition (Virtio Frontend)
+
+  Memory layout:
+    PRTOS Hypervisor:      12MB (0x1000000 - 0x1bfffff)
+    Partition 0 (System):  GPA 0x6000000,  128MB, 1 vCPU on pCPU 0 (VMX hw-virt)
+    Partition 1 (Guest):   GPA 0xe000000,  128MB, 1 vCPU on pCPU 1 (VMX hw-virt)
+    Shared Memory:         GPA 0x16000000, 8MB   (Virtio rings + data buffers)
+
+  Device Ownership:
+    System Partition (id=0):
+      - Console:      PRTOS hypervisor UART (via prtos_write_console hypercall)
+      - PCI config:   IO ports 0xCF8-0xCFF (PCI_CONFIG_ADDRESS + PCI_CONFIG_DATA)
+      - Shared memory: 8MB at 0x16000000 (flags="shared", Virtio rings + mailbox)
+      - Runs: virtio_backend (Virtio device emulation daemon)
+              prtos_manager  (Partition management CLI, lib_prtos_manager)
+    Guest Partition (id=1):
+      - No physical IO ports assigned (para-virtualized I/O only)
+      - Shared memory: 8MB at 0x16000000 (flags="shared flag3", virtual I/O space)
+      - Discovers Virtio devices via VIRTIO_PRTOS_MAGIC in control block
+      - Signals backend via IPVI id=0 doorbell
+
+  Virtio devices (Backend in System Partition, Frontend in Guest):
+    - virtio-console: character ring buffer via shared memory
+    - virtio-net:     packet exchange via shared memory
+    - virtio-blk:     block I/O via shared memory
+
+  Inter-partition signaling (Doorbells):
+    IPVI id=0: Guest (src=1) -> System (dst=0)  [Guest signals new buffers]
+    IPVI id=1: System (src=0) -> Guest (dst=1)  [Backend signals completion]
+
+  Communication Channels:
+    SamplingChannel "GuestToSystem": Guest -> System, 8 bytes (doorbell counter)
+    SamplingChannel "SystemToGuest": System -> Guest, 8 bytes (doorbell counter)
+
+  Scheduler: 2 pCPUs, each runs one partition vCPU, 100ms major frame, 50ms slots.
+-->
+<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="virtio_linux_demo_2p_amd64">
+    <HwDescription>
+        <MemoryLayout>
+            <Region type="ram" start="0x0" size="512MB" />
+        </MemoryLayout>
+        <ProcessorTable>
+            <!-- pCPU 0: System Partition vCPU 0 (100% - console interactive) -->
+            <Processor id="0">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="200ms">
+                        <Slot id="0" start="0ms" duration="150ms" partitionId="0" vCpuId="0"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <!-- pCPU 1: Guest Partition vCPU 0 -->
+            <Processor id="1">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="200ms">
+                        <Slot id="0" start="0ms" duration="50ms" partitionId="1" vCpuId="0"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+        </ProcessorTable>
+        <Devices>
+            <Uart id="0" baudRate="115200" name="Uart" />
+        </Devices>
+    </HwDescription>
+
+    <PRTOSHypervisor console="Uart">
+        <PhysicalMemoryArea size="12MB" />
+    </PRTOSHypervisor>
+
+    <PartitionTable>
+        <Partition id="0" name="System" flags="system" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x6000000" size="128MB" />
+                <Area start="0x16000000" size="8MB" flags="shared"/>
+            </PhysicalMemoryAreas>
+            <HwResources>
+                <IoPorts>
+                    <!-- PCI configuration space for device enumeration/passthrough -->
+                    <Range base="0xCF8" noPorts="4"/>
+                    <Range base="0xCFC" noPorts="4"/>
+                </IoPorts>
+            </HwResources>
+            <PortTable>
+                <Port type="sampling" direction="destination" name="GuestToSystem"/>
+                <Port type="sampling" direction="source" name="SystemToGuest"/>
+            </PortTable>
+        </Partition>
+
+        <Partition id="1" name="Guest" flags="system">
+            <PhysicalMemoryAreas>
+                <Area start="0xe000000" size="128MB" />
+                <!-- flag3: marks this area as virtual I/O space (Virtqueue rings) -->
+                <Area start="0x16000000" size="8MB" flags="shared flag3"/>
+            </PhysicalMemoryAreas>
+            <PortTable>
+                <Port type="sampling" direction="source" name="GuestToSystem"/>
+                <Port type="sampling" direction="destination" name="SystemToGuest"/>
+            </PortTable>
+        </Partition>
+    </PartitionTable>
+
+    <Channels>
+        <Ipvi id="0" sourceId="1" destinationId="0" />
+        <Ipvi id="1" sourceId="0" destinationId="1" />
+
+        <SamplingChannel maxMessageLength="8B">
+            <Source partitionId="1" portName="GuestToSystem"/>
+            <Destination partitionId="0" portName="GuestToSystem"/>
+        </SamplingChannel>
+        <SamplingChannel maxMessageLength="8B">
+            <Source partitionId="0" portName="SystemToGuest"/>
+            <Destination partitionId="1" portName="SystemToGuest"/>
+        </SamplingChannel>
+    </Channels>
+
+</SystemDescription>

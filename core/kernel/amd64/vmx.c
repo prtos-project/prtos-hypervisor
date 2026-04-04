@@ -13,6 +13,7 @@
 
 #include <assert.h>
 #include <boot.h>
+#include <hypercalls.h>
 #include <kthread.h>
 #include <physmm.h>
 #include <prtosconf.h>
@@ -1497,6 +1498,34 @@ void __attribute__((noreturn)) vmx_run_guest(void *kthread_ptr) {
             case EXIT_REASON_CPUID:
                 vmx_handle_cpuid_exit(vmx);
                 break;
+
+            case EXIT_REASON_VMCALL: {
+                /* Guest issued vmcall - dispatch as PRTOS hypercall.
+                 * Register convention matches para-virt (int $0x82):
+                 *   rax = hypercall number
+                 *   rbx = arg0, rcx = arg1, rdx = arg2, rsi = arg3, rdi = arg4
+                 * EPT is identity-mapped (GPA == HPA), so buffer pointers
+                 * from the guest can be used directly by hypercall handlers.
+                 */
+                extern prtos_s32_t (*hypercalls_table[NR_HYPERCALLS])(prtos_word_t, ...);
+                prtos_u64_t hc_nr = vmx->guest_regs[VMX_REG_RAX];
+                prtos_s32_t hc_ret;
+
+                if (hc_nr < NR_HYPERCALLS && hypercalls_table[hc_nr]) {
+                    hc_ret = hypercalls_table[hc_nr](
+                        (prtos_word_t)vmx->guest_regs[VMX_REG_RBX],
+                        (prtos_word_t)vmx->guest_regs[VMX_REG_RCX],
+                        (prtos_word_t)vmx->guest_regs[VMX_REG_RDX],
+                        (prtos_word_t)vmx->guest_regs[VMX_REG_RSI],
+                        (prtos_word_t)vmx->guest_regs[VMX_REG_RDI]);
+                } else {
+                    hc_ret = PRTOS_UNKNOWN_HYPERCALL;
+                }
+                vmx->guest_regs[VMX_REG_RAX] = (prtos_u64_t)(prtos_s64_t)hc_ret;
+                /* Advance past vmcall instruction (3 bytes: 0F 01 C1) */
+                vmx_vmwrite(VMCS_GUEST_RIP, vmx_vmread(VMCS_GUEST_RIP) + 3);
+                break;
+            }
 
             case EXIT_REASON_PREEMPTION_TIMER: {
                 prtos_u64_t now = get_sys_clock_usec();

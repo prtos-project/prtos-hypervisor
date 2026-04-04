@@ -1,0 +1,36 @@
+#!/bin/sh
+#
+# S99virtio_backend - Init script to start Virtio backend daemon.
+#
+# Placed in the System Partition's rootfs overlay at /etc/init.d/.
+# Starts virtio_backend automatically after Linux boots.
+#
+# The daemon maps shared memory and processes Virtio requests from the Guest.
+#
+
+DAEMON=/opt/virtio_backend
+PIDFILE=/var/run/virtio_backend.pid
+
+case "$1" in
+    start)
+        echo "Starting Virtio Backend daemon..."
+        if [ -x "$DAEMON" ]; then
+            start-stop-daemon -S -b -m -p $PIDFILE -x $DAEMON
+        else
+            echo "  $DAEMON not found, skipping"
+        fi
+        ;;
+    stop)
+        echo "Stopping Virtio Backend daemon..."
+        start-stop-daemon -K -p $PIDFILE 2>/dev/null
+        rm -f $PIDFILE
+        ;;
+    restart)
+        $0 stop
+        $0 start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac

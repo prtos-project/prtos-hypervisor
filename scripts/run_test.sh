@@ -37,6 +37,7 @@ ALL_CASES=(
     "mix_os_demo_aarch64:0:420:aarch64"
     "mix_os_demo_riscv64:0:420:riscv64"
     "mix_os_demo_amd64:0:420:amd64"
+    "virtio_linux_demo_2p_amd64:0:480:amd64"
 )
 
 # Colors for output
@@ -66,7 +67,8 @@ Commands:
                          linux_4vcpu_1partion_amd64 (amd64 only),
                          mix_os_demo_aarch64 (aarch64 only),
                          mix_os_demo_riscv64 (riscv64 only),
-                         mix_os_demo_amd64 (amd64 only)
+                         mix_os_demo_amd64 (amd64 only),
+                         virtio_linux_demo_2p_amd64 (amd64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -969,6 +971,93 @@ PYTEST
     fi
 }
 
+# Run the Virtio Linux 2-partition demo test (amd64 only, requires KVM)
+# Two Linux partitions (System + Guest) communicating via shared memory Virtio.
+function run_test_virtio_linux_demo_2p_amd64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/virtio_linux_demo_2p_amd64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    local kvm_ok=0
+    if test -w /dev/kvm 2>/dev/null; then
+        kvm_ok=1
+    elif grep -q "^kvm:.*\b$(whoami)\b" /etc/group 2>/dev/null; then
+        if sg kvm -c "test -w /dev/kvm" 2>/dev/null; then
+            kvm_ok=2
+        fi
+    fi
+
+    if [[ ${kvm_ok} -eq 0 ]]; then
+        echo -e "${YELLOW}KVM not accessible - cannot run virtio_linux_demo_2p_amd64${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/virtio_linux_demo_2p_amd64 [${ARCH}]"
+    cd "${test_dir}"
+
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (build error)"
+        return 1
+    fi
+
+    export KVM_OK=${kvm_ok}
+
+    python3 -u << 'PYTEST' 2>&1
+import pexpect, sys, time, os
+kvm_ok = int(os.environ.get('KVM_OK', '1'))
+sg_pre = "sg kvm -c '" if kvm_ok == 2 else ""
+sg_post = "'" if kvm_ok == 2 else ""
+cmd = (f"{sg_pre}qemu-system-x86_64 "
+    "-enable-kvm -cpu host,-waitpkg "
+       "-m 512 -smp 2 "
+       "-nographic -no-reboot "
+       "-cdrom resident_sw.iso "
+       "-serial mon:stdio "
+       f"-boot d{sg_post}")
+child = pexpect.spawn('/bin/bash', ['-c', cmd],
+                      timeout=460, encoding='utf-8', codec_errors='replace')
+try:
+    # Verify kernel version from boot log (always printed to serial)
+    idx = child.expect(['Linux version 6\\.19', pexpect.TIMEOUT, pexpect.EOF], timeout=240)
+    if idx != 0:
+        print('VIRTIO_TEST_FAIL: kernel version not found in boot log')
+        child.close(force=True); sys.exit(1)
+    print('Kernel version 6.19 detected in boot log')
+    # Verify prtos_role=system in kernel command line boot message
+    idx = child.expect(['prtos_role=system', pexpect.TIMEOUT], timeout=30)
+    if idx != 0:
+        print('VIRTIO_TEST_FAIL: prtos_role=system not found in boot log')
+        child.close(force=True); sys.exit(1)
+    print('PRTOS system partition role detected')
+    # Wait for login prompt to confirm full boot completion
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT], timeout=240)
+    if idx != 0:
+        print('VIRTIO_TEST_FAIL: login prompt not reached')
+        child.close(force=True); sys.exit(1)
+    print('Login prompt reached - boot complete')
+    print('Verification Passed')
+    child.close(force=True)
+except Exception as e:
+    print(f'VIRTIO_TEST_FAIL: {e}')
+    try: child.close(force=True)
+    except: pass
+    sys.exit(1)
+PYTEST
+
+    local rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        echo -e "${GREEN}Check virtio_linux_demo_2p_amd64 PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC}"
+        return 1
+    fi
+}
+
 # Run a single test case
 # Arguments: case_name
 # Returns: 0 on PASS, 1 on FAIL
@@ -1014,6 +1103,10 @@ function run_test() {
     fi
     if [[ "${case_name}" == "mix_os_demo_amd64" ]]; then
         run_test_mix_os_demo_amd64
+        return $?
+    fi
+    if [[ "${case_name}" == "virtio_linux_demo_2p_amd64" ]]; then
+        run_test_virtio_linux_demo_2p_amd64
         return $?
     fi
 
@@ -1108,6 +1201,7 @@ function builder_to_case() {
         check-mix_os_demo_riscv64) echo "mix_os_demo_riscv64" ;;
         check-linux_4vcpu_1partion_amd64) echo "linux_4vcpu_1partion_amd64" ;;
         check-mix_os_demo_amd64) echo "mix_os_demo_amd64" ;;
+        check-virtio_linux_demo_2p_amd64) echo "virtio_linux_demo_2p_amd64" ;;
         check-[0-9]*)         echo "example.${builder#check-}" ;;
         *)                    echo "" ;;
     esac
