@@ -9,38 +9,38 @@ The **System Partition** owns all hardware resources (PCI, legacy I/O, IRQs) and
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  L0: Host Linux + QEMU (x86_64, KVM, 4 pCPUs, 1024MB RAM)  │
-├──────────────────────────────────────────────────────────────┤
-│  L1: PRTOS Type-1 Hypervisor (12MB @ 0x1000000)             │
-│  ┌──────────────────────┐  ┌──────────────────────┐         │
-│  │ Partition 0 (System)  │  │ Partition 1 (Guest)   │         │
+┌────────────────────────────────────────────────────────────────┐
+│  L0: Host Linux + QEMU (x86_64, KVM, 4 pCPUs, 1024MB RAM)      │
+├────────────────────────────────────────────────────────────────┤
+│  L1: PRTOS Type-1 Hypervisor (12MB @ 0x1000000)                │
+│  ┌───────────────────────┐  ┌────────────────────────┐         │
+│  │ Partition 0 (System)  │  │ Partition 1 (Guest)    │         │
 │  │ Linux + Virtio Backend│  │ Linux + Virtio Frontend│         │
-│  │ 2 vCPU (pCPU 0-1)    │  │ 2 vCPU (pCPU 2-3)    │         │
-│  │ 128MB @ 0x6000000    │  │ 128MB @ 0xE000000    │         │
-│  │ console=ttyS0 (UART) │  │ console=tty0 (VGA)   │         │
-│  │                      │  │ + ttyS1 (COM2/telnet) │         │
-│  │ Services:            │  │                      │         │
-│  │ - prtos_manager      │  │ Virtio Frontend:     │         │
-│  │ - virtio_backend     │  │ - 3x virtio-net      │         │
-│  │   - Console backend  │  │ - virtio-blk         │         │
-│  │   - 3x Net backend   │  │ - virtio-console     │         │
-│  │   - Blk backend      │  │ - /opt/virtio_test.sh│         │
-│  └──────────┬───────────┘  └──────────┬───────────┘         │
-│             │     Shared Memory        │                     │
-│             │  ┌───────────────────┐   │                     │
-│             └──┤ ~5.25MB @ 0x16000000 ├┘                     │
-│                │ 5 Virtio Regions   │                        │
-│                └───────────────────┘                         │
-│                                                              │
-│  IPVI 0-4: Guest→System (per-device doorbell)                │
-│  IPVI 5:   System→Guest (completion doorbell)                │
-└──────────────────────────────────────────────────────────────┘
+│  │ 2 vCPU (pCPU 0-1)     │  │ 2 vCPU (pCPU 2-3)      │         │
+│  │ 128MB @ 0x6000000     │  │ 128MB @ 0xE000000      │         │
+│  │ console=ttyS0 (UART)  │  │ console=tty0 (VGA)     │         │
+│  │                       │  │ + ttyS1 (COM2/telnet)  │         │
+│  │ Services:             │  │                        │         │
+│  │ - prtos_manager       │  │ Virtio Frontend:       │         │
+│  │ - virtio_backend      │  │ - 3x virtio-net        │         │
+│  │   - Console backend   │  │ - virtio-blk           │         │
+│  │   - 3x Net backend    │  │ - virtio-console       │         │
+│  │   - Blk backend       │  │ - /opt/virtio_test.sh  │         │
+│  └──────────┬────────────┘  └──────────┬─────────────┘         │
+│             │     Shared Memory        │                       │
+│             │  ┌──────────────────────┐│                       │
+│             └──┤ ~5.25MB @ 0x16000000 ├┘                       │
+│                │ 5 Virtio Regions     │                        │
+│                └──────────────────────┘                        │
+│                                                                │
+│  IPVI 0-4: Guest→System (per-device doorbell)                  │
+│  IPVI 5:   System→Guest (completion doorbell)                  │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ## Memory Layout
 
-| Region              | GPA Start    | Size   | GPA End      |
+| Region              | GPA Start    | Size   | GPA End    |
 |---------------------|-------------|--------|-------------|
 | PRTOS Hypervisor    | 0x01000000  | 12MB   | 0x01BFFFFF  |
 | System Partition    | 0x06000000  | 128MB  | 0x0DFFFFFF  |
@@ -52,7 +52,7 @@ All addresses are within the first 1GB, required by PRTOS EPT identity-map (sing
 
 ## Shared Memory Layout (5 Regions at GPA 0x16000000+)
 
-| Region       | GPA Start    | Size   | Description                     |
+| Region       | GPA Start    | Size   | Description                   |
 |-------------|-------------|--------|---------------------------------|
 | Virtio_Net0 | 0x16000000  | 1MB    | virtio-net bridge (TAP backend) |
 | Virtio_Net1 | 0x16100000  | 1MB    | virtio-net NAT (loopback)       |
@@ -64,7 +64,7 @@ Each region uses `flags="shared"` in the XML config and is EPT-mapped into both 
 
 ## CPU Assignment (SMP)
 
-| Physical CPU | Partition          | Virtual CPU |
+| Physical CPU | Partition        | Virtual CPU |
 |-------------|-------------------|-------------|
 | pCPU 0      | System (P0)       | vCPU 0      |
 | pCPU 1      | System (P0)       | vCPU 1      |
@@ -76,9 +76,9 @@ Scheduler: 10ms major frame, dedicated pCPU mapping (each pCPU runs one vCPU ful
 ## Console Assignment
 
 | Partition | Console   | QEMU Device                        | Access Method            |
-|-----------|----------|------------------------------------|--------------------------|
-| System    | UART     | `-serial mon:stdio`                | Terminal (SSH)            |
-| Guest     | VGA      | `-vga std -vnc :1`                 | VNC `localhost:5901`      |
+|-----------|----------|-------------------------------------|--------------------------|
+| System    | UART     | `-serial mon:stdio`                 | Terminal (SSH)           |
+| Guest     | VGA      | `-vga std -vnc :1`                  | VNC `localhost:5901`     |
 | Guest     | COM2     | `-serial telnet::4321,server,nowait`| `telnet localhost 4321`  |
 
 The Guest partition uses `set_serial_poll` (ioctl `TIOCSSERIAL` with `irq=0`) to enable polling mode for COM2/ttyS1, since PRTOS does not route IRQ3 to the Guest. An init script (`S99virtio_guest`) spawns `getty` on ttyS1 automatically.

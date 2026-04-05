@@ -193,7 +193,7 @@ cp prtos_config.amd64 prtos_config
 make defconfig
 make
 cd user/bail/examples/linux_4vcpu_1partion_amd64
-run.amd64.kvm.nographic
+make run.amd64.kvm.nographic
 ```
 Log in with username `root` and password `1234`. The output is as follows:
 
@@ -212,6 +212,22 @@ processor       : 3
 #
 
 ```
+
+#### 4.1.5.3 Compiling and Running PRTOS `virtio_linux_demo_2p_amd64` (Dual SMP Linux + Virtio)
+```
+cd prtos-hypervisor
+cp prtos_config.amd64 prtos_config
+make defconfig
+make
+cd user/bail/examples/virtio_linux_demo_2p_amd64
+make run.amd64
+```
+This launches QEMU with dual consoles:
+- **System Partition** (COM1/stdio): login `root`/`1234`, then run `prtos_manager &` and `virtio_backend &`
+- **Guest Partition** (COM2/telnet): `telnet localhost 4321`, login `root`/`1234`
+- **Guest VGA** (VNC): `vnc://localhost:5901`
+
+See `user/bail/examples/virtio_linux_demo_2p_amd64/README.md` for full documentation.
 
 ## 4.2 **Commands to Automatically Run Test Suites for All Platforms**
 ```
@@ -277,8 +293,9 @@ The test report of run `bash scripts/run_test.sh --arch x86 check-all` should be
   mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    SKIP
+  virtio_linux_demo_2p_amd64 SKIP
 --------------------------------------
-  Total: 24  Pass: 11  Fail: 0  Skip: 13
+  Total: 25  Pass: 11  Fail: 0  Skip: 14
 ======================================
 
 ```
@@ -313,8 +330,9 @@ The test report of run `bash scripts/run_test.sh --arch aarch64 check-all` shoul
   mix_os_demo_aarch64  PASS
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    SKIP
+  virtio_linux_demo_2p_amd64 SKIP
 --------------------------------------
-  Total: 24  Pass: 16  Fail: 0  Skip: 8
+  Total: 25  Pass: 16  Fail: 0  Skip: 9
 ======================================
 
 ```
@@ -348,8 +366,9 @@ The test report of run `bash scripts/run_test.sh --arch riscv64 check-all` shoul
   mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  PASS
   mix_os_demo_amd64    SKIP
+  virtio_linux_demo_2p_amd64 SKIP
 --------------------------------------
-  Total: 24  Pass: 15  Fail: 0  Skip: 9
+  Total: 25  Pass: 15  Fail: 0  Skip: 10
 ======================================
 
 ```
@@ -383,8 +402,9 @@ The test report of run `bash scripts/run_test.sh --arch amd64 check-all` should 
   mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    PASS
+  virtio_linux_demo_2p_amd64 PASS
 --------------------------------------
-  Total: 24  Pass: 15  Fail: 0  Skip: 9
+  Total: 25  Pass: 16  Fail: 0  Skip: 9
 ======================================
 ```
 
