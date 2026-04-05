@@ -442,6 +442,7 @@ static void vmx_init_vmcs_controls(struct vmx_state *vmx, kthread_t *k) {
         vmx_vmwrite(VMCS_APIC_ACCESS_ADDR, vmx->shared->apic_access_page_phys);
     }
 
+
     /* MSR bitmap */
     if (!vmx_msr_bitmap_initialized) {
         GET_MEMAZ(vmx_msr_bitmap, PAGE_SIZE, PAGE_SIZE);
@@ -716,7 +717,12 @@ int vmx_setup_partition(void *kthread_ptr) {
     /* Allocate shared partition state */
     GET_MEMAZ(shared, sizeof(struct vmx_partition_shared), ALIGNMENT);
     shared->num_vcpus = p->cfg->num_of_vcpus;
+    shared->partition_id = p->cfg->id;
     memset(shared->vcpu_vmx, 0, sizeof(shared->vcpu_vmx));
+
+    /* Initialize I/O bitmap pointers (not used — all partitions use unconditional I/O exiting) */
+    shared->io_bitmap_a = 0;
+    shared->io_bitmap_b = 0;
 
     /* Allocate per-vCPU VMX state */
     GET_MEMAZ(vmx, sizeof(struct vmx_state), ALIGNMENT);
@@ -2168,7 +2174,11 @@ static void vuart_update_irq(struct vmx_state *vmx) {
 
 static void vuart_poll_host(struct vmx_state *vmx) {
     struct vuart_state *uart = &vmx->shared->vuart;
-    /* Poll host UART for incoming data */
+    /* Only route COM1 input to partition 0 (System).
+     * This prevents the input race condition where both partitions
+     * consume characters from the same physical serial port. */
+    if (vmx->shared->partition_id != 0)
+        return;
     while (in_byte(0x3FD) & 0x01) {
         prtos_u8_t ch = in_byte(0x3F8);
         prtos_u8_t next = (uart->rx_head + 1) % sizeof(uart->rx_buf);
@@ -2192,12 +2202,12 @@ static void vuart_write(struct vmx_state *vmx, prtos_u16_t port, prtos_u8_t val)
     }
 
     switch (offset) {
-    case 0: /* THR: write character to hypervisor console */
+    case 0: /* THR: write character to COM1 via hypervisor console */
         {
             extern void console_put_char(prtos_u8_t c);
             console_put_char((prtos_u8_t)val);
-            g_vuart_tx_cnt++;
         }
+        g_vuart_tx_cnt++;
         uart->thr_empty = 1;
         vuart_update_irq(vmx);
         break;
@@ -2311,6 +2321,41 @@ static void vmx_handle_io_exit(kthread_t *k, struct vmx_state *vmx) {
             val32 = vuart_read(vmx, port);
         else if (port == 0x64)
             val32 = 0;  /* keyboard status: no data */
+        else if (port >= 0x2F8 && port <= 0x2FF && vmx->shared->partition_id != 0) {
+            /* COM2 ports — passthrough to QEMU COM2 (Guest only).
+             * Guest spawns getty on ttyS1 for telnet login.
+             * set_serial_poll forces irq=0 so 8250 uses timer polling. */
+            if (size == 4) {
+                __asm__ __volatile__("inl %w1, %0" : "=a"(val32) : "Nd"(port));
+                handled_wide = 1;
+            } else if (size == 2) {
+                prtos_u16_t v16;
+                __asm__ __volatile__("inw %w1, %0" : "=a"(v16) : "Nd"(port));
+                val32 = v16;
+            } else {
+                prtos_u8_t v8;
+                __asm__ __volatile__("inb %w1, %b0" : "=a"(v8) : "Nd"(port));
+                val32 = v8;
+            }
+        }
+        else if (port >= 0x3B0 && port <= 0x3DF && vmx->shared->partition_id != 0) {
+            /* VGA I/O ports — passthrough to QEMU VGA device (Guest only).
+             * Guest uses console=tty0 (vgacon) which needs CRT controller,
+             * attribute controller, sequencer, DAC, and misc registers.
+             * System partition returns default 0xFF (no VGA overhead). */
+            if (size == 4) {
+                __asm__ __volatile__("inl %w1, %0" : "=a"(val32) : "Nd"(port));
+                handled_wide = 1;
+            } else if (size == 2) {
+                prtos_u16_t v16;
+                __asm__ __volatile__("inw %w1, %0" : "=a"(v16) : "Nd"(port));
+                val32 = v16;
+            } else {
+                prtos_u8_t v8;
+                __asm__ __volatile__("inb %w1, %b0" : "=a"(v8) : "Nd"(port));
+                val32 = v8;
+            }
+        }
         else if (port == 0xCF8 || (port >= 0xCFC && port <= 0xCFF)) {
             /* PCI config space — passthrough to real hardware (QEMU emulated) */
             if (size == 4) {
@@ -2348,6 +2393,28 @@ static void vmx_handle_io_exit(kthread_t *k, struct vmx_state *vmx) {
             vpic_write(&vmx->shared->vpic, port, val);
         else if (port >= 0x3F8 && port <= 0x3FF)
             vuart_write(vmx, port, val);
+        else if (port >= 0x2F8 && port <= 0x2FF && vmx->shared->partition_id != 0) {
+            /* COM2 ports — passthrough to QEMU COM2 (Guest only) */
+            prtos_u32_t val32_out = (prtos_u32_t)(vmx->guest_regs[VMX_REG_RAX] & 0xFFFFFFFF);
+            if (size == 4) {
+                __asm__ __volatile__("outl %0, %w1" :: "a"(val32_out), "Nd"(port));
+            } else if (size == 2) {
+                __asm__ __volatile__("outw %w0, %w1" :: "a"((prtos_u16_t)val32_out), "Nd"(port));
+            } else {
+                __asm__ __volatile__("outb %b0, %w1" :: "a"((prtos_u8_t)val32_out), "Nd"(port));
+            }
+        }
+        else if (port >= 0x3B0 && port <= 0x3DF && vmx->shared->partition_id != 0) {
+            /* VGA I/O ports — passthrough to QEMU VGA device (Guest only) */
+            prtos_u32_t val32_out = (prtos_u32_t)(vmx->guest_regs[VMX_REG_RAX] & 0xFFFFFFFF);
+            if (size == 4) {
+                __asm__ __volatile__("outl %0, %w1" :: "a"(val32_out), "Nd"(port));
+            } else if (size == 2) {
+                __asm__ __volatile__("outw %w0, %w1" :: "a"((prtos_u16_t)val32_out), "Nd"(port));
+            } else {
+                __asm__ __volatile__("outb %b0, %w1" :: "a"((prtos_u8_t)val32_out), "Nd"(port));
+            }
+        }
         else if (port == 0xCF8 || (port >= 0xCFC && port <= 0xCFF)) {
             /* PCI config space — passthrough to real hardware (QEMU emulated) */
             prtos_u32_t val32_out = (prtos_u32_t)(vmx->guest_regs[VMX_REG_RAX] & 0xFFFFFFFF);

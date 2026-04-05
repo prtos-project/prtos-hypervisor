@@ -1,40 +1,23 @@
 #!/bin/sh
 #
-# S99virtio_guest - Init script for Guest Partition.
-#
-# Configures network interfaces and reports virtio device status.
-# Runs in the Guest Partition after Linux boots.
+# S99virtio_guest - Guest Partition init script.
+# Spawns getty on ttyS1 (COM2) for telnet login at port 4321.
 #
 
 case "$1" in
     start)
-        echo "=== PRTOS Guest Partition Initialization ==="
-        echo "Console: VGA (tty0)"
-        echo "Role:    Virtio Frontend"
-        echo ""
+        echo "=== PRTOS Guest Partition ==="
+        echo "Console: tty0 (VGA) + ttyS1 (COM2 -> telnet :4321)"
+        echo "CPUs: $(nproc), Kernel: $(uname -r)"
 
-        # Report CPUs
-        echo "CPUs: $(nproc)"
-        echo "Kernel: $(uname -r)"
-        echo ""
-
-        # Auto-detect and configure network interfaces
-        for iface in eth0 eth1 eth2; do
-            if [ -d "/sys/class/net/$iface" ]; then
-                idx=$(echo $iface | tr -dc '0-9')
-                ip addr add 10.0.$((idx + 1)).2/24 dev $iface 2>/dev/null
-                ip link set $iface up 2>/dev/null
-                echo "Configured $iface: 10.0.$((idx + 1)).2/24"
-            fi
-        done
-
-        # Report virtio devices
-        echo ""
-        echo "Virtio devices:"
-        [ -b /dev/vda ] && echo "  /dev/vda  (block)" || echo "  /dev/vda  (not found)"
-        [ -c /dev/hvc0 ] && echo "  /dev/hvc0 (console)" || echo "  /dev/hvc0 (not found)"
-        echo ""
-        echo "Run /opt/virtio_test.sh for full device verification."
+        # Set ttyS1 (COM2) to polling mode (irq=0).
+        # PRTOS doesn't route IRQ3 to Guest, so 8250 driver needs
+        # timer-based polling instead of interrupt-driven I/O.
+        if [ -c /dev/ttyS1 ]; then
+            /opt/set_serial_poll /dev/ttyS1 2>/dev/null
+            /sbin/getty -L ttyS1 115200 vt100 &
+            echo "getty on ttyS1 started (telnet localhost 4321)"
+        fi
         ;;
     stop)
         ;;

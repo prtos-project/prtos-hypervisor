@@ -12,7 +12,7 @@
  *   +0x100000  bzImage (embedded via .incbin)
  *
  * SMP: 2 vCPUs (pCPU 2-3), Linux handles AP startup via PRTOS VMX.
- * Console: VGA (tty0) -> VNC :1 remote display
+ * Console: VGA text mode (tty0) -> QEMU VGA device -> VNC :1
  * Shared memory at GPA 0x16000000+ for Virtio device regions.
  */
 
@@ -37,11 +37,18 @@
 #define BP_RAMDISK_IMAGE    0x218
 #define BP_RAMDISK_SIZE     0x21c
 
+/* screen_info offsets (struct screen_info at boot_params offset 0) */
+#define SI_ORIG_VIDEO_MODE    0x06
+#define SI_ORIG_VIDEO_COLS    0x07
+#define SI_ORIG_VIDEO_LINES   0x0E
+#define SI_ORIG_VIDEO_ISVGA   0x0F
+#define SI_ORIG_VIDEO_POINTS  0x10
+
 	.code32
 	.section .text
 	.globl _boot
 _boot:
-	/* --- UART debug: 'G' for Guest partition --- */
+	/* --- UART debug: 'G' for Guest partition (COM1) --- */
 	movl	$0x3f8, %edx
 1:	movl	$0x3fd, %edx
 	inb	%dx, %al
@@ -50,6 +57,7 @@ _boot:
 	movl	$0x3f8, %edx
 	movb	$'G', %al
 	outb	%al, %dx
+
 
 	/* --- Step 1: Clear boot_params (zero page) --- */
 	movl	$BOOT_PARAMS_ADDR, %edi
@@ -71,6 +79,17 @@ _boot:
 	orb	$0x41, %al
 	movb	%al, (BP_LOADFLAGS)(%ebx)
 	movw	$0xfe00, (BP_HEAP_END_PTR)(%ebx)
+
+	/* --- Step 3b: Set up screen_info for VGA text console (tty0) ---
+	 * This tells Linux vgacon driver that VGA hardware is present.
+	 * QEMU provides standard VGA device; EPT identity-maps VGA memory
+	 * at 0xA0000-0xBFFFF; VGA I/O ports 0x3B0-0x3DF are passed through
+	 * by the hypervisor to QEMU's VGA emulation. */
+	movb	$3,    (SI_ORIG_VIDEO_MODE)(%ebx)   /* 80x25 color text */
+	movb	$80,   (SI_ORIG_VIDEO_COLS)(%ebx)   /* 80 columns */
+	movb	$25,   (SI_ORIG_VIDEO_LINES)(%ebx)  /* 25 lines */
+	movb	$0x22, (SI_ORIG_VIDEO_ISVGA)(%ebx)  /* VIDEO_TYPE_VGAC */
+	movw	$16,   (SI_ORIG_VIDEO_POINTS)(%ebx) /* font height 16px */
 
 	/* --- Step 4: Set up command line --- */
 	leal	_guest_cmdline, %esi
@@ -134,7 +153,9 @@ _boot:
 	movl	$BOOT_PARAMS_ADDR, %esi
 	jmp	*%ecx
 
-/* Command line: Guest partition with virtio frontend role */
+/* Command line: Guest partition with virtio frontend role
+ * console=tty0: output to VGA text console (visible via VNC)
+ * This avoids sharing COM1 with System partition. */
 	.section .rodata
 _guest_cmdline:
 	.asciz "console=tty0 nokaslr noapic nolapic prtos_role=guest prtos_shmem_base=0x16000000 prtos_shmem_size=0x540000"

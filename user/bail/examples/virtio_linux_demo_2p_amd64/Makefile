@@ -1,15 +1,15 @@
 # Virtio Linux Demo (amd64): 2 SMP Linux Partitions with Virtio Device Virtualization
-# UART + VGA Dual Console
+# Dual Console: System on UART, Guest on VGA + telnet
 #
 # Architecture:
 #   L0: Host Linux (Ubuntu 24.04) + QEMU (x86_64, KVM)
 #   L1: PRTOS Type-1 Hypervisor (16MB)
 #   L2-System: Partition 0 (System) - Linux x86_64, Virtio Backend (hw-virt VMX)
 #              2 vCPU on pCPU 0-1, 512MB RAM at GPA 0x6000000
-#              Console: UART (ttyS0,115200) -> SSH terminal
+#              Console: UART (ttyS0,115200) -> COM1 -> terminal (input + output)
 #   L2-Guest:  Partition 1 (Guest)  - Linux x86_64, Virtio Frontend (hw-virt VMX)
 #              2 vCPU on pCPU 2-3, 512MB RAM at GPA 0x26000000
-#              Console: VGA (tty0) -> VNC :1 remote display
+#              Console: VGA (tty0) -> VNC :1 + COM2 (ttyS1) -> telnet :4321
 #
 # Shared Memory (5 separate regions):
 #   Virtio_Net0:  1MB   @ 0x16000000  (bridge)
@@ -17,12 +17,13 @@
 #   Virtio_Net2:  1MB   @ 0x16200000  (p2p)
 #   Virtio_Blk:   2MB   @ 0x16300000  (file-backed block device)
 #   Virtio_Con:   256KB @ 0x16500000  (character console)
+# Dual Console: System on UART, Guest on VGA
 #
 # Usage:
-#   make                   # Build container.bin and resident_sw.iso
-#   make run.amd64         # Basic QEMU launch (UART only)
-#   make run.amd64.demo    # Full demo: UART + VGA (VNC :1) + networking
-#   make clean             # Clean all build artifacts
+#   make                     # Build container.bin and resident_sw.iso
+#   make run.amd64           # Basic QEMU launch (UART + VGA/VNC + telnet)
+#   make run.amd64.demo      # Full demo with dual console
+#   make clean               # Clean all build artifacts
 
 BAIL_PATH=../../
 
@@ -144,18 +145,25 @@ rootfs_overlay.cpio: prtos_manager virtio_backend
 
 # ============================================================================
 # Guest Partition Rootfs CPIO Overlay
-# Contains: /opt/virtio_test.sh, /etc/init.d/S99virtio_guest
+# Contains: /opt/virtio_test.sh, /opt/set_serial_poll, /etc/init.d/S99virtio_guest
 # ============================================================================
 
+set_serial_poll: set_serial_poll.c
+	@gcc -static -O2 -o $@ $<
+	@echo "[Build] $@ built"
+
 guest_rootfs_overlay.cpio: guest_partition/rootfs_overlay/opt/virtio_test.sh \
-                           guest_partition/rootfs_overlay/etc/init.d/S99virtio_guest
+                           guest_partition/rootfs_overlay/etc/init.d/S99virtio_guest \
+                           set_serial_poll
 	@rm -rf _guest_overlay_root
 	@mkdir -p _guest_overlay_root/opt
 	@mkdir -p _guest_overlay_root/etc/init.d
 	@cp guest_partition/rootfs_overlay/opt/virtio_test.sh _guest_overlay_root/opt/
 	@cp guest_partition/rootfs_overlay/etc/init.d/S99virtio_guest _guest_overlay_root/etc/init.d/
+	@cp set_serial_poll _guest_overlay_root/opt/
 	@chmod 755 _guest_overlay_root/opt/virtio_test.sh
 	@chmod 755 _guest_overlay_root/etc/init.d/S99virtio_guest
+	@chmod 755 _guest_overlay_root/opt/set_serial_poll
 	@(cd _guest_overlay_root && find . | cpio -o -H newc --quiet) > $@
 	@rm -rf _guest_overlay_root
 	@echo "[Build] Guest rootfs overlay CPIO built: $@ ($$(stat -c%s $@) bytes)"
@@ -226,23 +234,34 @@ disk.img:
 # QEMU Launch Targets
 # ============================================================================
 
-# Basic launch: KVM, 2048MB RAM, 4 pCPUs, UART serial console only
+# Basic launch: KVM, 512MB RAM, 4 pCPUs, dual console
+# System Partition: COM1 -> stdio (interactive)
+# Guest Partition:  VGA -> VNC :1, COM2 -> telnet :4321 (interactive)
 run.amd64:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
+	@echo "================================================================"
+	@echo "  Window 1 (System): this terminal (COM1/stdio) | root/1234"
+	@echo "  Window 2 (Guest):  telnet localhost 4321      | root/1234"
+	@echo "  VGA display:       vnc://localhost:5901"
+	@echo "================================================================"
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
 		-m 512 -smp 4 \
 		-cdrom resident_sw.iso \
-		-serial stdio -boot d
+		-serial mon:stdio \
+		-serial telnet::4321,server,nowait \
+		-vga std -display none -vnc :1 \
+		-boot d
 
-# Nographic mode for automated testing
+# Nographic mode for automated testing (System UART only)
 run.amd64.nographic:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
 		-nographic -m 512 -smp 4 \
 		-cdrom resident_sw.iso \
-		-serial mon:stdio -boot d
+		-serial mon:stdio \
+		-boot d
 
 # Alias for test framework
 run.amd64.kvm.nographic:
@@ -251,65 +270,55 @@ run.amd64.kvm.nographic:
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
 		-nographic -m 512 -smp 4 \
 		-cdrom resident_sw.iso \
-		-serial mon:stdio -boot d
+		-serial mon:stdio \
+		-boot d
 
-# Full demo: UART (System=serial) + VGA (Guest=VNC :1) + Networking + Block
-# SSH Terminal -> System Linux (UART)
-# VNC :1 (localhost:5901) -> Guest Linux (VGA)
+# Full demo: Dual Console (UART + VGA + telnet)
+# System Partition: COM1 -> stdio (interactive)
+# Guest Partition:  VGA -> VNC :1, COM2 -> telnet :4321 (interactive)
+#
+# NOTE: QEMU PCI devices (virtio-net-pci, virtio-blk) are NOT attached because
+# PRTOS does not route MSI-X/PCI interrupts to L2 partitions. The actual virtio
+# device virtualization uses shared memory between partitions.
 run.amd64.demo: disk.img
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
 	@echo "================================================================"
-	@echo "  PRTOS Virtio Demo - UART + VGA Dual Console"
+	@echo "  PRTOS Virtio Demo - Dual Console (UART + VGA + Telnet)"
 	@echo "================================================================"
-	@echo "  System Partition: UART console (this terminal)"
-	@echo "  Guest Partition:  VGA console (VNC localhost:5901)"
+	@echo "  Window 1 (System): this terminal (COM1) | root/1234"
+	@echo "  Window 2 (Guest):  telnet localhost 4321 | root/1234"
+	@echo "  VGA display:       vnc://localhost:5901"
 	@echo ""
 	@echo "  After System boots, run:"
 	@echo "    prtos_manager &"
 	@echo "    virtio_backend &"
-	@echo ""
-	@echo "  Connect to Guest VGA:"
-	@echo "    vncviewer localhost:5901"
 	@echo "================================================================"
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
 		-m 512 -smp 4 \
 		-cdrom resident_sw.iso \
 		-boot d \
 		-serial mon:stdio \
-		-serial null \
-		-display none \
-		-vga std \
-		-vnc :1 \
-		-netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
-		-device virtio-net-pci,netdev=net0 \
-		-netdev user,id=net1 \
-		-device virtio-net-pci,netdev=net1 \
-		-netdev socket,id=net2,listen=:1234 \
-		-device virtio-net-pci,netdev=net2 \
-		-drive file=disk.img,if=virtio,id=vdisk,format=raw
+		-serial telnet::4321,server,nowait \
+		-vga std -display none -vnc :1
 
 # Demo without TAP (no root required, NAT only)
 run.amd64.demo.nat: disk.img
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
 	@echo "================================================================"
-	@echo "  PRTOS Virtio Demo (NAT mode) - UART + VGA Dual Console"
+	@echo "  PRTOS Virtio Demo (NAT) - Dual Console"
 	@echo "================================================================"
-	@echo "  System: UART (this terminal) | Guest: VGA (VNC localhost:5901)"
+	@echo "  System: this terminal | Guest: telnet localhost 4321"
+	@echo "  VGA: vnc://localhost:5901"
 	@echo "================================================================"
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
 		-m 512 -smp 4 \
 		-cdrom resident_sw.iso \
 		-boot d \
 		-serial mon:stdio \
-		-serial null \
-		-display none \
-		-vga std \
-		-vnc :1 \
-		-netdev user,id=net0 \
-		-device virtio-net-pci,netdev=net0 \
-		-drive file=disk.img,if=virtio,id=vdisk,format=raw
+		-serial telnet::4321,server,nowait \
+		-vga std -display none -vnc :1
 
 clean:
 	@rm -f partition_system partition_guest virtio_backend prtos_manager

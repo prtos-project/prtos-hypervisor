@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Test Virtio Linux Demo (amd64): 2 SMP Linux Partitions with UART + VGA.
+Test Virtio Linux Demo (amd64): 2 SMP Linux Partitions with Dual Console.
 
 Architecture:
-  Partition 0 (System): Linux + Virtio Backend (2 vCPU, pCPU 0-1, console=ttyS0)
-  Partition 1 (Guest):  Linux + Virtio Frontend (2 vCPU, pCPU 2-3, console=tty0)
+  Partition 0 (System): Linux + Virtio Backend (2 vCPU, pCPU 0-1, console=ttyS0 -> COM1)
+  Partition 1 (Guest):  Linux + Virtio Frontend (2 vCPU, pCPU 2-3, console=tty0 -> VGA)
   Shared Memory: 5 regions at 0x16000000+ (net x3, blk, console)
 
-Only the System Partition produces serial output (Guest uses VGA/tty0).
+System outputs to COM1 (stdio). Guest outputs to VGA (not visible in nographic mode).
 
 Verifies:
-1. System Partition boots to login prompt
+1. System Partition boots to login prompt (COM1)
 2. Login works (root/1234)
 3. Kernel is running (uname)
 """
@@ -35,20 +35,21 @@ if ret.returncode != 0:
     print(ret.stderr.decode(errors='replace'))
     sys.exit(1)
 
-# Start QEMU (4 pCPUs, 2048MB, serial for System)
+# Start QEMU (4 pCPUs, 512MB, COM1=stdio for System, Guest uses VGA)
 cmd = ("sg kvm -c 'qemu-system-x86_64 "
        "-enable-kvm -cpu host,-waitpkg "
        "-m 512 -smp 4 "
        "-nographic -no-reboot "
        "-cdrom resident_sw.iso "
        "-serial mon:stdio "
+       "-serial null "
        "-boot d'")
 
 print("=== Starting QEMU ===")
 child = pexpect.spawn("/bin/bash", ["-c", cmd], encoding='utf-8', timeout=TIMEOUT)
 child.logfile = sys.stdout
 
-# Wait for login prompt (only System Partition outputs to serial)
+# Wait for login prompt (only System outputs to serial; Guest uses VGA)
 idx = child.expect(["buildroot login:", pexpect.TIMEOUT, pexpect.EOF], timeout=180)
 if idx != 0:
     print("\n\n=== FAIL: No login prompt detected ===")

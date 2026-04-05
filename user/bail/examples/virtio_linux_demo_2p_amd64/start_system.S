@@ -141,7 +141,8 @@ _boot:
 	movl	$BOOT_PARAMS_ADDR, %esi
 	jmp	*%ecx
 
-/* Command line: System partition with virtio backend role */
+/* Command line: System partition with virtio backend role
+ * Guest outputs to VGA (separate console), so no need for quiet. */
 	.section .rodata
 _sys_cmdline:
 	.asciz "console=ttyS0,115200 nokaslr noapic nolapic prtos_role=system prtos_shmem_base=0x16000000 prtos_shmem_size=0x540000"
