@@ -1539,20 +1539,7 @@ void __attribute__((noreturn)) vmx_run_guest(void *kthread_ptr) {
                     vpit_tick(vmx, now);
                     vuart_poll_host(vmx);
 
-                    /* Heartbeat: show timer state every 60s */
-                    {
-                        extern prtos_u32_t g_pic_inj_cnt, g_pic_defer_cnt, g_pic_busy_cnt;
-                        extern prtos_u32_t g_lapic_inj_cnt, g_vuart_tx_cnt, g_vuart_irq4_cnt, g_vmentry_cnt;
-                        static prtos_u64_t next_hb = 60000000;
-                        if (now >= next_hb) {
-                            kprintf("[HB] PIC=%u LAPIC=%u TX=%u VM=%u IER=0x%x\n",
-                                    g_pic_inj_cnt,
-                                    g_lapic_inj_cnt,
-                                    g_vuart_tx_cnt, g_vmentry_cnt,
-                                    vmx->shared->vuart.ier);
-                            next_hb = now + 10000000;
-                        }
-                    }
+
                 }
                 vmx_vmwrite(VMCS_VMX_PREEMPT_TIMER_VALUE, vmx->preempt_timer_val);
                 break;

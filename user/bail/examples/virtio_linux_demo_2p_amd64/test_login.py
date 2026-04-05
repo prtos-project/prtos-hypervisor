@@ -35,10 +35,10 @@ if ret.returncode != 0:
     print(ret.stderr.decode(errors='replace'))
     sys.exit(1)
 
-# Start QEMU (4 pCPUs, 512MB, COM1=stdio for System, Guest uses VGA)
+# Start QEMU (4 pCPUs, 1GB, COM1=stdio for System, Guest uses VGA)
 cmd = ("sg kvm -c 'qemu-system-x86_64 "
        "-enable-kvm -cpu host,-waitpkg "
-       "-m 512 -smp 4 "
+       "-m 1024 -smp 4 "
        "-nographic -no-reboot "
        "-cdrom resident_sw.iso "
        "-serial mon:stdio "

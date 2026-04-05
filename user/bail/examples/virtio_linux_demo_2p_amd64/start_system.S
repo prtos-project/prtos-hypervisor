@@ -145,7 +145,7 @@ _boot:
  * Guest outputs to VGA (separate console), so no need for quiet. */
 	.section .rodata
 _sys_cmdline:
-	.asciz "console=ttyS0,115200 nokaslr noapic nolapic prtos_role=system prtos_shmem_base=0x16000000 prtos_shmem_size=0x540000"
+	.asciz "console=ttyS0,115200 quiet loglevel=0 nokaslr noapic nolapic prtos_role=system prtos_shmem_base=0x16000000 prtos_shmem_size=0x540000"
 
 /* Embedded bzImage for System partition */
 	.section .bzimage_sys, "ax", @progbits

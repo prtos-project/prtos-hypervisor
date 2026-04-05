@@ -234,8 +234,8 @@ disk.img:
 # QEMU Launch Targets
 # ============================================================================
 
-# Basic launch: KVM, 512MB RAM, 4 pCPUs, dual console
-# System Partition: COM1 -> stdio (interactive)
+# Basic launch: KVM, 1GB RAM, 4 pCPUs, dual console + PCI devices
+# System Partition: COM1 -> stdio (interactive), owns all PCI/IRQ
 # Guest Partition:  VGA -> VNC :1, COM2 -> telnet :4321 (interactive)
 run.amd64:
 	@$(MAKE) clean
@@ -246,7 +246,7 @@ run.amd64:
 	@echo "  VGA display:       vnc://localhost:5901"
 	@echo "================================================================"
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
-		-m 512 -smp 4 \
+		-m 1024 -smp 4 \
 		-cdrom resident_sw.iso \
 		-serial mon:stdio \
 		-serial telnet::4321,server,nowait \
@@ -258,7 +258,7 @@ run.amd64.nographic:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
-		-nographic -m 512 -smp 4 \
+		-nographic -m 1024 -smp 4 \
 		-cdrom resident_sw.iso \
 		-serial mon:stdio \
 		-boot d
@@ -268,18 +268,18 @@ run.amd64.kvm.nographic:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
-		-nographic -m 512 -smp 4 \
+		-nographic -m 1024 -smp 4 \
 		-cdrom resident_sw.iso \
 		-serial mon:stdio \
 		-boot d
 
-# Full demo: Dual Console (UART + VGA + telnet)
-# System Partition: COM1 -> stdio (interactive)
+# Full demo: Dual Console (UART + VGA + telnet) + PCI devices
+# System Partition: COM1 -> stdio (interactive), owns all PCI devices
 # Guest Partition:  VGA -> VNC :1, COM2 -> telnet :4321 (interactive)
 #
-# NOTE: QEMU PCI devices (virtio-net-pci, virtio-blk) are NOT attached because
-# PRTOS does not route MSI-X/PCI interrupts to L2 partitions. The actual virtio
-# device virtualization uses shared memory between partitions.
+# PCI devices use legacy INTx (MSI/MSI-X disabled) because PRTOS does not
+# route MSI-X interrupts to L2 partitions. System Linux probes PCI and uses
+# these devices as the backend for virtio-over-shared-memory to the Guest.
 run.amd64.demo: disk.img
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
@@ -295,14 +295,21 @@ run.amd64.demo: disk.img
 	@echo "    virtio_backend &"
 	@echo "================================================================"
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
-		-m 512 -smp 4 \
+		-m 1024 -smp 4 \
 		-cdrom resident_sw.iso \
 		-boot d \
 		-serial mon:stdio \
 		-serial telnet::4321,server,nowait \
-		-vga std -display none -vnc :1
+		-vga std -display none -vnc :1 \
+		-netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
+		-device virtio-net-pci,netdev=net0,disable-modern=on \
+		-netdev user,id=net1 \
+		-device virtio-net-pci,netdev=net1,disable-modern=on \
+		-netdev socket,id=net2,listen=:1234 \
+		-device virtio-net-pci,netdev=net2,disable-modern=on \
+		-drive file=disk.img,if=virtio,format=raw
 
-# Demo without TAP (no root required, NAT only)
+# Demo without TAP (no root required, NAT only + p2p + block)
 run.amd64.demo.nat: disk.img
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
@@ -313,12 +320,15 @@ run.amd64.demo.nat: disk.img
 	@echo "  VGA: vnc://localhost:5901"
 	@echo "================================================================"
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
-		-m 512 -smp 4 \
+		-m 1024 -smp 4 \
 		-cdrom resident_sw.iso \
 		-boot d \
 		-serial mon:stdio \
 		-serial telnet::4321,server,nowait \
-		-vga std -display none -vnc :1
+		-vga std -display none -vnc :1 \
+		-netdev user,id=net1 \
+		-device virtio-net-pci,netdev=net1,disable-modern=on \
+		-drive file=disk.img,if=virtio,format=raw
 
 clean:
 	@rm -f partition_system partition_guest virtio_backend prtos_manager
