@@ -10,7 +10,7 @@
  *   0x6001000   Boot stub code (.text)
  *   0x6002000   Read-only data (.rodata)
  *   0x6100000   bzImage (embedded, 1MB aligned, ~17MB)
- *   0xC000000   initrd CPIO overlay (placed high to avoid kernel decompression)
+ *   0xA000000   initrd CPIO overlay (placed high to avoid kernel decompression)
  *               Contains: /usr/bin/prtos_manager, /usr/bin/virtio_backend
  */
 
@@ -40,12 +40,11 @@ SECTIONS {
         *(.bzimage_sys)
     }
 
-    /* Place initrd at 192MB mark (0xC000000) - well above kernel decompression
-     * area. The kernel decompressor targets low physical addresses (~0x1000000
-     * relative to partition base). Placing initrd 96MB into the 128MB partition
-     * ensures it survives decompression intact.
+    /* Place initrd at 0xA000000 - well above kernel decompression area.
+     * With 128MB partition (0x6000000 - 0xDFFFFFF), placing initrd at
+     * 0xA000000 gives ~64MB gap from partition base for kernel.
      */
-    . = 0xC000000;
+    . = 0xA000000;
     .initrd_sys : {
         *(.initrd_sys)
     }

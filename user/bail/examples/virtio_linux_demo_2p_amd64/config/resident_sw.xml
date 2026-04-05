@@ -1,44 +1,49 @@
 <!--
-  PRTOS Configuration: Virtio Linux Demo (amd64) - 2 Partitions
+  PRTOS Configuration: Virtio Linux Demo (amd64) - 2 SMP Linux Partitions
+  UART + VGA Dual Console
 
   Architecture (3-layer):
-    L0: Host Linux + QEMU (x86_64, KVM)
+    L0: Host Linux (Ubuntu 24.04) + QEMU (x86_64, KVM)
     L1: PRTOS Type-1 Hypervisor
     L2: System Partition (Virtio Backend) + Guest Partition (Virtio Frontend)
 
-  Memory layout:
-    PRTOS Hypervisor:      12MB (0x1000000 - 0x1bfffff)
-    Partition 0 (System):  GPA 0x6000000,  128MB, 1 vCPU on pCPU 0 (VMX hw-virt)
-    Partition 1 (Guest):   GPA 0xe000000,  128MB, 1 vCPU on pCPU 1 (VMX hw-virt)
-    Shared Memory:         GPA 0x16000000, 8MB   (Virtio rings + data buffers)
+  Memory layout (all within first 1GB for PRTOS identity map):
+    PRTOS Hypervisor:      8MB  (0x1000000 - 0x17fffff)
+    Partition 0 (System):  GPA 0x6000000,  128MB, 2 vCPU on pCPU 0-1 (VMX hw-virt)
+    Partition 1 (Guest):   GPA 0xE000000,  128MB, 2 vCPU on pCPU 2-3 (VMX hw-virt)
+    Shared Memory:
+      Virtio_Net0:  1MB   @ 0x16000000  (virtio-net bridge)
+      Virtio_Net1:  1MB   @ 0x16100000  (virtio-net NAT)
+      Virtio_Net2:  1MB   @ 0x16200000  (virtio-net p2p)
+      Virtio_Blk:   2MB   @ 0x16300000  (virtio-blk file-backed)
+      Virtio_Con:   256KB @ 0x16500000  (virtio-console)
 
-  Device Ownership:
-    System Partition (id=0):
-      - Console:      PRTOS hypervisor UART (via prtos_write_console hypercall)
-      - PCI config:   IO ports 0xCF8-0xCFF (PCI_CONFIG_ADDRESS + PCI_CONFIG_DATA)
-      - Shared memory: 8MB at 0x16000000 (flags="shared", Virtio rings + mailbox)
-      - Runs: virtio_backend (Virtio device emulation daemon)
-              prtos_manager  (Partition management CLI, lib_prtos_manager)
-    Guest Partition (id=1):
-      - No physical IO ports assigned (para-virtualized I/O only)
-      - Shared memory: 8MB at 0x16000000 (flags="shared flag3", virtual I/O space)
-      - Discovers Virtio devices via VIRTIO_PRTOS_MAGIC in control block
-      - Signals backend via IPVI id=0 doorbell
+  CPU Assignment (SMP):
+    pCPU 0 -> System Partition vCPU 0
+    pCPU 1 -> System Partition vCPU 1
+    pCPU 2 -> Guest Partition  vCPU 0
+    pCPU 3 -> Guest Partition  vCPU 1
 
-  Virtio devices (Backend in System Partition, Frontend in Guest):
-    - virtio-console: character ring buffer via shared memory
-    - virtio-net:     packet exchange via shared memory
-    - virtio-blk:     block I/O via shared memory
+  Console Assignment:
+    System Partition -> UART (serial stdio, SSH terminal)
+    Guest Partition  -> VGA  (VNC :1, remote VGA display)
 
-  Inter-partition signaling (Doorbells):
-    IPVI id=0: Guest (src=1) -> System (dst=0)  [Guest signals new buffers]
-    IPVI id=1: System (src=0) -> Guest (dst=1)  [Backend signals completion]
+  Virtio Devices (Backend in System, Frontend in Guest):
+    virtio-net0:     bridge mode     (IPVI 0, vector 32)
+    virtio-net1:     NAT mode        (IPVI 1, vector 33)
+    virtio-net2:     p2p mode        (IPVI 2, vector 34)
+    virtio-blk:      file-backed     (IPVI 3, vector 35)
+    virtio-console:  character ring  (IPVI 4, vector 36)
 
-  Communication Channels:
-    SamplingChannel "GuestToSystem": Guest -> System, 8 bytes (doorbell counter)
-    SamplingChannel "SystemToGuest": System -> Guest, 8 bytes (doorbell counter)
+  Doorbell IRQ (Guest -> System):
+    IPVI 0: net0  (Guest src=1 -> System dst=0)
+    IPVI 1: net1  (Guest src=1 -> System dst=0)
+    IPVI 2: net2  (Guest src=1 -> System dst=0)
+    IPVI 3: blk   (Guest src=1 -> System dst=0)
+    IPVI 4: con   (Guest src=1 -> System dst=0)
+    IPVI 5: System -> Guest completion doorbell
 
-  Scheduler: 2 pCPUs, each runs one partition vCPU, 100ms major frame, 50ms slots.
+  Scheduler: 4 pCPUs, dedicated mapping, 10ms major frame.
 -->
 <SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="virtio_linux_demo_2p_amd64">
     <HwDescription>
@@ -46,41 +51,57 @@
             <Region type="ram" start="0x0" size="512MB" />
         </MemoryLayout>
         <ProcessorTable>
-            <!-- pCPU 0: System Partition vCPU 0 (100% - console interactive) -->
             <Processor id="0">
                 <CyclicPlanTable>
-                    <Plan id="0" majorFrame="200ms">
-                        <Slot id="0" start="0ms" duration="150ms" partitionId="0" vCpuId="0"/>
+                    <Plan id="0" majorFrame="10ms">
+                        <Slot id="0" start="0ms" duration="10ms" partitionId="0" vCpuId="0"/>
                     </Plan>
                 </CyclicPlanTable>
             </Processor>
-            <!-- pCPU 1: Guest Partition vCPU 0 -->
             <Processor id="1">
                 <CyclicPlanTable>
-                    <Plan id="0" majorFrame="200ms">
-                        <Slot id="0" start="0ms" duration="50ms" partitionId="1" vCpuId="0"/>
+                    <Plan id="0" majorFrame="10ms">
+                        <Slot id="0" start="0ms" duration="10ms" partitionId="0" vCpuId="1"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="2">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="10ms">
+                        <Slot id="0" start="0ms" duration="10ms" partitionId="1" vCpuId="0"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="3">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="10ms">
+                        <Slot id="0" start="0ms" duration="10ms" partitionId="1" vCpuId="1"/>
                     </Plan>
                 </CyclicPlanTable>
             </Processor>
         </ProcessorTable>
         <Devices>
             <Uart id="0" baudRate="115200" name="Uart" />
+            <Vga name="Vga" />
         </Devices>
     </HwDescription>
 
     <PRTOSHypervisor console="Uart">
-        <PhysicalMemoryArea size="12MB" />
+        <PhysicalMemoryArea size="8MB" />
     </PRTOSHypervisor>
 
     <PartitionTable>
-        <Partition id="0" name="System" flags="system" console="Uart">
+        <Partition id="0" name="System" flags="system" console="Uart" noVCpus="2">
             <PhysicalMemoryAreas>
                 <Area start="0x6000000" size="128MB" />
-                <Area start="0x16000000" size="8MB" flags="shared"/>
+                <Area start="0x16000000" size="1MB"   flags="shared"/>
+                <Area start="0x16100000" size="1MB"   flags="shared"/>
+                <Area start="0x16200000" size="1MB"   flags="shared"/>
+                <Area start="0x16300000" size="2MB"   flags="shared"/>
+                <Area start="0x16500000" size="256KB"  flags="shared"/>
             </PhysicalMemoryAreas>
             <HwResources>
                 <IoPorts>
-                    <!-- PCI configuration space for device enumeration/passthrough -->
                     <Range base="0xCF8" noPorts="4"/>
                     <Range base="0xCFC" noPorts="4"/>
                 </IoPorts>
@@ -91,11 +112,14 @@
             </PortTable>
         </Partition>
 
-        <Partition id="1" name="Guest" flags="system">
+        <Partition id="1" name="Guest" console="Vga" noVCpus="2">
             <PhysicalMemoryAreas>
-                <Area start="0xe000000" size="128MB" />
-                <!-- flag3: marks this area as virtual I/O space (Virtqueue rings) -->
-                <Area start="0x16000000" size="8MB" flags="shared flag3"/>
+                <Area start="0xE000000" size="128MB" />
+                <Area start="0x16000000" size="1MB"   flags="shared flag3"/>
+                <Area start="0x16100000" size="1MB"   flags="shared flag3"/>
+                <Area start="0x16200000" size="1MB"   flags="shared flag3"/>
+                <Area start="0x16300000" size="2MB"   flags="shared flag3"/>
+                <Area start="0x16500000" size="256KB"  flags="shared flag3"/>
             </PhysicalMemoryAreas>
             <PortTable>
                 <Port type="sampling" direction="source" name="GuestToSystem"/>
@@ -106,7 +130,11 @@
 
     <Channels>
         <Ipvi id="0" sourceId="1" destinationId="0" />
-        <Ipvi id="1" sourceId="0" destinationId="1" />
+        <Ipvi id="1" sourceId="1" destinationId="0" />
+        <Ipvi id="2" sourceId="1" destinationId="0" />
+        <Ipvi id="3" sourceId="1" destinationId="0" />
+        <Ipvi id="4" sourceId="1" destinationId="0" />
+        <Ipvi id="5" sourceId="0" destinationId="1" />
 
         <SamplingChannel maxMessageLength="8B">
             <Source partitionId="1" portName="GuestToSystem"/>

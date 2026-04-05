@@ -9,7 +9,7 @@
  *
  * For buffer-based hypercalls (read_object, write_object, ctrl_object),
  * the buffer must be in a memory region whose GPA is identity-mapped
- * (GPA == HPA). The shared memory region at VIRTIO_SHMEM_BASE satisfies
+ * (GPA == HPA). The Virtio_Con shared memory region at 0x16500000 provides
  * this requirement. We reserve the last 4KB of shmem as a hypercall mailbox.
  */
 
@@ -175,15 +175,15 @@ typedef union {
 /* ============================================================================
  * Shared Memory Hypercall Mailbox
  *
- * The last 4KB of the shared memory region is reserved as a mailbox
- * for buffer-based hypercalls. The hypervisor accesses this via
+ * The last 4KB of the Virtio_Con shared memory region is reserved as a
+ * mailbox for buffer-based hypercalls. The hypervisor accesses this via
  * identity-mapped EPT (GPA == HPA).
  * ============================================================================ */
 
-#define VIRTIO_SHMEM_BASE       0x16000000UL
-#define VIRTIO_SHMEM_SIZE       0x00800000UL    /* 8MB */
-#define HC_MAILBOX_OFFSET       (VIRTIO_SHMEM_SIZE - 0x1000)  /* Last 4KB */
-#define HC_MAILBOX_GPA          (VIRTIO_SHMEM_BASE + HC_MAILBOX_OFFSET)
+#define HC_MAILBOX_SHM_BASE     0x16500000UL
+#define HC_MAILBOX_SHM_SIZE     0x00040000UL    /* 256KB (Virtio_Con region) */
+#define HC_MAILBOX_OFFSET       (HC_MAILBOX_SHM_SIZE - 0x1000)  /* Last 4KB */
+#define HC_MAILBOX_GPA          (HC_MAILBOX_SHM_BASE + HC_MAILBOX_OFFSET)
 
 /* ============================================================================
  * Hypervisor Call Interface (vmcall from userspace)

@@ -30,8 +30,8 @@ int prtos_hv_init(void)
         return -1;
     }
 
-    shmem_base = mmap(NULL, VIRTIO_SHMEM_SIZE, PROT_READ | PROT_WRITE,
-                      MAP_SHARED, fd, VIRTIO_SHMEM_BASE);
+    shmem_base = mmap(NULL, HC_MAILBOX_SHM_SIZE, PROT_READ | PROT_WRITE,
+                      MAP_SHARED, fd, HC_MAILBOX_SHM_BASE);
     close(fd);
 
     if (shmem_base == MAP_FAILED) {

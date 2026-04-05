@@ -14,12 +14,13 @@
  *     Contains: /usr/bin/prtos_manager, /usr/bin/virtio_backend
  *     Linux unpacks this CPIO on top of the built-in initramfs.
  *
- * Shared memory at GPA 0x16000000 (8MB) for Virtio rings.
- * The System Partition kernel will access this via /dev/mem or mmap.
+ * SMP: 2 vCPUs (pCPU 0-1), Linux handles AP startup via PRTOS VMX.
+ * Console: UART (ttyS0,115200) -> SSH terminal
+ * Shared memory at GPA 0x16000000+ for Virtio device regions.
  */
 
 #define PARTITION_BASE      0x6000000
-#define PARTITION_SIZE      0x08000000  /* 128MB */
+#define PARTITION_SIZE      0x8000000   /* 128MB */
 #define BOOT_PARAMS_ADDR    0x6010000   /* Absolute GPA for boot_params */
 #define CMDLINE_ADDR        0x6011000   /* Absolute GPA for command line */
 
@@ -84,12 +85,11 @@ _boot:
 	movl	$CMDLINE_ADDR, (BP_CMDLINE_PTR)(%ebx)
 
 	/* --- Step 5: Set up e820 memory map --- */
-	/* 3 entries (matching working demos - shared memory accessed via /dev/mem):
+	/* 3 entries (shared memory accessed via /dev/mem, not in e820):
 	 *   0) 0x0000_0000 .. 0x0009_FFFF  (640KB)   usable (conventional)
 	 *   1) 0x000A_0000 .. 0x000F_FFFF  (384KB)   reserved (VGA/ROM)
 	 *   2) 0x0600_0000 .. 0x0DFF_FFFF  (128MB)   usable (partition RAM)
-	 * Note: Shared memory at 0x16000000 (8MB) is NOT in e820.
-	 *       Non-contiguous e820 regions trigger kernel sparse memory bugs.
+	 * Note: Shared memory at 0x16000000+ is NOT in e820.
 	 *       Access shared memory via /dev/mem mmap instead.
 	 */
 	movl	$3, (BP_E820_ENTRIES)(%ebx)
@@ -144,7 +144,7 @@ _boot:
 /* Command line: System partition with virtio backend role */
 	.section .rodata
 _sys_cmdline:
-	.asciz "console=ttyS0,115200 earlyprintk=serial,ttyS0,115200,keep loglevel=7 nokaslr nosmp noapic nolapic prtos_role=system prtos_shmem_base=0x16000000 prtos_shmem_size=0x800000"
+	.asciz "console=ttyS0,115200 nokaslr noapic nolapic prtos_role=system prtos_shmem_base=0x16000000 prtos_shmem_size=0x540000"
 
 /* Embedded bzImage for System partition */
 	.section .bzimage_sys, "ax", @progbits

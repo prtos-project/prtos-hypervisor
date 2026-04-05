@@ -1,25 +1,28 @@
-# Virtio Linux Demo (amd64): 2 Linux Partitions with Virtio Device Virtualization
+# Virtio Linux Demo (amd64): 2 SMP Linux Partitions with Virtio Device Virtualization
+# UART + VGA Dual Console
 #
 # Architecture:
-#   L0: Host Linux + QEMU (x86_64, KVM)
-#   L1: PRTOS Type-1 Hypervisor
-#   L2-B: Partition 0 (System) - Linux x86_64, Virtio Backend (hw-virt VMX)
-#         1 vCPU on pCPU 0, 128MB RAM at GPA 0x6000000
-#   L2-A: Partition 1 (Guest)  - Linux x86_64, Virtio Frontend (hw-virt VMX)
-#         1 vCPU on pCPU 1, 128MB RAM at GPA 0xe000000
-#   Shared Memory: 8MB at GPA 0x16000000 (Virtio rings + buffers)
+#   L0: Host Linux (Ubuntu 24.04) + QEMU (x86_64, KVM)
+#   L1: PRTOS Type-1 Hypervisor (16MB)
+#   L2-System: Partition 0 (System) - Linux x86_64, Virtio Backend (hw-virt VMX)
+#              2 vCPU on pCPU 0-1, 512MB RAM at GPA 0x6000000
+#              Console: UART (ttyS0,115200) -> SSH terminal
+#   L2-Guest:  Partition 1 (Guest)  - Linux x86_64, Virtio Frontend (hw-virt VMX)
+#              2 vCPU on pCPU 2-3, 512MB RAM at GPA 0x26000000
+#              Console: VGA (tty0) -> VNC :1 remote display
 #
-# Directory structure:
-#   config/resident_sw.xml       - PRTOS XML configuration
-#   system_partition/src/         - Virtio Backend daemon source (runs inside System Linux)
-#   system_partition/include/     - Shared Virtio data structure headers
-#   guest_partition/rootfs_overlay/ - Scripts/binaries for Guest Linux rootfs
-#
+# Shared Memory (5 separate regions):
+#   Virtio_Net0:  1MB   @ 0x16000000  (bridge)
+#   Virtio_Net1:  1MB   @ 0x16100000  (NAT)
+#   Virtio_Net2:  1MB   @ 0x16200000  (p2p)
+#   Virtio_Blk:   2MB   @ 0x16300000  (file-backed block device)
+#   Virtio_Con:   256KB @ 0x16500000  (character console)
 #
 # Usage:
-#   make          # Build container.bin and resident_sw.iso
-#   make run      # Build and run on QEMU (requires KVM)
-#   make clean    # Clean all build artifacts
+#   make                   # Build container.bin and resident_sw.iso
+#   make run.amd64         # Basic QEMU launch (UART only)
+#   make run.amd64.demo    # Full demo: UART + VGA (VNC :1) + networking
+#   make clean             # Clean all build artifacts
 
 BAIL_PATH=../../
 
@@ -27,14 +30,11 @@ all: container.bin resident_sw.iso
 include $(BAIL_PATH)/common/rules.mk
 
 # XMLCF: PRTOS build system expects prtos_cf.$(ARCH).xml
-# We symlink to config/resident_sw.xml
 XMLCF=prtos_cf.$(ARCH).xml
 
-# Recreate symlink if distclean removed it (distclean deletes all symlinks)
 $(XMLCF): config/resident_sw.xml
 	@ln -sf config/resident_sw.xml $@
 
-# PARTITIONS: both partition PEF files
 PARTITIONS=partition_system.pef partition_guest.pef
 
 # ============================================================================
@@ -52,12 +52,12 @@ LNX_LD = ld
 LNX_CFLAGS = -m64 -ffreestanding -Wall -g -fno-pie -fno-stack-protector -mcmodel=kernel
 LNX_ASFLAGS = -m64 -ffreestanding -g -fno-pie -fno-stack-protector
 
-# Backend daemon cross-compilation flags (runs inside System Partition Linux)
+# Backend daemon (runs inside System Partition Linux)
 BE_CC = gcc
 BE_CFLAGS = -O2 -Wall -Wextra -I./system_partition/include -I./lib_prtos_manager/include -I./lib_prtos_manager/common
 BE_LDFLAGS = -static
 
-# PRTOS Manager cross-compilation flags (runs inside System Partition Linux)
+# PRTOS Manager (runs inside System Partition Linux)
 MGR_CC = gcc
 MGR_CFLAGS = -O2 -Wall -Wextra -I./lib_prtos_manager/include -I./lib_prtos_manager/common
 MGR_LDFLAGS = -static
@@ -71,19 +71,20 @@ OBJDIR = obj/
 $(OBJDIR):
 	mkdir -p $@
 
-# Copy bzImage to local directory for .incbin (same kernel for both partitions)
 bzImage: $(LINUX_BZIMAGE)
 	cp $< $@
 
 # ============================================================================
 # System Partition Userspace: Virtio Backend Daemon
-# Cross-compiled as a static binary to embed in rootfs or run after boot.
+# Manages 3 x net + 1 x blk + 1 x console via shared memory
 # ============================================================================
 
 BE_SRCS = system_partition/src/main.c \
           system_partition/src/virtio_console.c \
           system_partition/src/virtio_net.c \
           system_partition/src/virtio_blk.c \
+          system_partition/src/doorbell.c \
+          system_partition/src/manager_if.c \
           lib_prtos_manager/common/prtos_hv.c
 
 BE_OBJS = $(addprefix $(OBJDIR)/, $(notdir $(BE_SRCS:.c=.o)))
@@ -100,9 +101,6 @@ virtio_backend: $(BE_OBJS)
 
 # ============================================================================
 # PRTOS Partition Manager
-# Cross-compiled as a static binary for System Partition Linux.
-# Provides CLI for partition management (list, halt, reset, resume, etc.)
-# Uses vmcall for hypervisor interaction + shared memory mailbox.
 # ============================================================================
 
 MGR_SRCS = lib_prtos_manager/linux/prtos_manager_main.c \
@@ -129,10 +127,8 @@ prtos_manager: $(MGR_OBJS)
 	@echo "[Build] PRTOS Manager built: $@"
 
 # ============================================================================
-# Rootfs CPIO Overlay
-# Creates a newc-format CPIO archive containing prtos_manager and
-# virtio_backend under /usr/bin/. Linux unpacks this on top of the
-# built-in initramfs when passed as an initrd via boot_params.
+# System Partition Rootfs CPIO Overlay
+# Contains: /usr/bin/prtos_manager, /usr/bin/virtio_backend
 # ============================================================================
 
 rootfs_overlay.cpio: prtos_manager virtio_backend
@@ -144,11 +140,29 @@ rootfs_overlay.cpio: prtos_manager virtio_backend
 	@chmod 755 _overlay_root/usr/bin/virtio_backend
 	@(cd _overlay_root && find . | cpio -o -H newc --quiet) > $@
 	@rm -rf _overlay_root
-	@echo "[Build] Rootfs overlay CPIO built: $@ ($$(stat -c%s $@) bytes)"
+	@echo "[Build] System rootfs overlay CPIO built: $@ ($$(stat -c%s $@) bytes)"
+
+# ============================================================================
+# Guest Partition Rootfs CPIO Overlay
+# Contains: /opt/virtio_test.sh, /etc/init.d/S99virtio_guest
+# ============================================================================
+
+guest_rootfs_overlay.cpio: guest_partition/rootfs_overlay/opt/virtio_test.sh \
+                           guest_partition/rootfs_overlay/etc/init.d/S99virtio_guest
+	@rm -rf _guest_overlay_root
+	@mkdir -p _guest_overlay_root/opt
+	@mkdir -p _guest_overlay_root/etc/init.d
+	@cp guest_partition/rootfs_overlay/opt/virtio_test.sh _guest_overlay_root/opt/
+	@cp guest_partition/rootfs_overlay/etc/init.d/S99virtio_guest _guest_overlay_root/etc/init.d/
+	@chmod 755 _guest_overlay_root/opt/virtio_test.sh
+	@chmod 755 _guest_overlay_root/etc/init.d/S99virtio_guest
+	@(cd _guest_overlay_root && find . | cpio -o -H newc --quiet) > $@
+	@rm -rf _guest_overlay_root
+	@echo "[Build] Guest rootfs overlay CPIO built: $@ ($$(stat -c%s $@) bytes)"
 
 # ============================================================================
 # System Partition (Partition 0) - PRTOS PEF Image
-# Contains boot stub + embedded bzImage
+# boot stub + bzImage + System rootfs CPIO overlay
 # ============================================================================
 
 $(OBJDIR)/start_system.o: start_system.S bzImage rootfs_overlay.cpio | $(OBJDIR)
@@ -169,10 +183,10 @@ partition_system.pef: partition_system
 
 # ============================================================================
 # Guest Partition (Partition 1) - PRTOS PEF Image
-# Contains boot stub + embedded bzImage
+# boot stub + bzImage + Guest rootfs CPIO overlay
 # ============================================================================
 
-$(OBJDIR)/start_guest.o: start_guest.S bzImage | $(OBJDIR)
+$(OBJDIR)/start_guest.o: start_guest.S bzImage guest_rootfs_overlay.cpio | $(OBJDIR)
 	$(LNX_CC) -c $(LNX_ASFLAGS) $< -o $@
 
 $(OBJDIR)/hdr_guest.o: hdr_guest.c | $(OBJDIR)
@@ -188,7 +202,6 @@ partition_guest.pef: partition_guest
 
 # ============================================================================
 # PRTOS Packaging (2 partitions)
-# Assembles: PRTOS core + XML config + partition PEF files -> bootable ISO
 # ============================================================================
 
 PACK_ARGS=-h $(PRTOS_CORE):prtos_cf.pef.prtos_conf \
@@ -202,58 +215,112 @@ container.bin: $(PARTITIONS) prtos_cf.pef.prtos_conf
 include ../run.mk
 
 # ============================================================================
-# QEMU Launch (Override): KVM required, 512MB RAM, 2 pCPUs
-# Additional QEMU devices for System Partition passthrough:
-#   -netdev tap for physical network
-#   -drive for physical block device
+# Block Device Image (for Virtio-Blk)
 # ============================================================================
 
+disk.img:
+	qemu-img create -f raw $@ 64M
+	@echo "[Build] Block device image created: $@ (64MB)"
+
+# ============================================================================
+# QEMU Launch Targets
+# ============================================================================
+
+# Basic launch: KVM, 2048MB RAM, 4 pCPUs, UART serial console only
 run.amd64:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
-		-m 512 -smp 2 \
+		-m 512 -smp 4 \
 		-cdrom resident_sw.iso \
 		-serial stdio -boot d
 
+# Nographic mode for automated testing
 run.amd64.nographic:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
-		-nographic -m 512 -smp 2 \
+		-nographic -m 512 -smp 4 \
 		-cdrom resident_sw.iso \
 		-serial mon:stdio -boot d
 
-# Alias for test framework and manual use
+# Alias for test framework
 run.amd64.kvm.nographic:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
-		-nographic -m 512 -smp 2 \
+		-nographic -m 512 -smp 4 \
 		-cdrom resident_sw.iso \
 		-serial mon:stdio -boot d
 
-# Full demo with QEMU physical devices for System Partition passthrough
-run.amd64.full:
+# Full demo: UART (System=serial) + VGA (Guest=VNC :1) + Networking + Block
+# SSH Terminal -> System Linux (UART)
+# VNC :1 (localhost:5901) -> Guest Linux (VGA)
+run.amd64.demo: disk.img
 	@$(MAKE) clean
-	@$(MAKE) resident_sw.iso virtio_backend prtos_manager
-	@echo "=== Launching PRTOS Virtio Demo (full) ==="
-	@echo "System Partition: Virtio Backend + physical devices"
-	@echo "Guest Partition:  Virtio Frontend (standard Linux)"
+	@$(MAKE) resident_sw.iso
+	@echo "================================================================"
+	@echo "  PRTOS Virtio Demo - UART + VGA Dual Console"
+	@echo "================================================================"
+	@echo "  System Partition: UART console (this terminal)"
+	@echo "  Guest Partition:  VGA console (VNC localhost:5901)"
+	@echo ""
+	@echo "  After System boots, run:"
+	@echo "    prtos_manager &"
+	@echo "    virtio_backend &"
+	@echo ""
+	@echo "  Connect to Guest VGA:"
+	@echo "    vncviewer localhost:5901"
+	@echo "================================================================"
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
-		-nographic -m 512 -smp 2 \
+		-m 512 -smp 4 \
 		-cdrom resident_sw.iso \
-		-serial mon:stdio -boot d \
+		-boot d \
+		-serial mon:stdio \
+		-serial null \
+		-display none \
+		-vga std \
+		-vnc :1 \
+		-netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
+		-device virtio-net-pci,netdev=net0 \
+		-netdev user,id=net1 \
+		-device virtio-net-pci,netdev=net1 \
+		-netdev socket,id=net2,listen=:1234 \
+		-device virtio-net-pci,netdev=net2 \
+		-drive file=disk.img,if=virtio,id=vdisk,format=raw
+
+# Demo without TAP (no root required, NAT only)
+run.amd64.demo.nat: disk.img
+	@$(MAKE) clean
+	@$(MAKE) resident_sw.iso
+	@echo "================================================================"
+	@echo "  PRTOS Virtio Demo (NAT mode) - UART + VGA Dual Console"
+	@echo "================================================================"
+	@echo "  System: UART (this terminal) | Guest: VGA (VNC localhost:5901)"
+	@echo "================================================================"
+	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
+		-m 512 -smp 4 \
+		-cdrom resident_sw.iso \
+		-boot d \
+		-serial mon:stdio \
+		-serial null \
+		-display none \
+		-vga std \
+		-vnc :1 \
 		-netdev user,id=net0 \
-		-device virtio-net-pci,netdev=net0
+		-device virtio-net-pci,netdev=net0 \
+		-drive file=disk.img,if=virtio,id=vdisk,format=raw
 
 clean:
 	@rm -f partition_system partition_guest virtio_backend prtos_manager
-	@rm -f rootfs_overlay.cpio
-	@rm -rf _overlay_root
+	@rm -f rootfs_overlay.cpio guest_rootfs_overlay.cpio
+	@rm -rf _overlay_root _guest_overlay_root
 	@rm -f *.pef *.prtos_conf container.bin resident_sw resident_sw.iso
 	@rm -f resident_sw.bin resident_sw_image
 	@rm -f bzImage
 	@rm -rf $(OBJDIR)
 
-.PHONY: all clean run
+distclean: clean
+	@rm -f disk.img
+
+.PHONY: all clean distclean run

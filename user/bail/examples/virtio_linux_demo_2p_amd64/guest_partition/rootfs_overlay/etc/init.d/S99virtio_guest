@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+# S99virtio_guest - Init script for Guest Partition.
+#
+# Configures network interfaces and reports virtio device status.
+# Runs in the Guest Partition after Linux boots.
+#
+
+case "$1" in
+    start)
+        echo "=== PRTOS Guest Partition Initialization ==="
+        echo "Console: VGA (tty0)"
+        echo "Role:    Virtio Frontend"
+        echo ""
+
+        # Report CPUs
+        echo "CPUs: $(nproc)"
+        echo "Kernel: $(uname -r)"
+        echo ""
+
+        # Auto-detect and configure network interfaces
+        for iface in eth0 eth1 eth2; do
+            if [ -d "/sys/class/net/$iface" ]; then
+                idx=$(echo $iface | tr -dc '0-9')
+                ip addr add 10.0.$((idx + 1)).2/24 dev $iface 2>/dev/null
+                ip link set $iface up 2>/dev/null
+                echo "Configured $iface: 10.0.$((idx + 1)).2/24"
+            fi
+        done
+
+        # Report virtio devices
+        echo ""
+        echo "Virtio devices:"
+        [ -b /dev/vda ] && echo "  /dev/vda  (block)" || echo "  /dev/vda  (not found)"
+        [ -c /dev/hvc0 ] && echo "  /dev/hvc0 (console)" || echo "  /dev/hvc0 (not found)"
+        echo ""
+        echo "Run /opt/virtio_test.sh for full device verification."
+        ;;
+    stop)
+        ;;
+    *)
+        echo "Usage: $0 {start|stop}"
+        exit 1
+        ;;
+esac

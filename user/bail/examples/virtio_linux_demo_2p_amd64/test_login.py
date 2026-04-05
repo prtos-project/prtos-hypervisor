@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-Test Virtio Linux Demo (amd64): 2 Linux Partitions with Virtio Device Virtualization.
+Test Virtio Linux Demo (amd64): 2 SMP Linux Partitions with UART + VGA.
 
 Architecture:
-  Partition 0 (System): Linux + Virtio Backend (1 vCPU, pCPU 0)
-  Partition 1 (Guest):  Linux + Virtio Frontend (1 vCPU, pCPU 1)
-  Shared Memory: 8MB at GPA 0x16000000
+  Partition 0 (System): Linux + Virtio Backend (2 vCPU, pCPU 0-1, console=ttyS0)
+  Partition 1 (Guest):  Linux + Virtio Frontend (2 vCPU, pCPU 2-3, console=tty0)
+  Shared Memory: 5 regions at 0x16000000+ (net x3, blk, console)
+
+Only the System Partition produces serial output (Guest uses VGA/tty0).
 
 Verifies:
-1. Both Linux partitions boot to login prompt
-2. System Partition login works (root/1234)
-3. Guest Partition login works (root/1234)
-4. Shared memory is accessible from both partitions
+1. System Partition boots to login prompt
+2. Login works (root/1234)
+3. Kernel is running (uname)
 """
 import pexpect
 import subprocess
@@ -21,6 +22,7 @@ import time
 
 TIMEOUT = 300
 LOGIN_TIMEOUT = 30
+LOGIN_RETRIES = 3
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -33,10 +35,10 @@ if ret.returncode != 0:
     print(ret.stderr.decode(errors='replace'))
     sys.exit(1)
 
-# Start QEMU with 4GB RAM, 4 CPUs for 2 Linux partitions
+# Start QEMU (4 pCPUs, 2048MB, serial for System)
 cmd = ("sg kvm -c 'qemu-system-x86_64 "
        "-enable-kvm -cpu host,-waitpkg "
-       "-m 512 -smp 2 "
+       "-m 512 -smp 4 "
        "-nographic -no-reboot "
        "-cdrom resident_sw.iso "
        "-serial mon:stdio "
@@ -46,50 +48,47 @@ print("=== Starting QEMU ===")
 child = pexpect.spawn("/bin/bash", ["-c", cmd], encoding='utf-8', timeout=TIMEOUT)
 child.logfile = sys.stdout
 
-# Wait for first login prompt (either partition could reach it first)
-login_count = 0
-max_logins = 2
-
-# Wait for login prompt
+# Wait for login prompt (only System Partition outputs to serial)
 idx = child.expect(["buildroot login:", pexpect.TIMEOUT, pexpect.EOF], timeout=180)
 if idx != 0:
     print("\n\n=== FAIL: No login prompt detected ===")
     child.close(force=True)
     sys.exit(1)
 
-print("\n\n=== First login prompt detected ===")
-login_count = 1
+print("\n\n=== Login prompt detected ===")
 
-# Login to first partition
-time.sleep(3)
-child.sendline("root")
-idx = child.expect(["assword", "buildroot login:", pexpect.TIMEOUT], timeout=30)
-if idx == 0:
+# Login with retries (hypervisor output may interleave with input)
+logged_in = False
+for attempt in range(LOGIN_RETRIES):
     time.sleep(1)
-    child.sendline("1234")
-    idx2 = child.expect([r"[\$#] ", "Login incorrect", pexpect.TIMEOUT], timeout=30)
-    if idx2 == 0:
-        print("\n\n=== First partition login successful ===")
-    else:
-        print("\n\n=== First partition login failed ===")
-        child.close(force=True)
-        sys.exit(1)
-elif idx == 1:
-    # Second login prompt appeared, try again
-    time.sleep(2)
     child.sendline("root")
-    idx = child.expect(["assword", pexpect.TIMEOUT], timeout=30)
+    idx = child.expect(["assword", "buildroot login:", pexpect.TIMEOUT], timeout=LOGIN_TIMEOUT)
     if idx == 0:
-        time.sleep(1)
+        time.sleep(0.5)
         child.sendline("1234")
-        idx2 = child.expect([r"[\$#] ", pexpect.TIMEOUT], timeout=30)
-        if idx2 != 0:
-            print("\n\n=== FAIL: Login failed ===")
-            child.close(force=True)
-            sys.exit(1)
+        idx2 = child.expect([r"[#\$] ", "Login incorrect", "buildroot login:", pexpect.TIMEOUT],
+                            timeout=LOGIN_TIMEOUT)
+        if idx2 == 0:
+            logged_in = True
+            break
+        elif idx2 == 2:
+            # Got another login prompt, retry
+            continue
+    elif idx == 1:
+        # Another login prompt appeared (noise interrupted), retry
+        continue
+    else:
+        break
+
+if not logged_in:
+    print("\n\n=== FAIL: Login failed after retries ===")
+    child.close(force=True)
+    sys.exit(1)
+
+print("\n\n=== Login successful ===")
 
 # Verify kernel is running
-time.sleep(1)
+time.sleep(0.5)
 child.sendline("uname -a")
 idx = child.expect(["Linux", pexpect.TIMEOUT], timeout=10)
 if idx != 0:
