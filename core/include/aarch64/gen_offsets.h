@@ -23,6 +23,7 @@
 #include <logstream.h>
 #include <physmm.h>
 #include <local.h>
+#include "../../kernel/aarch64/prtos_vgic.h"
 
 static inline void generate_offsets(void) {
     /* local_processor_t */
@@ -62,6 +63,7 @@ static inline void generate_offsets(void) {
     DEFINE2(partition_control_table_t, sizeof(partition_control_table_t), );
     DEFINE2(prtos_physical_mem_map, sizeof(struct prtos_physical_mem_map), );
     DEFINE2(local_time_t, sizeof(local_time_t), );
+    DEFINE2(prtos_vgic_state, sizeof(struct prtos_vgic_state), );
 #ifdef CONFIG_SMP
     DEFINE2(local_processor_t, sizeof(local_processor_t), );
 #endif
