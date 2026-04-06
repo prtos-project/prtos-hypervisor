@@ -1,16 +1,15 @@
 /*
  * FILE: hypercalls.h
  *
- * Processor-related hypercalls definition
+ * AArch64 processor-related hypercalls definition
  *
  * http://www.prtos.org/
- *
  */
 
 #ifndef _PRTOS_ARCH_HYPERCALLS_H_
 #define _PRTOS_ARCH_HYPERCALLS_H_
 
-// hypercall-numbers
+/* hypercall numbers - shared with riscv64 */
 #define __MULTICALL_NR 0
 #define __HALT_PARTITION_NR 1
 #define __SUSPEND_PARTITION_NR 2
@@ -58,9 +57,20 @@
 #define x86_load_idtr_nr 38
 #define x86_update_ss_sp_nr 39
 #define x86_update_gdt_nr 40
+
 #define x86_update_idt_nr 41
 #define x86_set_if_nr 42
 #define x86_clear_if_nr 43
+
 #define NR_HYPERCALLS 44
+
+#ifndef __ASSEMBLY__
+
+/* PRTOS_IRET: guest returns from virtual IRQ handler */
+#define __PRTOS_IRET_NR NR_HYPERCALLS
+/* PRTOS_RAISE_TRAP: guest raises a trap to itself */
+#define __PRTOS_RAISE_TRAP_NR (NR_HYPERCALLS + 1)
+
+#endif
 
 #endif

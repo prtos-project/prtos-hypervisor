@@ -1,14 +1,16 @@
 /*
- * FILE: prtos.lds
+ * FILE: prtos.lds.in
  *
- * ld script to build the aarch64 version
+ * AArch64 linker script for PRTOS hypervisor
+ * Boot code runs at physical addresses before MMU is enabled.
+ * Everything after .boot runs at virtual addresses (CONFIG_PRTOS_OFFSET).
  *
  * http://www.prtos.org/
  */
 
 #include <config.h>
 
-OUTPUT_FORMAT("elf64-littleaarch64", "elf64-bigaarch64", "elf64-littleaarch64")
+OUTPUT_FORMAT("elf64-littleaarch64", "elf64-littleaarch64", "elf64-littleaarch64")
 OUTPUT_ARCH("aarch64")
 ENTRY(start)
 
@@ -16,38 +18,33 @@ PHYSOFFSET = - CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR;
 
 SECTIONS
 {
-    . = CONFIG_PRTOS_OFFSET;
+    /* Boot sections: linked and loaded at physical addresses */
+    . = CONFIG_PRTOS_LOAD_ADDR;
     _sprtos = .;
 
-    _sboot = . + PHYSOFFSET;
-    .boot_text ALIGN(0x1000) :  AT (ADDR (.boot_text) + PHYSOFFSET) {
+    _sboot = .;
+    .boot_text ALIGN(0x1000) : {
         _stext = .;
         *(.boot.text)
-        _etext = .;
-
-        _idmap_start = .;
-        *(.boot.text.header)
-        *(.boot.text.idmap)
-        *(.boot.rodata.idmap)
-        *(.boot.data.idmap)
-        _idmap_end = .;
+        _etext_boot = .;
     }
-    .boot_data : AT (ADDR (.boot_data) + PHYSOFFSET) {
+    .boot_data : {
         *(.boot.data)
     }
-    _eboot = . + PHYSOFFSET;
+    _eboot = .;
 
-
-    .spbl ALIGN(0x1000) :  AT (ADDR (.spbl) + PHYSOFFSET) {
+    .spbl ALIGN(0x1000) : {
         _spbl = .;
         *(.pbl)
         _epbl = .;
     }
-    .prtos_hdr ALIGN(0x1000) :  AT (ADDR (.prtos_hdr) + PHYSOFFSET) {
+    .prtos_hdr ALIGN(0x1000) : {
         *(.prtos_hdr)
     }
 
-    
+    /* Transition to virtual addresses: VMA = CONFIG_PRTOS_OFFSET + (LMA - LOAD_ADDR) */
+    . = . + CONFIG_PRTOS_OFFSET - CONFIG_PRTOS_LOAD_ADDR;
+
     .vboot ALIGN(0x1000) : AT (ADDR (.vboot) + PHYSOFFSET) {
         _svboot = .;
         *(.vboot.text)
@@ -58,25 +55,25 @@ SECTIONS
     .text ALIGN(0x1000) : AT (ADDR (.text) + PHYSOFFSET) {
         _sinittext = .;
         *(.text)
-         _einittext = .;
+        _einittext = .;
         . = ALIGN(8);
         _sdevice = .;
         *(.dev.info)
         _edevice = .;
     }
 
-    .rsv_hwirqs ALIGN(8) : {
+    .rsv_hwirqs ALIGN(8) : AT (ADDR (.rsv_hwirqs) + PHYSOFFSET) {
         rsv_hw_irqs = .;
         end_rsv_hw_irqs = .;
     }
 
-    .rsv_ioports ALIGN(8) : {
+    .rsv_ioports ALIGN(8) : AT (ADDR (.rsv_ioports) + PHYSOFFSET) {
         rsv_io_ports = .;
         *(.rsv_ioports)
         end_rsv_io_ports = .;
     }
 
-    .rsv_physpages ALIGN(8) : {
+    .rsv_physpages ALIGN(8) : AT (ADDR (.rsv_physpages) + PHYSOFFSET) {
         rsv_phys_pages = .;
         *(.rsv_physpages)
         end_rsv_phys_pages = .;
@@ -92,44 +89,44 @@ SECTIONS
         . = ALIGN(8);
         exception_table = .;
         *(.exptable)
-        LONG(0);
-        LONG(0);
+        QUAD(0);
+        QUAD(0);
 
         . = ALIGN(8);
         __gp_ex_table = .;
         *(.gp_ex_tab)
-        LONG(0);
-        
+        QUAD(0);
+
         . = ALIGN(8);
         kdev_table = .;
         *(.kdevtab)
-        LONG(0);
+        QUAD(0);
         . = ALIGN(8);
 
         kdev_setup = .;
         *(.kdevsetup)
-        LONG(0);
-        
+        QUAD(0);
+
         . = ALIGN(8);
         object_setup_table = .;
         *(.objsetuptab)
-        LONG(0);
-        
+        QUAD(0);
+
         . = ALIGN(8);
         *(.rodata)
         *(.rodata.*)
-      _erodata = .;
+        _erodata = .;
     }
-    
-    .build_info ALIGN(8) :  AT (ADDR (.build_info) + PHYSOFFSET) {
+
+    .build_info ALIGN(8) : AT (ADDR (.build_info) + PHYSOFFSET) {
         build_info = .;
         *(.kbuild_info)
         *(.build_info)
         BYTE(0);
     }
 
-    . = ALIGN((1 << (7)));
-    .data ALIGN(8) :  AT (ADDR (.data) + PHYSOFFSET) {
+    . = ALIGN(128);
+    .data ALIGN(8) : AT (ADDR (.data) + PHYSOFFSET) {
         _sdata = .;
         *(.data.page_aligned)
         . = ALIGN(8);
@@ -138,107 +135,56 @@ SECTIONS
 
         _edata = .;
         sys_reset_counter = .;
-        LONG(0);
+        QUAD(0);
         reset_status_init = .;
-        LONG(0);
+        QUAD(0);
         _cpdata = .;
-        LONG(0);
-
-       . = ALIGN((1 << 12));
-       *(.init.rodata)
-       *(.init.rodata.*)
-       . = ALIGN((1 << 3));
-       __setup_start = .;
-       *(.init.setup)
-       __setup_end = .;
-       __initcall_start = .;
-       *(.initcallpresmp.init)
-       __presmp_initcall_end = .;
-       *(.initcall1.init)
-       __initcall_end = .;
-       . = ALIGN(4);
-       __alt_instructions = .;
-       *(.altinstructions)
-       __alt_instructions_end = .;
-      
-       *(.init.data)
-       *(.init.data.rel)
-       *(.init.data.rel.*)
-       . = ALIGN(8);
-       __ctors_start = .;
-       *(.ctors)
-       *(.init_array)
-       *(SORT(.init_array.*))
-       __ctors_end = .;
-
-
-
-    . = ALIGN((1 << 12));
-      __ro_after_init_start = .;
-      *(.data.ro_after_init)
-      . = ALIGN((1 << 12));
-      __ro_after_init_end = .;
-
-       __start___ex_table = .;
-       *(.ex_table)
-       __stop___ex_table = .;
-       __start___pre_ex_table = .;
-       *(.ex_table.pre)
-       __stop___pre_ex_table = .;
-       *(.data.read_mostly)
-    . = ALIGN((1 << (7)));
-       *(.data.page_aligned)
-       . = ALIGN(8);
-       __start_schedulers_array = .;
-       *(.data.schedulers)
-       __end_schedulers_array = .;
-       . = ALIGN((1 << 3)); __paramhypfs_start = .; *(.data.paramhypfs) 
-	   __paramhypfs_end = .;
-
-      _splatform = .;
-      *(.arch.info)
-      _eplatform = .;
-
-
+        QUAD(0);
     }
 
-    .bss ALIGN(8) :  AT (ADDR (.bss) + PHYSOFFSET) {
+    .bss ALIGN(0x1000) : AT (ADDR (.bss) + PHYSOFFSET) {
         _sbss = .;
         *(COMMON)
-
-        . = ALIGN(((1 << 12) << 3));
-        __init_end = .;
-       __bss_start = .;
-       *(.bss.stack_aligned)
-       *(.bss.page_aligned)
-       . = ALIGN(4K);
-       __per_cpu_start = .;
-       *(.bss.percpu.page_aligned)
-       *(.bss.percpu)
-       . = ALIGN(128);
-       *(.bss.percpu.read_mostly)
-       . = ALIGN(128);
-       __per_cpu_data_end = .;
-       *(.bss .bss.*)
-       . = ALIGN(8);
-       __bss_end = .;
-
-        _ebss = .; 
+        *(.bss)
         . = ALIGN(8);
-        _scdata = .;
-        . = . + SIZEOF(.data);
-        _ecdata = .;
-        *(.bss.noinit)
+        _ebss = .;
     }
 
-    . = ALIGN(4K);
+    /* Physical address aliases for BSS (used by boot code before MMU) */
+    _sbss_phys = _sbss + PHYSOFFSET;
+    _ebss_phys = _ebss + PHYSOFFSET;
+
+    /* Physical address aliases for virtual code entry points (boot trampoline) */
+    _virtual_start_phys = _virtual_start + PHYSOFFSET;
+    _secondary_virtual_phys = _secondary_virtual + PHYSOFFSET;
+
+    /* Virtual address alias for boot stacks (physical .boot.data accessible via VA mapping) */
+    _boot_stacks_va = _boot_stacks - PHYSOFFSET;
+
+    /* Virtual address alias for boot page table root (L0) used as _page_tables by kernel code */
+    _page_tables = _boot_pt_l0 - PHYSOFFSET;
+
+    /* Virtual address alias for L1 identity table (for remove_identity_mapping) */
+    _page_tables_l1_id = _boot_pt_l1_id - PHYSOFFSET;
+
+    /* Virtual address alias for L1 kernel table */
+    _page_tables_l1_kern = _boot_pt_l1_kern - PHYSOFFSET;
+
+    /* Virtual address alias for boot CPU ID */
+    _boot_cpuid_va = _boot_cpuid - PHYSOFFSET;
+
+    /* Virtual address alias for secondary start address storage */
+    _secondary_start_addr_va = _secondary_start_addr - PHYSOFFSET;
+
+    _eprtos = . + PHYSOFFSET;
+
+    . = ALIGN(0x1000);
     prtos_conf_table = .;
     phys_prtos_conf_table = . + PHYSOFFSET;
-    _eprtos = .;
 
     /DISCARD/ : {
         *(.note)
         *(.comment*)
+        *(.eh_frame)
     }
-
 }

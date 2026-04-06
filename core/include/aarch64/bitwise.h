@@ -1,7 +1,7 @@
 /*
  * FILE: bitwise.h
  *
- * Some basic bit operations
+ * AArch64 basic bit operations
  *
  * http://www.prtos.org/
  */
@@ -11,7 +11,6 @@
 
 #define ARCH_HAS_FFS
 
-/* Find first set bit (LSB). Returns bit position (0-based) or -1 if x==0. */
 static __inline__ prtos_s32_t _ffs(prtos_s32_t x) {
     if (!x) return -1;
     return __builtin_ctz((unsigned int)x);
@@ -19,14 +18,12 @@ static __inline__ prtos_s32_t _ffs(prtos_s32_t x) {
 
 #define ARCH_HAS_FFZ
 
-/* Find first zero bit (LSB). Returns bit position (0-based) or -1 if x==~0. */
 static __inline__ prtos_s32_t _ffz(prtos_s32_t x) {
     return _ffs(~x);
 }
 
 #define ARCH_HAS_FLS
 
-/* Find last set bit (MSB). Returns bit position (0-based) or -1 if x==0. */
 static __inline__ prtos_s32_t _fls(prtos_s32_t x) {
     if (!x) return -1;
     return 31 - __builtin_clz((unsigned int)x);

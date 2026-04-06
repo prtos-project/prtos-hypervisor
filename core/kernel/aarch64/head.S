@@ -1,505 +1,244 @@
 /*
  * FILE: head.S
  *
- * Entry point of the PRTOS in the x86 architecture version
+ * AArch64 early page table setup and MMU enable
+ * Creates initial mapping for EL2 (TTBR0_EL2, 4KB granule, 48-bit VA).
+ *
+ * 4-level page tables:
+ *   L0: 512 entries, VA[47:39], 512GB per entry
+ *   L1: 512 entries, VA[38:30], 1GB per entry (block descriptor)
+ *   L2: 512 entries, VA[29:21], 2MB per entry
+ *   L3: 512 entries, VA[20:12], 4KB per entry
+ *
+ * Boot-time mapping uses L0→L1 with 1GB block descriptors at L1:
+ *   L0[0]  → _boot_pt_l1_id    (identity + MMIO mapping)
+ *   L0[20] → _boot_pt_l1_kern  (kernel virtual mapping)
+ *
+ * After the kernel transitions to virtual addresses, the identity L1 entry
+ * is removed (MMIO entry at L1[0] is preserved in L0[0]).
  *
  * http://www.prtos.org/
-*/
+ */
 
 #include <linkage.h>
-#include <arch/irqs.h>
-#include <arch/asm_offsets.h>
+#include <arch/paging.h>
 #include <arch/prtos_def.h>
 
-#include <arch/arm_defs.h>
+/* AArch64 block descriptor flags for 1GB blocks at level 1 */
+#define BLOCK_DESC_VALID  (1 << 0)
+#define BLOCK_DESC_BLOCK  (0 << 1)
+#define BLOCK_DESC_TABLE  (1 << 1)
+#define BLOCK_ATTR_IDX0   (0 << 2)  /* AttrIndx=0 (Normal memory from MAIR) */
+#define BLOCK_ATTR_AF     (1 << 10) /* Access flag */
+#define BLOCK_ATTR_ISH    (3 << 8)  /* Inner Shareable */
+#define BLOCK_ATTR_AP_RW  (0 << 7)  /* AP[2:1]=00: EL2 RW */
+#define BLOCK_ATTR_UXN    (1ULL << 54)
 
+/* Normal cacheable block: Valid + Block + AttrIdx=0 + AF + ISH */
+#define BLOCK_FLAGS (BLOCK_DESC_VALID | BLOCK_DESC_BLOCK | \
+                     BLOCK_ATTR_IDX0 | BLOCK_ATTR_AF | BLOCK_ATTR_ISH)
 
-/* need to add the uart address offset in page to the fixmap address */
+/* Device memory block: AttrIdx=1 */
+#define BLOCK_ATTR_IDX1   (1 << 2)
+#define DEVICE_BLOCK_FLAGS (BLOCK_DESC_VALID | BLOCK_DESC_BLOCK | \
+                            BLOCK_ATTR_IDX1 | BLOCK_ATTR_AF | BLOCK_ATTR_ISH)
 
+/* Table descriptor: points to next-level table */
+#define TABLE_FLAGS (BLOCK_DESC_VALID | BLOCK_DESC_TABLE)
 
-#define PT_PT     0xf7f /* nG=1 AF=1 SH=11 AP=01 NS=1 ATTR=111 T=1 P=1 */
-#define PT_MEM    0xf7d /* nG=1 AF=1 SH=11 AP=01 NS=1 ATTR=111 T=0 P=1 */
-#define PT_MEM_L3 0xf7f /* nG=1 AF=1 SH=11 AP=01 NS=1 ATTR=111 T=1 P=1 */
-#define PT_DEV    0xe71 /* nG=1 AF=1 SH=10 AP=01 NS=1 ATTR=100 T=0 P=1 */
-#define PT_DEV_L3 0xe73 /* nG=1 AF=1 SH=10 AP=01 NS=1 ATTR=100 T=1 P=1 */
+#define L0_BLOCK_SHIFT 39    /* 512GB per L0 entry */
+#define L1_BLOCK_SHIFT 30    /* 1GB per level-1 entry */
 
-/* Convenience defines to get slot used by PRTOS mapping. */
-#define PRTOS_ZEROETH_SLOT    zeroeth_table_offset(PRTOS_VIRT_START)
-#define PRTOS_FIRST_SLOT      first_table_offset(PRTOS_VIRT_START)
-#define PRTOS_SECOND_SLOT     second_table_offset(PRTOS_VIRT_START)
+.section .boot.text, "ax"
 
+/*
+ * setup_boot_page_table - create initial 4-level page tables for boot
+ *
+ * Uses _boot_pt_l0 as the L0 root table.
+ * L0[0] → _boot_pt_l1_id (identity map + MMIO)
+ * L0[20] → _boot_pt_l1_kern (kernel virtual mapping)
+ *
+ * _boot_pt_l1_id:
+ *   [0] = 1GB device block at PA 0 (UART, GIC)
+ *   [PA>>30] = 1GB normal block containing CONFIG_PRTOS_LOAD_ADDR
+ *
+ * _boot_pt_l1_kern:
+ *   [0] = 1GB normal block at PA base containing CONFIG_PRTOS_LOAD_ADDR
+ *
+ * Clobbers: x0-x8
+ */
+.globl setup_boot_page_table
+.type setup_boot_page_table, @function
+setup_boot_page_table:
+    /* Zero all three boot tables */
+    adrp x0, _boot_pt_l0
+    add  x0, x0, :lo12:_boot_pt_l0
+    adrp x1, _boot_pt_l1_id
+    add  x1, x1, :lo12:_boot_pt_l1_id
+    adrp x2, _boot_pt_l1_kern
+    add  x2, x2, :lo12:_boot_pt_l1_kern
 
+    /* Zero L0 table */
+    mov  x3, x0
+    add  x4, x0, #4096
+1:  str  xzr, [x3], #8
+    cmp  x3, x4
+    b.lt 1b
+
+    /* Zero L1 identity table */
+    mov  x3, x1
+    add  x4, x1, #4096
+2:  str  xzr, [x3], #8
+    cmp  x3, x4
+    b.lt 2b
+
+    /* Zero L1 kernel table */
+    mov  x3, x2
+    add  x4, x2, #4096
+3:  str  xzr, [x3], #8
+    cmp  x3, x4
+    b.lt 3b
+
+    /* === L0 entries === */
+
+    /* L0[0] → _boot_pt_l1_id (table descriptor) */
+    ldr  x5, =TABLE_FLAGS
+    orr  x5, x1, x5            /* PA of _boot_pt_l1_id | TABLE_FLAGS */
+    str  x5, [x0, #0]          /* L0 index 0 */
+
+    /* L0[20] → _boot_pt_l1_kern (table descriptor) */
+    ldr  x5, =TABLE_FLAGS
+    orr  x5, x2, x5            /* PA of _boot_pt_l1_kern | TABLE_FLAGS */
+    str  x5, [x0, #(20 * 8)]   /* L0 index 20 */
+
+    /* === L1 identity table entries === */
+
+    /* Calculate the 1GB-aligned physical base for LOAD_ADDR */
+    ldr  x3, =CONFIG_PRTOS_LOAD_ADDR
+    mov  x4, #(1 << L1_BLOCK_SHIFT)
+    sub  x5, x4, #1            /* x5 = 0x3FFFFFFF */
+    bic  x6, x3, x5            /* x6 = PA base (1GB-aligned) */
+
+    /* Build normal block descriptor: PA_base | BLOCK_FLAGS */
+    ldr  x7, =BLOCK_FLAGS
+    orr  x7, x6, x7            /* x7 = identity block descriptor */
+
+    /* L1_id[PA>>30] = 1GB normal block (identity map for kernel PA) */
+    lsr  x3, x3, #L1_BLOCK_SHIFT
+    and  x3, x3, #0x1FF        /* L1 index */
+    str  x7, [x1, x3, lsl #3]
+
+    /* L1_id[0] = 1GB device block at PA 0 (MMIO: UART, GIC) */
+    ldr  x7, =DEVICE_BLOCK_FLAGS
+    str  x7, [x1]
+
+    /* === L1 kernel table entries === */
+
+    /* L1_kern[0] = 1GB normal block at same PA base as identity */
+    ldr  x7, =BLOCK_FLAGS
+    orr  x7, x6, x7
+    str  x7, [x2]              /* L1 index 0 in kernel table */
+
+    ret
+
+/*
+ * enable_mmu - enable EL2 MMU with 4KB granule, 48-bit VA (T0SZ=16)
+ *
+ * Sets up MAIR_EL2, TCR_EL2, TTBR0_EL2, then enables SCTLR_EL2.M
+ * Clobbers: x0-x4
+ */
+.globl enable_mmu
+.type enable_mmu, @function
+enable_mmu:
+    /* Invalidate TLBs */
+    tlbi alle2
+    dsb  sy
+    isb
+
+    /* Set MAIR_EL2:
+     * Attr0 = 0xFF (Normal memory, Write-Back, Read-Write Allocate)
+     * Attr1 = 0x04 (Device-nGnRE) */
+    ldr  x0, =0x00000000000004FF
+    msr  mair_el2, x0
+
+    /* Set TCR_EL2:
+     * T0SZ  = 16 (48-bit VA → 2^48 = 256TB)
+     * IRGN0 = 01 (Normal WB RA WA cacheable)
+     * ORGN0 = 01 (Normal WB RA WA cacheable)
+     * SH0   = 11 (Inner Shareable)
+     * TG0   = 00 (4KB granule)
+     * PS    = 010 (40-bit PA) */
+    mov  x0, #16               /* T0SZ = 16 for 48-bit VA */
+    orr  x0, x0, #(1 << 8)    /* IRGN0 = WB RA WA */
+    orr  x0, x0, #(1 << 10)   /* ORGN0 = WB RA WA */
+    orr  x0, x0, #(3 << 12)   /* SH0 = Inner Shareable */
+    orr  x0, x0, #(2 << 16)   /* PS = 40-bit PA */
+    msr  tcr_el2, x0
+    isb
+
+    /* Set TTBR0_EL2 = physical address of L0 root table */
+    adrp x0, _boot_pt_l0
+    add  x0, x0, :lo12:_boot_pt_l0
+    msr  ttbr0_el2, x0
+    isb
+
+    /* Enable MMU: set SCTLR_EL2.M, .C, .I */
+    mrs  x0, sctlr_el2
+    orr  x0, x0, #(1 << 0)    /* M: enable MMU */
+    orr  x0, x0, #(1 << 2)    /* C: enable data cache */
+    orr  x0, x0, #(1 << 12)   /* I: enable instruction cache */
+    bic  x0, x0, #(1 << 19)   /* WXN: clear */
+    bic  x0, x0, #(1 << 25)   /* EE: clear (little-endian) */
+    msr  sctlr_el2, x0
+    isb
+
+    ret
+
+/*
+ * remove_identity_mapping - remove the identity L1 entry (not the MMIO entry)
+ *
+ * Clears the identity block in _boot_pt_l1_id that maps the kernel PA range.
+ * Preserves L0[0] and L1_id[0] (MMIO device block for UART/GIC).
+ * Must be called from virtual address space.
+ * Clobbers: x0-x4
+ */
 .section .vboot.text, "ax"
+.globl remove_identity_mapping
+.type remove_identity_mapping, @function
+remove_identity_mapping:
+    /* Get virtual address of L1 identity table via L0 */
+    ldr  x0, =_page_tables_l1_id  /* Virtual address of L1 identity table */
 
+    /* Compute L1 index for LOAD_ADDR */
+    ldr  x1, =CONFIG_PRTOS_LOAD_ADDR
+    lsr  x1, x1, #L1_BLOCK_SHIFT
+    and  x1, x1, #0x1FF
 
-
-/* Load the physical address of a symbol into xb */
-.macro load_paddr xb, sym
-        ldr \xb, =\sym
-        add \xb, \xb, x20
-.endm
-
-/*
- * Flush local TLBs
- *
- * See asm/arm64/flushtlb.h for the explanation of the sequence.
- */
-.macro flush_prtos_tlb_local
-        dsb   nshst
-        tlbi  alle2
-        dsb   nsh
-        isb
-.endm
-
-/*
- * Macro to find the slot number at a given page-table level
- *
- * slot:     slot computed
- * virt:     virtual address
- * lvl:      page-table level
- */
-.macro get_table_slot, slot, virt, lvl
-        ubfx  \slot, \virt, #PRTOS_PT_LEVEL_SHIFT(\lvl), #PRTOS_PT_LPAE_SHIFT
-.endm
-
-/*
- * Macro to create a page table entry in \ptbl to \tbl
- * ptbl:    table symbol where the entry will be created
- * tbl:     physical address of the table to point to
- * virt:    virtual address
- * lvl:     page-table level
- * tmp1:    scratch register
- * tmp2:    scratch register
- *
- * Preserves \virt
- * Clobbers \tbl, \tmp1, \tmp2
- *
- * Note that all parameters using registers should be distinct.
- */
-.macro create_table_entry_from_paddr, ptbl, tbl, virt, lvl, tmp1, tmp2
-        get_table_slot \tmp1, \virt, \lvl   /* \tmp1 := slot in \tbl */
-
-        mov   \tmp2, #PT_PT                 /* \tmp2 := right for linear PT */
-        orr   \tmp2, \tmp2, \tbl            /*          + \tbl */
-
-        adr_l \tbl, \ptbl                   /* \tbl := address(\ptbl) */
-
-        str   \tmp2, [\tbl, \tmp1, lsl #3]
-.endm
-
-/*
- * Macro to create a page table entry in \ptbl to \tbl
- *
- * ptbl:    table symbol where the entry will be created
- * tbl:     table symbol to point to
- * virt:    virtual address
- * lvl:     page-table level
- * tmp1:    scratch register
- * tmp2:    scratch register
- * tmp3:    scratch register
- *
- * Preserves \virt
- * Clobbers \tmp1, \tmp2, \tmp3
- *
- * Also use x20 for the phys offset.
- *
- * Note that all parameters using registers should be distinct.
- */
-.macro create_table_entry, ptbl, tbl, virt, lvl, tmp1, tmp2, tmp3
-        load_paddr \tmp1, \tbl
-        create_table_entry_from_paddr \ptbl, \tmp1, \virt, \lvl, \tmp2, \tmp3
-.endm
-
-/*
- * Macro to create a mapping entry in \tbl to \phys. Only mapping in 3rd
- * level table (i.e page granularity) is supported.
- *
- * ptbl:    table symbol where the entry will be created
- * virt:    virtual address
- * phys:    physical address (should be page aligned)
- * tmp1:    scratch register
- * tmp2:    scratch register
- * tmp3:    scratch register
- * type:    mapping type. If not specified it will be normal memory (PT_MEM_L3)
- *
- * Preserves \virt, \phys
- * Clobbers \tmp1, \tmp2, \tmp3
- *
- * Note that all parameters using registers should be distinct.
- */
-.macro create_mapping_entry, ptbl, virt, phys, tmp1, tmp2, tmp3, type=PT_MEM_L3
-        and   \tmp3, \phys, #THIRD_MASK     /* \tmp3 := PAGE_ALIGNED(phys) */
-
-        get_table_slot \tmp1, \virt, 3      /* \tmp1 := slot in \tlb */
-
-        mov   \tmp2, #\type                 /* \tmp2 := right for section PT */
-        orr   \tmp2, \tmp2, \tmp3           /*          + PAGE_ALIGNED(phys) */
-
-        adr_l \tmp3, \ptbl
-
-        str   \tmp2, [\tmp3, \tmp1, lsl #3]
-.endm
-
-.section .boot.text.idmap, "ax", %progbits
-
-/*
- * Rebuild the boot pagetable's first-level entries. The structure
- * is described in mm.c.
- *
- * Inputs:
- *   x19: paddr(start)
- *   x20: phys offset
- *
- * Clobbers x0 - x4
- */
-FUNC_LOCAL(create_page_tables)
-        /* Prepare the page-tables for mapping PRTOS */
-        ldr   x0, =PRTOS_VIRT_START
-        create_table_entry boot_pgtable, boot_first, x0, 0, x1, x2, x3
-        create_table_entry boot_first, boot_second, x0, 1, x1, x2, x3
-
-        /*
-         * We need to use a stash register because
-         * create_table_entry_paddr() will clobber the register storing
-         * the physical address of the table to point to.
-         */
-        load_paddr x4, boot_third
-        ldr   x1, =PRTOS_VIRT_START
-.rept PRTOS_NR_ENTRIES(2)
-        mov   x0, x4                            /* x0 := paddr(l3 table) */
-        create_table_entry_from_paddr boot_second, x0, x1, 2, x2, x3
-        add   x1, x1, #PRTOS_PT_LEVEL_SIZE(2)     /* x1 := Next vaddr */
-        add   x4, x4, #PAGE_SIZE                /* x4 := Next table */
-.endr
-
-        /*
-         * Find the size of PRTOS in pages and multiply by the size of a
-         * PTE. This will then be compared in the mapping loop below.
-         *
-         * Note the multiplication is just to avoid using an extra
-         * register/instruction per iteration.
-         */
-        ldr   x0, =PRTOS_VIRT_SIZE      /* x0 := effective size of PRTOS */
-        lsr   x0, x0, #PAGE_SHIFT    /* x0 := Number of pages for PRTOS */
-        lsl   x0, x0, #3             /* x0 := Number of pages * PTE size */
-
-        /* Map PRTOS */
-        adr_l x4, boot_third
-
-        lsr   x2, x19, #THIRD_SHIFT  /* Base address for 4K mapping */
-        lsl   x2, x2, #THIRD_SHIFT
-        mov   x3, #PT_MEM_L3         /* x2 := Section map */
-        orr   x2, x2, x3
-
-        /* ... map of vaddr(start) in boot_third */
-        mov   x1, xzr
-1:      str   x2, [x4, x1]           /* Map vaddr(start) */
-        add   x2, x2, #PAGE_SIZE     /* Next page */
-        add   x1, x1, #8             /* Next slot */
-        cmp   x1, x0                 /* Loop until we map all of PRTOS */
-        b.lt  1b
-
-        /*
-         * If PRTOS is loaded at exactly PRTOS_VIRT_START then we don't
-         * need an additional 1:1 mapping, the virtual mapping will
-         * suffice.
-         */
-        ldr   x0, =PRTOS_VIRT_START
-        cmp   x19, x0
-        bne   1f
-        ret
+    /* Don't clear index 0 (MMIO device block) */
+    cbz  x1, 1f
+    str  xzr, [x0, x1, lsl #3]  /* Clear identity block entry */
+    dsb  sy
+    tlbi alle2
+    dsb  sy
+    isb
 1:
-        /*
-         * Setup the 1:1 mapping so we can turn the MMU on. Note that
-         * only the first page of PRTOS will be part of the 1:1 mapping.
-         */
-
-        /*
-         * Find the zeroeth slot used. If the slot is not
-         * PRTOS_ZEROETH_SLOT, then the 1:1 mapping will use its own set of
-         * page-tables from the first level.
-         */
-        get_table_slot x0, x19, 0       /* x0 := zeroeth slot */
-        cmp   x0, #PRTOS_ZEROETH_SLOT
-        beq   1f
-        create_table_entry boot_pgtable, boot_first_id, x19, 0, x0, x1, x2
-        b     link_from_first_id
-
-1:
-        /*
-         * Find the first slot used. If the slot is not PRTOS_FIRST_SLOT,
-         * then the 1:1 mapping will use its own set of page-tables from
-         * the second level.
-         */
-        get_table_slot x0, x19, 1      /* x0 := first slot */
-        cmp   x0, #PRTOS_FIRST_SLOT
-        beq   1f
-        create_table_entry boot_first, boot_second_id, x19, 1, x0, x1, x2
-        b     link_from_second_id
-
-1:
-        /*
-         * Find the second slot used. If the slot is PRTOS_SECOND_SLOT, then the
-         * 1:1 mapping will use its own set of page-tables from the
-         * third level. For slot PRTOS_SECOND_SLOT, PRTOS is not yet able to handle
-         * it.
-         */
-        get_table_slot x0, x19, 2     /* x0 := second slot */
-        cmp   x0, #PRTOS_SECOND_SLOT
-        beq   virtphys_clash
-        create_table_entry boot_second, boot_third_id, x19, 2, x0, x1, x2
-        b     link_from_third_id
-
-link_from_first_id:
-        create_table_entry boot_first_id, boot_second_id, x19, 1, x0, x1, x2
-link_from_second_id:
-        create_table_entry boot_second_id, boot_third_id, x19, 2, x0, x1, x2
-link_from_third_id:
-        create_mapping_entry boot_third_id, x19, x19, x0, x1, x2
-
-#ifdef CONFIG_EARLY_PRINTK
-        /* Add UART to the fixmap table */
-        ldr   x0, =EARLY_UART_VIRTUAL_ADDRESS
-        /* x23: Early UART base physical address */
-        create_mapping_entry prtos_fixmap, x0, x23, x1, x2, x3, type=PT_DEV_L3
-#endif
-        /* Map fixmap into boot_second */
-        ldr   x0, =FIXMAP_ADDR(0)
-        create_table_entry boot_second, prtos_fixmap, x0, 2, x1, x2, x3
-        ret
-
-virtphys_clash:
-        /* Identity map clashes with boot_third, which we cannot handle yet */
-        PRINT("- Unable to build boot page tables - virt and phys addresses clash. -\r\n")
-        b     fail
-END(create_page_tables)
+    ret
 
 /*
- * Turn on the Data Cache and the MMU. The function will return on the 1:1
- * mapping. In other word, the caller is responsible to switch to the runtime
- * mapping.
- *
- * Inputs:
- *   x0 : Physical address of the page tables.
- *   x1 : Extra flags of the SCTLR.
- *
- * Clobbers x0 - x5
+ * Boot-time page tables (must be 4KB-aligned, in .boot.data)
  */
-FUNC_LOCAL(enable_mmu)
-        mov   x4, x0
-        mov   x5, x1
-        PRINT_ID("- Turning on paging -\r\n")
+.section .boot.data, "aw"
+.align 12
+.globl _boot_pt_l0
+_boot_pt_l0:
+    .space 4096
 
-        /*
-         * The state of the TLBs is unknown before turning on the MMU.
-         * Flush them to avoid stale one.
-         */
-        flush_prtos_tlb_local
+.align 12
+.globl _boot_pt_l1_id
+_boot_pt_l1_id:
+    .space 4096
 
-        /* Write PRTOS's PT's paddr into TTBR0_EL2 */
-        msr   TTBR0_EL2, x4
-        isb
-#if 1
-        mrs   x0, SCTLR_EL2
-        orr   x0, x0, #SCTLR_Axx_ELx_M  /* Enable MMU */
-        orr   x0, x0, #SCTLR_Axx_ELx_C  /* Enable D-cache */
-        orr   x0, x0, x5                /* Enable extra flags */
-        dsb   sy                     /* Flush PTE writes and finish reads */
-        msr   SCTLR_EL2, x0          /* now paging is enabled */
-#endif
-        isb                          /* Now, flush the icache */
-
-#ifdef CONFIG_EARLY_PRINTK
-        /* Use a virtual address to access the UART. */
-        ldr   x23, =EARLY_UART_VIRTUAL_ADDRESS
-#endif
-
-        PRINT_ID("- Paging turned on -\r\n")
-
-        ret
-END(enable_mmu)
-
-/*
- * Enable mm (turn on the data cache and the MMU) for secondary CPUs.
- * The function will return to the virtual address provided in LR (e.g. the
- * runtime mapping).
- *
- * Inputs:
- *   lr : Virtual address to return to.
- *
- * Clobbers x0 - x6
- */
-FUNC(enable_secondary_cpu_mm)
-        mov   x6, lr
-
-        load_paddr x0, init_ttbr // FIXME: Just  comment for build pass
-        ldr   x0, [x0]
-
-        mov   x1, #0        /* No WXN - matches boot CPU (prtos_pt_enforce_wnx disabled for PRTOS) */
-        bl    enable_mmu
-        mov   lr, x6
-
-        /* Return to the virtual address requested by the caller. */
-        ret
-END(enable_secondary_cpu_mm)
-
-/*
- * Enable mm (turn on the data cache and the MMU) for the boot CPU.
- * The function will return to the virtual address provided in LR (e.g. the
- * runtime mapping).
- *
- * Inputs:
- *   lr : Virtual address to return to.
- *
- * Clobbers x0 - x6
- */
-FUNC(enable_boot_cpu_mm)
-        mov   x6, lr
-
-        bl    create_page_tables
-        load_paddr x0, boot_pgtable
-
-        mov   x1, #0        /* No extra SCTLR flags */
-        bl    enable_mmu
-
-        /*
-         * The MMU is turned on and we are in the 1:1 mapping. Switch
-         * to the runtime mapping.
-         */
-        ldr   x0, =1f
-        br    x0
-1:
-        mov   lr, x6
-        /*
-         * The 1:1 map may clash with other parts of the PRTOS virtual memory
-         * layout. As it is not used anymore, remove it completely to
-         * avoid having to worry about replacing existing mapping
-         * afterwards. Function will return to the virtual address requested
-         * by the caller.
-         */
-        b     remove_identity_mapping
-END(enable_boot_cpu_mm)
-
-/*
- * Remove the 1:1 map from the page-tables. It is not easy to keep track
- * where the 1:1 map was mapped, so we will look for the top-level entry
- * exclusive to the 1:1 map and remove it.
- *
- * Inputs:
- *   x19: paddr(start)
- *
- * Clobbers x0 - x1
- */
-FUNC_LOCAL(remove_identity_mapping)
-        /*
-         * Find the zeroeth slot used. Remove the entry from zeroeth
-         * table if the slot is not PRTOS_ZEROETH_SLOT.
-         */
-        get_table_slot x1, x19, 0       /* x1 := zeroeth slot */
-        cmp   x1, #PRTOS_ZEROETH_SLOT
-        beq   1f
-        /* It is not in slot PRTOS_ZEROETH_SLOT, remove the entry. */
-        ldr   x0, =boot_pgtable         /* x0 := root table */
-        str   xzr, [x0, x1, lsl #3]
-        b     identity_mapping_removed
-
-1:
-        /*
-         * Find the first slot used. Remove the entry for the first
-         * table if the slot is not PRTOS_FIRST_SLOT.
-         */
-        get_table_slot x1, x19, 1       /* x1 := first slot */
-        cmp   x1, #PRTOS_FIRST_SLOT
-        beq   1f
-        /* It is not in slot PRTOS_FIRST_SLOT, remove the entry. */
-        ldr   x0, =boot_first           /* x0 := first table */
-        str   xzr, [x0, x1, lsl #3]
-        b     identity_mapping_removed
-
-1:
-        /*
-         * Find the second slot used. Remove the entry for the first
-         * table if the slot is not PRTOS_SECOND_SLOT.
-         */
-        get_table_slot x1, x19, 2       /* x1 := second slot */
-        cmp   x1, #PRTOS_SECOND_SLOT
-        beq   identity_mapping_removed
-        /* It is not in slot 1, remove the entry */
-        ldr   x0, =boot_second          /* x0 := second table */
-        str   xzr, [x0, x1, lsl #3]
-
-identity_mapping_removed:
-        flush_prtos_tlb_local
-
-        ret
-END(remove_identity_mapping)
-
-/* Fail-stop */
-FUNC_LOCAL(fail)
-        PRINT("- Boot failed -\r\n")
-1:      wfe
-        b     1b
-END(fail)
-
-/*
- * Switch TTBR
- *
- * x0    ttbr
- */
-FUNC(switch_ttbr_id)
-        /* 1) Ensure any previous read/write have completed */
-        dsb    ish
-        isb
-
-        /* 2) Turn off MMU */
-        mrs    x1, SCTLR_EL2
-        bic    x1, x1, #SCTLR_Axx_ELx_M
-        msr    SCTLR_EL2, x1
-        isb
-
-        /* 3) Flush the TLBs */
-        flush_prtos_tlb_local
-
-        /* 4) Update the TTBR */
-        msr   TTBR0_EL2, x0
-        isb
-
-        /*
-         * 5) Flush I-cache
-         * This should not be necessary but it is kept for safety.
-         */
-        ic     iallu
-        isb
-
-        /* 6) Turn on the MMU */
-        mrs   x1, SCTLR_EL2
-        orr   x1, x1, #SCTLR_Axx_ELx_M  /* Enable MMU */
-        msr   SCTLR_EL2, x1
-        isb
-
-        ret
-END(switch_ttbr_id)
-
-
-
-
-.text
-/*
- * kthread_startup_wrapper - trampoline from CONTEXT_SWITCH into kthread startup
- * Called with: x19 = start_up function pointer, x20 = entry_point argument
- */
-FUNC(kthread_startup_wrapper)
-    mov  x0, x20    /* entry_point → first argument */
-    br   x19        /* jump to start_up(entry_point) */
-END(kthread_startup_wrapper)
-
-ENTRY(__halt_system)
-1:  wfi
-    b   1b
-
-.data
-ENTRY(early_gdt_table)
-        .quad 0x0000000000000000 /* NULL  descriptor */
-        .quad 0x00cf9b000000ffff /* 1<<3 PRTOS's code segment R0 */
-        .quad 0x00cf93000000ffff /* 2<<3 PRTOS's data segment R0 */
-
+.align 12
+.globl _boot_pt_l1_kern
+_boot_pt_l1_kern:
+    .space 4096

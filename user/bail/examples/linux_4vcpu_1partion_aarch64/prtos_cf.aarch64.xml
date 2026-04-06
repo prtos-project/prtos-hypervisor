@@ -7,28 +7,28 @@
             <Processor id="0">
                 <CyclicPlanTable>
                     <Plan id="0" majorFrame="100ms">
-                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="0"/>
+                        <Slot id="0" start="0ms" duration="100ms" partitionId="0" vCpuId="0"/>
                     </Plan>
                 </CyclicPlanTable>
             </Processor>
             <Processor id="1">
                 <CyclicPlanTable>
                     <Plan id="0" majorFrame="100ms">
-                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="1"/>
+                        <Slot id="0" start="0ms" duration="100ms" partitionId="0" vCpuId="1"/>
                     </Plan>
                 </CyclicPlanTable>
             </Processor>
             <Processor id="2">
                 <CyclicPlanTable>
                     <Plan id="0" majorFrame="100ms">
-                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="2"/>
+                        <Slot id="0" start="0ms" duration="100ms" partitionId="0" vCpuId="2"/>
                     </Plan>
                 </CyclicPlanTable>
             </Processor>
             <Processor id="3">
                 <CyclicPlanTable>
                     <Plan id="0" majorFrame="100ms">
-                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="3"/>
+                        <Slot id="0" start="0ms" duration="100ms" partitionId="0" vCpuId="3"/>
                     </Plan>
                 </CyclicPlanTable>
             </Processor>

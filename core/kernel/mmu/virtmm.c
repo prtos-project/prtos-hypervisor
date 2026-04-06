@@ -42,10 +42,10 @@ void __VBOOT setup_virt_mm(void) {
     st = prtos_conf_phys_mem_area_table[prtos_conf_table.hpv.physical_memory_areas_offset].start_addr;
     end = st + prtos_conf_phys_mem_area_table[prtos_conf_table.hpv.physical_memory_areas_offset].size - 1;
     flags = prtos_conf_phys_mem_area_table[prtos_conf_table.hpv.physical_memory_areas_offset].flags;
+
     eprintf("PRTOS map: [0x%" PRNT_ADDR_FMT "x - 0x%" PRNT_ADDR_FMT "x] flags: 0x%x\n", st, end, flags);
     ASSERT(st == CONFIG_PRTOS_LOAD_ADDR);
     setup_vm_map(&vmm_start_addr, &num_of_frames);
-
     #undef PRTOS_VMAPEND
     #define PRTOS_VMAPEND (vmm_start_addr + (num_of_frames << PAGE_SHIFT))
     eprintf("[VMM] Free [0x%llx-0x%llx] 0x%x frames\n", vmm_start_addr, PRTOS_VMAPEND, num_of_frames);

@@ -1,7 +1,7 @@
 /*
  * FILE: physmm.h
  *
- * Physical memory manager
+ * AArch64 physical memory manager
  *
  * http://www.prtos.org/
  */

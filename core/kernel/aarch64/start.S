@@ -1,11 +1,19 @@
 /*
  * FILE: start.S
  *
- * The execution of prtos starts from this file (start symbol)
+ * AArch64 PRTOS hypervisor entry point
+ * Runs in EL2 (Hypervisor mode)
+ *
+ * Boot sequence:
+ *   1. Zero BSS (physical addresses, before MMU)
+ *   2. Set up page tables (identity + virtual mapping)
+ *   3. Enable MMU via TTBR0_EL2 + SCTLR_EL2
+ *   4. Jump to virtual addresses
+ *   5. Remove identity mapping
+ *   6. Call setup_kernel() in virtual address space
  *
  * http://www.prtos.org/
  */
-
 
 #include <linkage.h>
 #include <prtosef.h>
@@ -13,337 +21,266 @@
 #include <arch/asm_offsets.h>
 #include <arch/irqs.h>
 #include <arch/paging.h>
-//#include <arch/processor.h>
 #include <arch/prtos_def.h>
-//#include <arch/layout.h>
 
-#include <arch/arm_defs.h>
-
-
-#define __HEAD_FLAG_PAGE_SIZE   ((PAGE_SHIFT - 10) / 2)
-
-#define __HEAD_FLAG_PHYS_BASE   1
-
-#define __HEAD_FLAGS            ((__HEAD_FLAG_PAGE_SIZE << 1) | \
-                                 (__HEAD_FLAG_PHYS_BASE << 3))
-
-#include "debug-pl011.inc"
-
+#define BOOT_STACK_SIZE  8192
+#define IDLE_KTHREAD_SIZE 16384
 
 .section .boot.text, "ax"
 
-FUNC(start)
-        /*
-         * DO NOT MODIFY. Image header expected by Linux boot-loaders.
-         */
-efi_head:
-        /*
-         * This add instruction has no meaningful effect except that
-         * its opcode forms the magic "MZ" signature of a PE/COFF file
-         * that is required for UEFI applications.
-         */
-        add     x13, x18, #0x16
-        b       real_start           /* branch to kernel start */
-END(start)
+.globl start
+.type start, @function
+.align 2
+start:
+    /*
+     * Entry from RSW:
+     *   x0 = boot cpu id (MPIDR Aff0)
+     * Running in EL2 (Hypervisor mode).
+     * MMU is off. All addresses are physical.
+     */
 
+    /* Disable interrupts */
+    msr daifset, #0xf
 
+    /* Save boot CPU ID */
+    adrp x10, _boot_cpuid
+    add  x10, x10, :lo12:_boot_cpuid
+    str  w0, [x10]
 
-FUNC_LOCAL(real_start)
-        /* BSS should be zeroed when booting without EFI */
-        mov   x26, #0                /* x26 := skip_zero_bss */
+    /* BSP is always logical CPU 0 */
+    mov  x19, #0            /* x19 = cpu_id = 0 */
 
-real_start_efi:
-        msr   DAIFSet, 0xf           /* Disable all interrupts */
+    /* Store physical address of _secondary_start for PSCI CPU_ON */
+    adrp x10, _secondary_start_addr
+    add  x10, x10, :lo12:_secondary_start_addr
+    adrp x11, _secondary_start
+    add  x11, x11, :lo12:_secondary_start
+    str  x11, [x10]
 
-        /* Save the bootloader arguments in less-clobberable registers */
-        mov   x21, x0                /* x21 := DTB, physical address  */
+    /* Set up boot stack (in .boot.data, at physical address) */
+    adrp x10, _boot_stacks
+    add  x10, x10, :lo12:_boot_stacks
+    add  sp, x10, #BOOT_STACK_SIZE  /* cpu 0: base + 8KB = top of stack[0] */
 
-        /* Find out where we are */
-        ldr   x0, =start
-        adr   x19, start             /* x19 := paddr (start) */
-        sub   x20, x19, x0           /* x20 := phys-offset */
+    /*
+     * Zero BSS. Use physical address aliases from linker script.
+     */
+    adrp x10, _sbss_phys
+    add  x10, x10, :lo12:_sbss_phys
+    adrp x11, _ebss_phys
+    add  x11, x11, :lo12:_ebss_phys
+    cmp  x10, x11
+    b.ge _bss_done
+_bss_loop:
+    str  xzr, [x10], #8
+    cmp  x10, x11
+    b.lt _bss_loop
+_bss_done:
 
-        /* Using the DTB in the .dtb section? */
-.ifnes CONFIG_DTB_FILE,""
-        adr_l x21, _sdtb
-.endif
+    /*
+     * Set up page tables for EL2 MMU:
+     *   - Identity map the 1GB block containing PRTOS_LOAD_ADDR
+     *   - Virtual map at CONFIG_PRTOS_OFFSET -> same physical block
+     *   - Identity map MMIO region (0x00000000-0x3FFFFFFF)
+     */
+    bl   setup_boot_page_table
 
-        /* Initialize the UART if earlyprintk has been enabled. */
-#ifdef CONFIG_EARLY_PRINTK
-        bl    init_uart
+    /*
+     * Set VBAR_EL2 to a boot trap handler before enabling MMU
+     */
+    adrp x10, _boot_trap
+    add  x10, x10, :lo12:_boot_trap
+    msr  vbar_el2, x10
+    isb
+
+    /* Enable EL2 MMU */
+    bl   enable_mmu
+
+    /*
+     * MMU is now on. We are still executing at a physical address
+     * (identity-mapped). Jump to virtual address space.
+     * Compute _virtual_start VA = PA(_virtual_start) + (OFFSET - LOAD)
+     * where PA = VA + PHYSOFFSET, so final = VA(_virtual_start)
+     * which is just its link address.  Use ldr =.
+     */
+    ldr  x10, =_virtual_start
+    br   x10
+    /* NOT REACHED from here — we continue at _virtual_start */
+
+.section .text, "ax"
+.align 2
+.globl _virtual_start
+_virtual_start:
+    /* Now executing in virtual address space */
+
+    /* Remove the identity mapping (only the virtual mapping remains) */
+    bl   remove_identity_mapping
+
+    /* Switch sp to virtual boot stack address */
+    ldr  x10, =_boot_stacks_va
+    add  sp, x10, #BOOT_STACK_SIZE
+
+    /* Set up exception vector (now at virtual address) */
+    ldr  x10, =_exception_vectors
+    msr  vbar_el2, x10
+    isb
+
+    /* Jump to C setup code (virtual addresses) */
+    mov  x0, x19               /* x0 = cpu_id = 0 */
+    ldr  x1, =__idle_kthreads  /* x1 = idle kthread[0] (virtual address) */
+    bl   setup_kernel
+    /* Should not return */
+    b    _halt
+
+#ifdef CONFIG_SMP
+/*
+ * _secondary_start - entry point for secondary CPUs started via PSCI
+ *
+ * On entry:
+ *   x0 = cpu_id (passed by PSCI as context_id)
+ * Running in EL2 with MMU off.
+ */
+.section .boot.text, "ax"
+.globl _secondary_start
+.type _secondary_start, @function
+.align 2
+_secondary_start:
+    mov  x19, x0               /* x19 = cpu_id */
+
+    /* Disable interrupts */
+    msr  daifset, #0xf
+
+    /* Set up per-CPU boot stack (physical, in .boot.data) */
+    adrp x10, _boot_stacks
+    add  x10, x10, :lo12:_boot_stacks
+    add  x11, x19, #1
+    mov  x12, #BOOT_STACK_SIZE
+    mul  x11, x11, x12
+    add  sp, x10, x11
+
+    /* Re-establish the single identity-map L1 entry that the BSP removed.
+     * Do NOT call setup_boot_page_table here — it zeros all page tables,
+     * which races with other secondary CPUs that may already have MMU on.
+     * The rest of the page tables (L0, L1 MMIO, L1 kernel) are still valid
+     * from the BSP's setup_boot_page_table call. */
+    adrp x10, _boot_pt_l1_id
+    add  x10, x10, :lo12:_boot_pt_l1_id
+    ldr  x3, =CONFIG_PRTOS_LOAD_ADDR
+    lsr  x4, x3, #30           /* L1 index = PA >> 30 */
+    and  x4, x4, #0x1FF
+    mov  x5, #(1 << 30)
+    sub  x6, x5, #1
+    bic  x5, x3, x6            /* PA base (1GB-aligned) */
+    ldr  x6, =(0x1 | (0 << 2) | (1 << 10) | (3 << 8))  /* BLOCK_FLAGS */
+    orr  x5, x5, x6            /* block descriptor */
+    str  x5, [x10, x4, lsl #3] /* Restore identity block entry */
+    dsb  sy
+    isb
+
+    /* Enable MMU (page tables are otherwise intact from BSP) */
+    bl   enable_mmu
+
+    /* Jump to virtual address space */
+    ldr  x10, =_secondary_virtual
+    br   x10
+
+.section .text, "ax"
+.align 2
+.globl _secondary_virtual
+_secondary_virtual:
+    /* Now in virtual address space */
+
+    /* Ensure SP_ELx is selected (not SP_EL0) so IRQ exceptions
+     * use the Current EL SP_ELx vectors (offset 0x200+) */
+    msr  spsel, #1
+    isb
+
+    /* Switch sp to virtual boot stack address */
+    ldr  x10, =_boot_stacks_va
+    add  x11, x19, #1
+    mov  x12, #BOOT_STACK_SIZE
+    mul  x11, x11, x12
+    add  sp, x10, x11
+
+    /* Set up exception vector (virtual) */
+    ldr  x10, =_exception_vectors
+    msr  vbar_el2, x10
+    isb
+
+    /* Set per-CPU ID in TPIDR_EL2 before calling C code */
+    msr  tpidr_el2, x19
+
+    /* Calculate idle kthread address: __idle_kthreads + cpu_id * IDLE_KTHREAD_SIZE */
+    ldr  x1, =__idle_kthreads
+    mov  x12, #IDLE_KTHREAD_SIZE
+    mul  x12, x12, x19
+    add  x1, x1, x12
+
+    /* Call init_secondary_cpu(cpu_id, idle_kthread) */
+    mov  x0, x19
+    bl   init_secondary_cpu
+    /* Should not return */
+    b    _halt
 #endif
-        PRINT("- Boot CPU booting -\r\n")
 
-        bl    check_cpu_mode
-        bl    cpu_init
+.section .text, "ax"
+_halt:
+    wfe
+    b    _halt
 
-        ldr   lr, =primary_switched
-        b     enable_boot_cpu_mm
-
-primary_switched:
-        bl    zero_bss
-        PRINT("- Ready -\r\n")
-        /* Setup the arguments for start_prtos and jump to C world */
-        mov   x0, x20                /* x0 := cpu_id */
-        mov   x1, x21                /* x1 := idle */
-        ldr   x2, =setup_kernel //FIXME: just comment it for build pass
-        b     launch
-END(real_start)
-
-FUNC(init_secondary)
-        msr   DAIFSet, 0xf           /* Disable all interrupts */
-
-        /* Find out where we are */
-        ldr   x0, =start
-        adr   x19, start             /* x19 := paddr (start) */
-        sub   x20, x19, x0           /* x20 := phys-offset */
-
-        mrs   x0, mpidr_el1
-        ldr   x13, =(~MPIDR_HWID_MASK)
-        bic   x24, x0, x13           /* Mask out flags to get CPU ID */
-
-        /* Wait here until __cpu_up is ready to handle the CPU */
-        adr_l x0, smp_up_cpu  // FIXME: here just comment it to build pass
-        dsb   sy
-2:      ldr   x1, [x0]
-        cmp   x1, x24
-        beq   1f
-        wfe
-        b     2b
-1:
-
-#ifdef CONFIG_EARLY_PRINTK
-        ldr   x23, =CONFIG_EARLY_UART_BASE_ADDRESS /* x23 := UART base address */   // 0x9000000
-        PRINT_ID("- CPU ")
-        print_reg x24
-        PRINT_ID(" booting -\r\n")
-#endif
-        bl    check_cpu_mode
-        bl    cpu_init
-
-        ldr   lr, =secondary_switched
-        b     enable_secondary_cpu_mm
-
-secondary_switched:
-        PRINT("- Ready -\r\n")
-        /* Jump to C world */
-        ldr   x2, =start_secondary  // FIXME: here just comment it for build pass
-        b     launch_ap
-END(init_secondary)
+.align 2
+.globl __halt_system
+.type __halt_system, @function
+__halt_system:
+    wfe
+    b    __halt_system
 
 /*
- * Check if the CPU has been booted in Hypervisor mode.
- * This function will never return when the CPU is booted in another mode
- * than Hypervisor mode.
- *
- * Clobbers x0 - x5
+ * kthread_startup_wrapper - wrapper for new kthread entry
+ * x19 = start_up function pointer
+ * x20 = entry_point argument
  */
-FUNC_LOCAL(check_cpu_mode)
-        PRINT_ID("- Current EL ")
-        mrs   x5, CurrentEL
-        print_reg x5
-        PRINT_ID(" -\r\n")
+.globl kthread_startup_wrapper
+.type kthread_startup_wrapper, @function
+.align 2
+kthread_startup_wrapper:
+    mov  x0, x20            /* entry_point as first arg */
+    blr  x19               /* call start_up(entry_point) */
+    /* If start_up returns, halt */
+    b    _halt
 
-        /* Are we in EL2 */
-        cmp   x5, #PSR_MODE_EL2t
-        ccmp  x5, #PSR_MODE_EL2h, #0x4, ne
-        b.ne  1f /* No */
-        ret
-1:
-        /* OK, we're boned. */
-        PRINT_ID("- PRTOS must be entered in NS EL2 mode -\r\n")
-        PRINT_ID("- Please update the bootloader -\r\n")
-        b fail
-END(check_cpu_mode)
+/* Early boot trap handler — just spin */
+.section .boot.text, "ax"
+.align 11
+_boot_trap:
+    wfe
+    b    _boot_trap
 
 /*
- * Zero BSS
- *
- * Inputs:
- *   x26: Do we need to zero BSS?
- *
- * Clobbers x0 - x3
+ * Per-CPU boot stacks in .boot.data (physical addresses, available before MMU)
  */
-FUNC_LOCAL(zero_bss)
-        /* Zero BSS only when requested */
-        cbnz  x26, skip_bss
-
-        PRINT("- Zero BSS -\r\n")
-        ldr   x0, =_sbss       /* x0 := vaddr(__bss_start) */  
-        ldr   x1, =_ebss       /* x1 := vaddr(__bss_end)   */
-
-1:      str   xzr, [x0], #8
-        cmp   x0, x1
-        b.lo  1b
-
-skip_bss:
-        ret
-END(zero_bss)
+.section .boot.data, "aw"
+.align 12
+.globl _boot_stacks
+_boot_stacks:
+    .space BOOT_STACK_SIZE * CONFIG_NO_CPUS
 
 /*
- * Initialize the processor for turning the MMU on.
- *
- * Clobbers x0 - x3
+ * Per-CPU idle kthread structures (CONFIG_NO_CPUS * 16KB)
  */
-FUNC_LOCAL(cpu_init)
-        PRINT_ID("- Initialize CPU -\r\n")
+.section .bss, "aw"
+.align 8
+.globl __idle_kthreads
+__idle_kthreads:
+    .space IDLE_KTHREAD_SIZE * CONFIG_NO_CPUS
 
-        /* Set up memory attribute type tables */
-        ldr   x0, =MAIRVAL
-        msr   mair_el2, x0
+.section .boot.data, "aw"
+.align 4
+.globl _boot_cpuid
+_boot_cpuid:
+    .word 0
 
-        /*
-         * Set up TCR_EL2:
-         * PS -- Based on ID_AA64MMFR0_EL1.PARange
-         * Top byte is used
-         * PT walks use Inner-Shareable accesses,
-         * PT walks are write-back, write-allocate in both cache levels,
-         * 48-bit virtual address space goes through this table.
-         */
-        ldr   x0, =(TCR_RES1|TCR_SH0_IS|TCR_ORGN0_WBWA|TCR_IRGN0_WBWA|TCR_T0SZ(64-48))
-        /* ID_AA64MMFR0_EL1[3:0] (PARange) corresponds to TCR_EL2[18:16] (PS) */
-        mrs   x1, ID_AA64MMFR0_EL1
-        /* Limit to 48 bits, 256TB PA range (#5) */
-        ubfm  x1, x1, #0, #3
-        mov   x2, #5
-        cmp   x1, x2
-        csel  x1, x1, x2, lt
-
-        bfi   x0, x1, #16, #3
-
-        msr   tcr_el2, x0
-
-        ldr   x0, =SCTLR_EL2_SET
-        msr   SCTLR_EL2, x0
-        isb
-
-        /*
-         * Ensure that any exceptions encountered at EL2
-         * are handled using the EL2 stack pointer, rather
-         * than SP_EL0.
-         */
-        msr spsel, #1
-        ret
-END(cpu_init)
-
-/*
- * Setup the initial stack and jump to the C world
- *
- * Inputs:
- *   x0 : Argument 0 of the C function to call
- *   x1 : Argument 1 of the C function to call
- *   x2 : C entry point
- *
- * Clobbers x3
- */
-FUNC_LOCAL(launch)
-        ldr   x3, =init_data_prtos  // need adjust for PRTOS hyperviosr
-        add   x3, x3, #0 /* Find the boot-time stack */  // need adjust for PRTOS hyperviosr
-        ldr   x3, [x3]
-
-        mov   x0, #0                /* x0 := cpu_id */
-        mov   x1, x3                /* x1 := idle */
-
-        add   x3, x3, #CONFIG_KSTACK_SIZE     /* (which grows down from the top). */
-        sub   x3, x3, #CPUINFO_sizeof /* Make room for CPU save record */  // need adjust for PRTOS hyperviosr
-        mov   sp, x3
-
-        /* Jump to C world */
-        br    x2
-END(launch)
-
-
-FUNC_LOCAL(launch_ap)
-        ldr   x3, =init_data
-        add   x3, x3, #INITINFO_stack /* Find the boot-time stack */
-        ldr   x3, [x3]
-        add   x3, x3, #STACK_SIZE     /* (which grows down from the top). */
-        sub   x3, x3, #CPUINFO_sizeof /* Make room for CPU save record */
-        mov   sp, x3
-
-        /* Jump to C world */
-        br    x2
-END(launch_ap)
-
-/* Fail-stop */
-FUNC_LOCAL(fail)
-        PRINT_ID("- Boot failed -\r\n")
-1:      wfe
-        b     1b
-END(fail)
-
-#ifdef CONFIG_EARLY_PRINTK
-/*
- * Initialize the UART. Should only be called on the boot CPU.
- *
- * Output:
- *  x23: Early UART base physical address
- *
- * Clobbers x0 - x1
- */
-FUNC_LOCAL(init_uart)
-        ldr   x23, =CONFIG_EARLY_UART_BASE_ADDRESS   // comes from include/aarch64/prtos_inc/generated_prtos_autoconf.h
-#ifdef CONFIG_EARLY_UART_INIT
-        early_uart_init x23, 0  // comes from arch/arm/arm64/debug-pl011.inc
-#endif
-        PRINT("- UART enabled -\r\n")
-        ret
-END(init_uart)
-
-/*
- * Print early debug messages.
- * Note: This function must be called from assembly.
- * x0: Nul-terminated string to print.
- * x23: Early UART base address
- * Clobbers x0-x1
- */
-FUNC(asm_puts)
-        early_uart_ready x23, 1
-        ldrb  w1, [x0], #1           /* Load next char */
-        cbz   w1, 1f                 /* Exit on nul */
-        early_uart_transmit x23, w1
-        b     asm_puts
-1:
-        ret
-END(asm_puts)
-
-/*
- * Print a 64-bit number in hex.
- * Note: This function must be called from assembly.
- * x0: Number to print.
- * x23: Early UART base address
- * Clobbers x0-x3
- */
-FUNC(asm_putn)
-        adr_l x1, hex
-        mov   x3, #16
-1:
-        early_uart_ready x23, 2
-        and   x2, x0, #(0xf<<60)     /* Mask off the top nybble */
-        lsr   x2, x2, #60
-        ldrb  w2, [x1, x2]           /* Convert to a char */
-        early_uart_transmit x23, w2
-        lsl   x0, x0, #4             /* Roll it through one nybble at a time */
-        subs  x3, x3, #1
-        b.ne  1b
-        ret
-END(asm_putn)
-
-RODATA_SECT(.boot.rodata.idmap, hex, "0123456789abcdef")
-
-#endif /* CONFIG_EARLY_PRINTK */
-
-/* This provides a C-API version of __lookup_processor_type
- * TODO: For now, the implementation return NULL every time
- */
-FUNC(lookup_processor_type)
-        mov  x0, #0
-        ret
-END(lookup_processor_type)
-
-
-
-.section .kbuild_info, "a"
-.ascii "BUILD_TIME="TO_STR(BUILD_TIME)"\n"
-.ascii "BUILD_IDR="TO_STR(BUILD_IDR)"\n"
-.previous
+.align 3
+.globl _secondary_start_addr
+_secondary_start_addr:
+    .quad 0

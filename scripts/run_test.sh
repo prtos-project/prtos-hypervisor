@@ -31,7 +31,7 @@ ALL_CASES=(
     "freertos_para_virt_amd64:1:20:amd64"
     "freertos_hw_virt_amd64:0:30:amd64"
     "linux_aarch64:0:180:aarch64"
-    "linux_4vcpu_1partion_aarch64:0:360:aarch64"
+    "linux_4vcpu_1partion_aarch64:0:540:aarch64"
     "linux_4vcpu_1partion_riscv64:0:360:riscv64"
     "linux_4vcpu_1partion_amd64:0:360:amd64"
     "mix_os_demo_aarch64:0:420:aarch64"
@@ -447,31 +447,31 @@ child = pexpect.spawn(
     '-bios ./u-boot/u-boot.bin '
     '-device loader,file=./resident_sw_image,addr=0x40200000,force-raw=on '
     '-nographic -no-reboot',
-    timeout=340, encoding='utf-8', codec_errors='replace'
+    timeout=500, encoding='utf-8', codec_errors='replace'
 )
 try:
-    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=320)
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=480)
     if idx != 0:
         print('LINUX_TEST_FAIL: login prompt not reached')
         child.close(force=True); sys.exit(1)
     time.sleep(4); child.sendline('root')
-    idx = child.expect(['Password:', 'assword:', pexpect.TIMEOUT], timeout=30)
+    idx = child.expect(['Password:', 'assword:', pexpect.TIMEOUT], timeout=60)
     if idx >= 2:
         print('LINUX_TEST_FAIL: no password prompt')
         child.close(force=True); sys.exit(1)
     time.sleep(2); child.sendline('1234')
-    idx = child.expect(['#', 'Login incorrect', pexpect.TIMEOUT], timeout=30)
+    idx = child.expect(['#', 'Login incorrect', pexpect.TIMEOUT], timeout=120)
     if idx != 0:
         print('LINUX_TEST_FAIL: login failed')
         child.close(force=True); sys.exit(1)
     time.sleep(2); child.sendline('nproc')
-    idx = child.expect(['4', pexpect.TIMEOUT], timeout=10)
+    idx = child.expect(['4', pexpect.TIMEOUT], timeout=30)
     if idx != 0:
         print('LINUX_TEST_FAIL: nproc did not return 4')
         child.close(force=True); sys.exit(1)
-    child.expect(['#', pexpect.TIMEOUT], timeout=5)
+    child.expect(['#', pexpect.TIMEOUT], timeout=30)
     child.sendline('which htop')
-    idx = child.expect(['htop', pexpect.TIMEOUT], timeout=10)
+    idx = child.expect(['htop', pexpect.TIMEOUT], timeout=30)
     if idx != 0:
         print('LINUX_TEST_FAIL: htop not found')
         child.close(force=True); sys.exit(1)

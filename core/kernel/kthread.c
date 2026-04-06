@@ -68,16 +68,10 @@ void start_up_guest(prtos_address_t entry) {
     kthread_t *k = info->sched.current_kthread;
     cpu_ctxt_t ctxt;
 
-    /* kprintf("[SUG] CPU %d: start_up_guest entry=0x%llx vmx=%p\n",
-            GET_CPU_ID(), (unsigned long long)entry,
-            k->ctrl.g->karch.vmx); */
-
     kthread_arch_init(k);
-    /* kprintf("[SUG] CPU %d: after kthread_arch_init\n", GET_CPU_ID()); */
     set_kthread_flags(info->sched.current_kthread, KTHREAD_DCACHE_ENABLED_F | KTHREAD_ICACHE_ENABLED_F);
     set_cache_state(DCACHE | ICACHE);
     resume_vclock(&k->ctrl.g->vclock, &k->ctrl.g->vtimer);
-    /* kprintf("[SUG] CPU %d: about to check VMX\n", GET_CPU_ID()); */
 
     // JMP_PARTITION must enable interrupts
 #ifdef CONFIG_AARCH64
@@ -215,7 +209,7 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
 
             /* Allocate VGIC state for hw-virt partitions.
              * Heuristic: partitions with memory >= 64MB are hw-virt guests
-             * that need full GIC emulation.  Para-virt (PCT-based) partitions
+             * that need full GIC emulation.  Para-virt BAIL partitions
              * keep vgic=NULL and use the PCT hypercall path. */
             k->ctrl.g->karch.vgic = 0;
             {

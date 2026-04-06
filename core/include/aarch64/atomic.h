@@ -1,7 +1,7 @@
 /*
  * FILE: atomic.h
  *
- * atomic operations
+ * AArch64 atomic operations
  *
  * http://www.prtos.org/
  */
@@ -16,26 +16,49 @@ typedef struct {
 #ifdef _PRTOS_KERNEL_
 
 #define prtos_atomic_set(v, i) (((v)->val) = (i))
-
 #define prtos_atomic_get(v) ((v)->val)
 
-#define prtos_atomic_glear_mask(mask, addr) //__asm__ __volatile__("andl %0,%1" : : "r"(~(mask)), "m"(*addr) : "memory")
-
-#define prtos_atomic_setmask(mask, addr) //__asm__ __volatile__("orl %0,%1" : : "r"(mask), "m"(*(addr)) : "memory")
+#define prtos_atomic_glear_mask(mask, addr)
+#define prtos_atomic_setmask(mask, addr)
 
 static inline void prtos_atomic_inc(prtos_atomic_t *v) {
-    //__asm__ __volatile__("incl %0" : "+m"(v->val));
+    prtos_u32_t tmp;
+    prtos_u32_t result;
+    __asm__ __volatile__(
+        "1: ldxr  %w0, [%2]\n"
+        "   add   %w0, %w0, #1\n"
+        "   stxr  %w1, %w0, [%2]\n"
+        "   cbnz  %w1, 1b\n"
+        : "=&r"(result), "=&r"(tmp)
+        : "r"(&v->val)
+        : "memory");
 }
 
 static inline void prtos_atomic_dec(prtos_atomic_t *v) {
-    //__asm__ __volatile__("decl %0" : "+m"(v->val));
+    prtos_u32_t tmp;
+    prtos_u32_t result;
+    __asm__ __volatile__(
+        "1: ldxr  %w0, [%2]\n"
+        "   sub   %w0, %w0, #1\n"
+        "   stxr  %w1, %w0, [%2]\n"
+        "   cbnz  %w1, 1b\n"
+        : "=&r"(result), "=&r"(tmp)
+        : "r"(&v->val)
+        : "memory");
 }
 
 static inline prtos_s32_t prtos_atomic_dec_and_test(prtos_atomic_t *v) {
-    prtos_u8_t c;
-
-    //__asm__ __volatile__("decl %0; sete %1" : "+m"(v->val), "=qm"(c) : : "memory");
-    return c != 0;
+    prtos_u32_t tmp;
+    prtos_u32_t result;
+    __asm__ __volatile__(
+        "1: ldxr  %w0, [%2]\n"
+        "   sub   %w0, %w0, #1\n"
+        "   stxr  %w1, %w0, [%2]\n"
+        "   cbnz  %w1, 1b\n"
+        : "=&r"(result), "=&r"(tmp)
+        : "r"(&v->val)
+        : "memory");
+    return result == 0;
 }
 
 #endif

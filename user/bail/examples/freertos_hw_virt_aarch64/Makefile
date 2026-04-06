@@ -40,7 +40,7 @@ OBJDIR = obj/
 # Compiler flags — same as native Makefile, preserving -DGUEST
 FRT_CFLAGS = -mcpu=cortex-a57 -ffreestanding -Wall -Wextra -g -DGUEST
 
-# Include paths — native headers only (no local overrides)
+# Include paths — native headers only (hw-virt runs unmodified native code)
 FRT_INC = -I$(FREERTOS_SRC)include/ -I$(APP_SRC)include/ -I$(FREERTOS_PORT_SRC)
 
 # ============================================================================
@@ -78,6 +78,10 @@ $(OBJDIR):
 partition: $(OBJDIR) $(OBJS) linker.ld
 	$(FRT_LD) -T linker.ld $(OBJS) -o $@
 
+# Local files (hdr.c only)
+$(OBJDIR)%.o: ./%.c
+	$(FRT_CC) -c $(FRT_CFLAGS) $(FRT_INC) $< -o $@
+
 # FreeRTOS core (from original source)
 $(OBJDIR)%.o: $(FREERTOS_SRC)%.c
 	$(FRT_CC) -c $(FRT_CFLAGS) $(FRT_INC) $< -o $@
@@ -98,10 +102,6 @@ $(OBJDIR)%.o: $(APP_SRC)%.c
 	$(FRT_CC) -c $(FRT_CFLAGS) $(FRT_INC) $< -o $@
 
 $(OBJDIR)%.o: $(APP_SRC)%.S
-	$(FRT_CC) -c $(FRT_CFLAGS) $(FRT_INC) $< -o $@
-
-# Local files (hdr.c only)
-$(OBJDIR)%.o: ./%.c
 	$(FRT_CC) -c $(FRT_CFLAGS) $(FRT_INC) $< -o $@
 
 # ============================================================================

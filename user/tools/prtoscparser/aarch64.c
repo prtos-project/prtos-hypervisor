@@ -22,7 +22,7 @@
 #include "prtos_conf.h"
 #include <prtos_inc/arch/asm_offsets.h>
 
-#define _PHYS2VIRT(x) ((prtos_u32_t)(x) + CONFIG_PRTOS_OFFSET - CONFIG_PRTOS_LOAD_ADDR)
+#define _PHYS2VIRT(x) ((prtos_u64_t)(x) + CONFIG_PRTOS_OFFSET - CONFIG_PRTOS_LOAD_ADDR)
 
 prtos_u32_t to_region_flags(char *s) {
     prtos_u32_t flags = 0;
@@ -119,10 +119,23 @@ void check_io_ports(void) {}
 
 #define ROUNDUP(r, v) ((((~(r)) + 1) & ((v)-1)) + (r))
 
+#define VMM_L3_POOL_COUNT (256 * 1024 * 1024 / LPAGE_SIZE)
+
 void arch_mmu_rsv_mem(FILE *out_file) {
 #if defined(CONFIG_AARCH64)
     int i;
     int j;
+    prtos_u64_t frame_start;
+    prtos_u64_t num_l2;
+
+    /* EL2 (S1) page tables: L2 tables for frame area (same as RISC-V pattern) */
+    frame_start = (CONFIG_PRTOS_OFFSET & ~((prtos_u64_t)(1ULL << PTDL1_SHIFT) - 1)) + (1ULL << PTDL1_SHIFT);
+    num_l2 = ((PRTOS_VMAPEND - frame_start + 1) >> PTDL1_SHIFT);
+    rsv_block((unsigned int)(num_l2 * PTDL2SIZE), PTDL2SIZE, "canon-ptdL2");
+
+    /* EL2 (S1) L3 table pool for vm_map_page fine-grained 4KB mappings */
+    rsv_block(VMM_L3_POOL_COUNT * PTDL3SIZE, PTDL3SIZE, "l3 pool");
+
     /* Allocate per-partition stage-2 page tables: L1 + 2×L2 + 8×L3 (each page-aligned) */
     for (i = 0; i < prtos_conf.num_of_partitions; i++) {
         rsv_block(PAGE_SIZE, PAGE_SIZE, "s2 L1 table");
@@ -138,7 +151,7 @@ void arch_mmu_rsv_mem(FILE *out_file) {
             int ma;
             for (ma = 0; ma < (int)prtos_conf_partition_table[i].num_of_physical_memory_areas; ma++)
                 total_mem += prtos_conf_mem_area_table[prtos_conf_partition_table[i].physical_memory_areas_offset + ma].size;
-            if (total_mem >= (64ULL * 1024 * 1024))
+            if (total_mem >= (2ULL * 1024 * 1024))
                 rsv_block(_PRTOS_VGIC_STATE_SIZEOF, ALIGNMENT, "VGIC state");
         }
     }

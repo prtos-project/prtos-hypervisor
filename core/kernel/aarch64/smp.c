@@ -1,122 +1,90 @@
 /*
  * FILE: smp.c
  *
- * Symmetric multi-processor
+ * AArch64 SMP support using PSCI
  *
  * http://www.prtos.org/
  */
-#include <arch/paging.h>
-#include <assert.h>
-#include <boot.h>
-#include <sched.h>
-#include <smp.h>
 
-#define SMP_RM_START_ADDR 0x1000
+#include <processor.h>
+#include <stdc.h>
 
 #ifdef CONFIG_SMP
+#include <boot.h>
+#include <smp.h>
+#include <arch/layout.h>
 
-struct x86_mp_conf x86_mp_conf;
-extern prtos_s32_t u_delay(prtos_u32_t usec);
 extern void setup_cpu_idtable(prtos_u32_t num_of_cpus);
-extern void init_smp_acpi(void);
-extern void init_smp_mpspec(void);
+extern void _secondary_start(void);
+extern prtos_u32_t _boot_cpuid;
+extern prtos_u32_t _boot_cpuid_va;
+extern unsigned long _secondary_start_addr;
+extern unsigned long _secondary_start_addr_va;
 
-prtos_s32_t __VBOOT init_smp(void) {
-//     memset(&x86_mp_conf, 0, sizeof(struct x86_mp_conf));
-// #ifdef CONFIG_SMP_INTERFACE_ACPI
-//     init_smp_acpi();
-// #endif
-// #ifdef CONFIG_SMP_INTERFACE_MPSPEC
-//     init_smp_mpspec();
-// #endif
-    return x86_mp_conf.num_of_cpu;
-}
-
-static prtos_u32_t apic_wait_for_delivery(void) __attribute__((unused));
-static prtos_u32_t apic_wait_for_delivery(void) {
-    prtos_u32_t timeout __attribute__((unused)), send_pending;
-
-    // send_pending = 1;
-    // for (timeout = 0; timeout < 1000 && (send_pending != 0); timeout++) {
-    //     u_delay(100);
-    //     send_pending = lapic_read(APIC_ICR_LOW) & APIC_ICR_BUSY;
-    // }
-
-    return send_pending;
-}
-
-static void wake_up_ap(prtos_u32_t start_eip, prtos_u32_t cpu_id) __attribute__((unused));
-static void wake_up_ap(prtos_u32_t start_eip, prtos_u32_t cpu_id) {
-    prtos_u32_t i __attribute__((unused)), send_status __attribute__((unused)), accept_status __attribute__((unused)), max_lvt __attribute__((unused));
-
-    // lapic_write(APIC_ICR_HIGH, SET_APIC_DEST_FIELD(cpu_id));
-    // lapic_write(APIC_ICR_LOW, APIC_INT_LEVELTRIG | APIC_INT_ASSERT | APIC_DM_INIT);
-    // apic_wait_for_delivery();
-    // u_delay(10000);
-    // lapic_write(APIC_ICR_HIGH, SET_APIC_DEST_FIELD(cpu_id));
-    // lapic_write(APIC_ICR_LOW, APIC_INT_LEVELTRIG | APIC_DM_INIT);
-    // apic_wait_for_delivery();
-
-    // max_lvt = lapic_get_max_lvt();
-
-    // for (i = 0; i < 2; i++) {
-    //     lapic_write(APIC_ESR, 0);
-    //     lapic_read(APIC_ESR);
-    //     lapic_write(APIC_ICR_HIGH, SET_APIC_DEST_FIELD(cpu_id));
-    //     lapic_write(APIC_ICR_LOW, APIC_DM_STARTUP | (start_eip >> 12));
-    //     u_delay(300);
-    //     send_status = apic_wait_for_delivery();
-    //     u_delay(200);
-
-    //     if (max_lvt > 3) {
-    //         lapic_read(APIC_SVR);
-    //         lapic_write(APIC_ESR, 0);
-    //     }
-
-    //     accept_status = lapic_read(APIC_ESR) & 0xEF;
-    //     if (send_status || accept_status) {
-    //         break;
-    //     }
-    // }
-}
-
-static inline void __VBOOT setup_ap_stack(prtos_u32_t ncpu) {
-    // extern struct {
-    //     volatile prtos_u32_t *esp;
-    //     volatile prtos_u16_t ss;
-    // } _sstack;
-    // prtos_u32_t *ptr;
-
-    // ptr = (prtos_u32_t *)((prtos_u32_t)_sstack.esp + CONFIG_KSTACK_SIZE);
-    // *(--ptr) = (prtos_u32_t)_sstack.esp;
-    // *(--ptr) = ncpu;
-    // _sstack.esp = ptr;
+/*
+ * PSCI CPU_ON (SMC32 convention):
+ *   Function ID: 0xC4000003 (PSCI_0_2_FN64_CPU_ON)
+ *   x1 = target MPIDR
+ *   x2 = entry_point_address (physical)
+ *   x3 = context_id (passed as x0 to target)
+ */
+static long psci_cpu_on(unsigned long target_mpidr, unsigned long entry_point,
+                        unsigned long context_id) {
+    register unsigned long x0 __asm__("x0") = 0xC4000003UL;  /* CPU_ON 64-bit */
+    register unsigned long x1 __asm__("x1") = target_mpidr;
+    register unsigned long x2 __asm__("x2") = entry_point;
+    register unsigned long x3 __asm__("x3") = context_id;
+    __asm__ __volatile__("smc #0"
+                         : "+r"(x0)
+                         : "r"(x1), "r"(x2), "r"(x3)
+                         : "memory");
+    return (long)x0;
 }
 
 void __VBOOT setup_smp(void) {
-    // extern const prtos_u8_t smp_start16[], smp_start16_end[];
-    // extern volatile prtos_u8_t ap_ready[];
-    // prtos_u32_t start_eip, ncpu;
+    prtos_u32_t ncpus, cpu;
+    long ret;
 
-    // start_eip = SMP_RM_START_ADDR;
+    ncpus = prtos_conf_table.hpv.num_of_cpus;
+    if (ncpus > CONFIG_NO_CPUS)
+        ncpus = CONFIG_NO_CPUS;
+    SET_NRCPUS(ncpus);
 
-    // flush_tlb();
-    // SET_NRCPUS((GET_NRCPUS() < prtos_conf_table.hpv.num_of_cpus) ? GET_NRCPUS() : prtos_conf_table.hpv.num_of_cpus);
-    // if (GET_NRCPUS() > 1) {
-    //     setup_cpu_idtable(GET_NRCPUS());
-    //     for (ncpu = 0; ncpu < GET_NRCPUS(); ncpu++) {
-    //         /* This code assumes that the bootstrap cpu will be found here */
-    //         if (x86_mp_conf.cpu[ncpu].enabled && !x86_mp_conf.cpu[ncpu].bsp) {
-    //             kprintf("Waking up (%d) AP CPU\n", ncpu);
-    //             ap_ready[0] &= ~0x80;
-    //             setup_ap_stack(ncpu);
-    //             memcpy((prtos_u8_t *)start_eip, (prtos_u8_t *)_PHYS2VIRT(smp_start16), smp_start16_end - smp_start16);
-    //             wake_up_ap(start_eip, x86_mp_conf.cpu[ncpu].id);
-    //             while ((ap_ready[0] & 0x80) != 0x80)
-    //                 ; /*Wait application cpu start*/
-    //         }
-    //     }
-    // }
+    if (ncpus <= 1)
+        return;
+
+    setup_cpu_idtable(ncpus);
+
+    /* Use _secondary_start_addr_va (VA alias of _secondary_start_addr in .boot.data)
+     * to get the physical address stored at boot time. */
+    for (cpu = 1; cpu < ncpus; cpu++) {
+        kprintf("Starting secondary CPU %d\n", cpu);
+        /* MPIDR = cpu (Aff0), context_id = cpu (logical CPU ID) */
+        ret = psci_cpu_on(cpu, _secondary_start_addr_va, cpu);
+        if (ret != 0)
+            kprintf("Failed to start CPU %d: error %ld\n", cpu, ret);
+    }
+}
+
+prtos_s32_t __VBOOT init_smp(void) {
+    return 0;
+}
+
+/*
+ * Send IPI via GICv3 ICC_SGI1R_EL1
+ * SGI INTID = GIC_SGI_IPI (0)
+ * Target specified by Aff0 target list
+ */
+void aarch64_send_ipi_to(unsigned long cpu) {
+    /* ICC_SGI1R_EL1: Aff3=0, Aff2=0, Aff1=0, INTID in bits[27:24], TargetList in bits[15:0] */
+    prtos_u64_t val = ((prtos_u64_t)GIC_SGI_IPI << 24) | (1UL << cpu);
+    __asm__ __volatile__("msr S3_0_C12_C11_5, %0\n\tisb" : : "r"(val));  /* ICC_SGI1R_EL1 */
+}
+
+void aarch64_send_ipi_all_others(void) {
+    /* ICC_SGI1R_EL1 with IRM=1 (all PEs other than self) */
+    prtos_u64_t val = ((prtos_u64_t)GIC_SGI_IPI << 24) | (1ULL << 40);  /* IRM bit */
+    __asm__ __volatile__("msr S3_0_C12_C11_5, %0\n\tisb" : : "r"(val));  /* ICC_SGI1R_EL1 */
 }
 
 #else

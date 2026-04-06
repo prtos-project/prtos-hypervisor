@@ -98,6 +98,7 @@
 		reg = <0x0 0x0a000000 0x0 0x200>;
 		interrupts = <0 34 1>;
 		/* SPI 34 (INTID 66), edge-triggered */
+		status = "disabled";
 	};
 
 	clk24mhz: clk24mhz {

@@ -48,3 +48,64 @@ start_stack:
 .global end_stack
 end_stack:
 #endif
+
+#ifdef CONFIG_AARCH64
+.global _start, start
+_start:
+start:
+        /* x0 = pointer to partition_control_table provided by hypervisor */
+        adrp    x1, part_ctrl_table_ptr
+        str     x0, [x1, :lo12:part_ctrl_table_ptr]
+
+        adrp    x1, end_stack
+        add     sp, x1, :lo12:end_stack
+
+        bl      main_pbl
+        /* main_pbl returns entry point in x0 */
+        mov     x4, x0
+
+        adrp    x1, part_ctrl_table_ptr
+        ldr     x0, [x1, :lo12:part_ctrl_table_ptr]
+
+        br      x4
+1:
+        wfe
+        b       1b
+
+.bss
+.global start_stack
+start_stack:
+        .zero STACK_SIZE
+.global end_stack
+end_stack:
+#endif
+
+#ifdef CONFIG_riscv64
+.global _start, start
+_start:
+start:
+        /* a0 = pointer to partition_control_table provided by hypervisor */
+        la      t0, part_ctrl_table_ptr
+        sd      a0, 0(t0)
+
+        la      sp, end_stack
+
+        call    main_pbl
+        /* main_pbl returns entry point in a0 */
+        mv      t0, a0
+
+        la      t1, part_ctrl_table_ptr
+        ld      a0, 0(t1)
+
+        jr      t0
+1:
+        wfi
+        j       1b
+
+.bss
+.global start_stack
+start_stack:
+        .zero STACK_SIZE
+.global end_stack
+end_stack:
+#endif

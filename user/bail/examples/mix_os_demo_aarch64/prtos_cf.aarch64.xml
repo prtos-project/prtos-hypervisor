@@ -3,7 +3,7 @@
 
   Memory layout:
     Partition 0 (Linux):    IPA 0x10000000, 256MB, 3 vCPUs on pCPU 0-2
-    Partition 1 (FreeRTOS): IPA 0x40000000, 64MB, 1 vCPU on pCPU 3
+    Partition 1 (FreeRTOS): IPA 0x6000000, 2MB, 1 vCPU on pCPU 3
     Shared memory:          IPA 0x30000000, 1MB (both partitions)
 
   Shared memory is used for FreeRTOS → Linux inter-partition communication
@@ -72,7 +72,7 @@
         </Partition>
         <Partition id="1" name="FreeRTOS_RTOS" flags="system" console="Uart">
             <PhysicalMemoryAreas>
-                <Area start="0x40000000" size="64MB" />
+                <Area start="0x6000000" size="64MB" />
                 <Area start="0x30000000" size="1MB" flags="shared"/>
             </PhysicalMemoryAreas>
         </Partition>

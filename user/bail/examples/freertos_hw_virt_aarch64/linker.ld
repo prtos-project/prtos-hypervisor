@@ -1,11 +1,11 @@
 ENTRY(_boot)
 
-STACKTOP = 0x41000000;
+STACKTOP = 0x6200000;
 
 SECTIONS
 {
 	/* Match native FreeRTOS load address */
-	. = 0x40000000;
+	. = 0x6000000;
 	__start = .;
 
 	/* PRTOS image header (required by prtoseformat) */

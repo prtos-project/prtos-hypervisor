@@ -1,7 +1,7 @@
 /*
  * FILE: io.h
  *
- * I/O port stubs for aarch64 (x86 port I/O not applicable)
+ * I/O stubs for AArch64 (no x86-style port I/O)
  *
  * http://www.prtos.org/
  */
@@ -13,7 +13,7 @@
 #error Kernel file, do not include.
 #endif
 
-/* aarch64 has no x86-style port I/O; all macros are no-ops */
+/* AArch64 uses MMIO, no port I/O */
 #define io_delay()
 #define out_byte(val, port)
 #define out_word(val, port)
