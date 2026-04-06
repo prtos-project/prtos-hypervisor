@@ -1,10 +1,9 @@
 /*
  * FILE: spinlock.h
  *
- * Spin locks related stuffs
+ * AArch64 spin locks
  *
  * http://www.prtos.org/
- *
  */
 
 #ifndef _PRTOS_ARCH_SPINLOCK_H_
@@ -31,15 +30,15 @@ typedef struct {
 
 static inline void __arch_barrier_write_mask(arch_barrier_mask_t *bm, prtos_u8_t bitMask) {
 #ifdef CONFIG_SMP
-    prtos_u8_t tmp;
-    __asm__ __volatile__("1:\n"
-                         "ldxr   %w0, [%1]\n"      // 原子加载 bm->mask 到 tmp
-                         "orr    %w0, %w0, %w2\n"  // tmp |= bitMask
-                         "stxr   w3, %w0, [%1]\n"  // 原子存储回 bm->mask，失败则重试
-                         "cbnz   w3, 1b\n"
-                         : "=&r"(tmp)                    // %0 输出：tmp，early clobber
-                         : "r"(&bm->mask), "r"(bitMask)  // %1 输入：bm->mask 的地址，%2 输入：bitMask
-                         : "w3", "memory");
+    prtos_u32_t tmp, tmp2;
+    __asm__ __volatile__(
+        "1: ldxrb %w0, [%2]\n"
+        "   orr   %w0, %w0, %w3\n"
+        "   stxrb %w1, %w0, [%2]\n"
+        "   cbnz  %w1, 1b\n"
+        : "=&r"(tmp), "=&r"(tmp2)
+        : "r"(&bm->mask), "r"((prtos_u32_t)bitMask)
+        : "memory");
 #endif
 }
 
@@ -54,17 +53,17 @@ static inline int __arch_barrier_check_mask(arch_barrier_mask_t *bm, prtos_u8_t 
 
 static inline void __arch_spin_lock(arch_spin_lock_t *lock) {
 #ifdef CONFIG_SMP
-    arch_spin_lock_t const ONE = __ARCH_SPINLOCK_LOCKED;
-    arch_spin_lock_t tmp;
-
-    asm volatile("1:\n\t"
-                 "ldaxr %w0, %1 \n\t"
-                 "cbnz %w0, 1b \n\t"
-                 "stxr %w0, %w2, %1 \n\t"
-                 "cbnz %w0, 1b \n\t"
-                 : "=&r"(tmp), "+Q"(*lock)
-                 : "r"(ONE)
-                 : "memory");
+    prtos_u32_t tmp;
+    __asm__ __volatile__(
+        "   sevl\n"
+        "1: wfe\n"
+        "   ldaxr %w0, [%1]\n"
+        "   cbnz  %w0, 1b\n"
+        "   stxr  %w0, %w2, [%1]\n"
+        "   cbnz  %w0, 1b\n"
+        : "=&r"(tmp)
+        : "r"(&lock->lock), "r"(1)
+        : "memory");
 #else
     lock->lock = 1;
 #endif
@@ -72,7 +71,9 @@ static inline void __arch_spin_lock(arch_spin_lock_t *lock) {
 
 static inline void __arch_spin_unlock(arch_spin_lock_t *lock) {
 #ifdef CONFIG_SMP
-    asm volatile("stlr wzr, %0\n\t" ::"Q"(*lock) : "memory");
+    __asm__ __volatile__(
+        "stlr %w0, [%1]\n"
+        : : "r"(0), "r"(&lock->lock) : "memory");
 #else
     lock->lock = 0;
 #endif
@@ -80,41 +81,31 @@ static inline void __arch_spin_unlock(arch_spin_lock_t *lock) {
 
 static inline prtos_s32_t __arch_spin_try_lock(arch_spin_lock_t *lock) {
 #ifdef CONFIG_SMP
-    prtos_s32_t tmp = 0;
-    prtos_s32_t res;
-
-    asm volatile("ldaxr   %w0, [%2]\n"       // Load the current lock value with acquire semantics
-                 "cbnz    %w0, 1f\n"         // If lock is already held (value != 0), branch to fail
-                 "mov     %w0, #1\n"         // Prepare to set lock value to 1
-                 "stlxr   %w1, %w0, [%2]\n"  // Attempt to store the new value atomically
-                 "cbnz    %w1, 1f\n"         // If store failed, branch to fail
-                 "mov     %w0, #0\n"         // Set return value to 0 (success)
-                 "b       2f\n"              // Branch to exit
-                 "1:\n"                      // Set return value of the lock
-                 "2:\n"
-                 : "=&r"(tmp), "=&r"(res)  // Outputs
-                 : "r"(&lock->lock)        // Inputs
-                 : "memory");
-
+    prtos_u32_t tmp;
+    __asm__ __volatile__(
+        "ldaxr %w0, [%1]\n"
+        "cbnz  %w0, 1f\n"
+        "stxr  %w0, %w2, [%1]\n"
+        "1:\n"
+        : "=&r"(tmp)
+        : "r"(&lock->lock), "r"(1)
+        : "memory");
     return tmp == 0;
 #else
-    prtos_s8_t oldval;
-    oldval = lock->lock;
+    if (lock->lock) return 0;
     lock->lock = 1;
-    return oldval == 0;
+    return 1;
 #endif
 }
 
-#define __arch_spin_is_locked(x) (*(volatile prtos_s8_t *)(&(x)->lock) <= 0)
+static inline prtos_s32_t __arch_spin_is_locked(arch_spin_lock_t *lock) {
+    return lock->lock != 0;
+}
 
 #define hw_save_flags_cli(flags) \
     {                            \
         hw_save_flags(flags);    \
         hw_cli();                \
     }
-
-static inline prtos_s32_t hw_is_sti(void) {
-    return local_fiq_is_enabled();
-}
 
 #endif

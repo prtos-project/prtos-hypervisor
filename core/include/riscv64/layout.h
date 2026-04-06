@@ -9,8 +9,6 @@
 #ifndef __LAYOUT_H__
 #define __LAYOUT_H__
 
-#define NCPU 1
-
 /* 4K page size */
 #define SZ_4K 0x00001000
 #define PAGESIZE SZ_4K

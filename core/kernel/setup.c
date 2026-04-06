@@ -219,26 +219,6 @@ static void __VBOOT load_conf_table(void) {
 #endif
 }
 
-#if defined(CONFIG_AARCH64)
-#include <arch/layout.h>
-__attribute__((aligned(SZ_4K))) char _kernel_sp_stack[SZ_4K * NCPU] = {0};
-
-struct init_info {
-    /* Pointer to the stack, used by head.S when entering in C */
-    unsigned char *stack;
-    /* Logical CPU ID, used by start_secondary */
-    unsigned int cpuid;
-};
-
-__attribute__((aligned(CONFIG_KSTACK_SIZE))) char cpu0_boot_stack_prtos[CONFIG_KSTACK_SIZE] = {0};
-
-/* Boot cpu data */
-struct init_info init_data_prtos = {
-    .stack = cpu0_boot_stack_prtos,
-};
-
-#endif
-
 void __VBOOT setup_kernel(prtos_s32_t cpu_id, kthread_t *idle) {
     ASSERT(!hw_is_sti());
     ASSERT(GET_CPU_ID() == 0);
@@ -250,40 +230,12 @@ void __VBOOT setup_kernel(prtos_s32_t cpu_id, kthread_t *idle) {
 
     load_conf_table();
     init_rsv_mem();
-
-#if defined(CONFIG_AARCH64)
-    /* AArch64 early platform init: page tables, traps, GIC, timers */
-    {
-        extern void setup_pagetables(unsigned long boot_phys_offset);
-        extern void init_traps(void);
-        extern void init_IRQ(void);
-        void setup_mm(void);
-        void vm_init(void);
-        void smp_clear_cpu_maps(void);
-        void init_percpu_areas_prtos(void);
-        void init_global_clock_for_prtos(void);
-
-        unsigned long boot_phys_offset = -CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR;
-
-        init_percpu_areas_prtos();
-        init_traps();
-        setup_pagetables(boot_phys_offset);
-        smp_clear_cpu_maps();
-        setup_mm();
-        vm_init();
-        init_IRQ();
-        init_global_clock_for_prtos();
-    }
-#endif
-
-    /* Common init flow (shared by x86 and aarch64) */
     early_setup_arch_common();
     setup_virt_mm();
     setup_phys_mm();
     setup_arch_common();
     create_local_info();
     setup_irqs();
-
     setup_kdev();
     setup_obj_dir();
 
@@ -294,55 +246,10 @@ void __VBOOT setup_kernel(prtos_s32_t cpu_id, kthread_t *idle) {
     setup_sys_clock();
     local_setup(cpu_id, idle);
 
-#if defined(CONFIG_AARCH64)
-    /* AArch64 post-init: GIC, SMP, timers, idle domains */
-    {
-        void gicv3_dt_preinit_prtos(void);
-        void processor_id(void);
-        void smp_init_cpus_prtos(void);
-        unsigned int smp_get_max_cpus(void);
-        int init_time_prtos(void);
-        void gic_init(void);
-        void tasklet_subsys_init(void);
-        void init_maintenance_interrupt_prtos(void);
-        void init_timer_interrupt_prtos(void);
-        void timer_init(void);
-        void enable_timer_prtos(void);
-        void init_idle_domain_prtos(void);
-        void rcu_init(void);
-        void smp_prepare_cpus(void);
-        void prtos_alloc_secondary_idle_kthreads(void);
-        void kick_cpus_prtos(void);
-
-        gicv3_dt_preinit_prtos();
-        processor_id();
-
-        smp_init_cpus_prtos();
-        eprintf("SMP: Allowing %u CPUs\n", smp_get_max_cpus());
-
-        init_time_prtos();
-        gic_init();
-        tasklet_subsys_init();
-        init_maintenance_interrupt_prtos();
-        init_timer_interrupt_prtos();
-        timer_init();
-        init_idle_domain_prtos();
-        rcu_init();
-
-        local_irq_enable();
-        smp_prepare_cpus();
-
-        prtos_alloc_secondary_idle_kthreads();
-        kick_cpus_prtos();
-        enable_timer_prtos();
-    }
-#else
 #ifdef CONFIG_SMP
     setup_smp();
     barrier_wait_mask(&smp_barrier_mask);
 #endif
-#endif
-
     setup_partitions();
 #if CONFIG_DEBUG
     rsv_mem_debug();
@@ -364,41 +271,3 @@ void __VBOOT init_secondary_cpu(prtos_s32_t cpu_id, kthread_t *idle) {
 
 #endif
 
-#ifdef CONFIG_AARCH64
-/*
- * prtos_init_secondary_cpu - Initialize PRTOS scheduling on a secondary CPU.
- *
- * Called from idle_loop on AArch64 secondary CPUs that have
- * PRTOS scheduling assignments. Sets up the local processor state
- * and enables the PRTOS scheduler.
- *
- * Returns 1 if this CPU has PRTOS scheduling work, 0 otherwise.
- */
-static kthread_t *secondary_idle_kthreads[CONFIG_NO_CPUS];
-
-int prtos_init_secondary_cpu(unsigned int cpu) {
-    if (cpu == 0 || cpu >= prtos_conf_table.hpv.num_of_cpus)
-        return 0;
-
-    if (!secondary_idle_kthreads[cpu])
-        return 0;
-
-    local_setup(cpu, secondary_idle_kthreads[cpu]);
-    GET_LOCAL_PROCESSOR()->sched.flags |= LOCAL_SCHED_ENABLED;
-    return 1;
-}
-
-void prtos_alloc_secondary_idle_kthreads(void) {
-    prtos_s32_t cpu;
-    for (cpu = 1; cpu < prtos_conf_table.hpv.num_of_cpus; cpu++) {
-        kthread_t *k;
-        GET_MEMAZ(k, sizeof(kthread_t), ALIGNMENT);
-        GET_MEMAZ(k->ctrl.g, sizeof(struct guest), ALIGNMENT);
-        k->ctrl.magic1 = k->ctrl.magic2 = KTHREAD_MAGIC;
-        k->ctrl.g->id = 0xfe00 | cpu;
-        dyn_list_init(&k->ctrl.local_active_ktimers);
-        k->ctrl.lock = SPINLOCK_INIT;
-        secondary_idle_kthreads[cpu] = k;
-    }
-}
-#endif

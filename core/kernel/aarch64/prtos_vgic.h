@@ -2,8 +2,7 @@
  * FILE: prtos_vgic.h
  *
  * Standalone GICv3 virtual distributor/redistributor emulation for PRTOS
- * hw-virt partitions (Linux guests).  Separate from PRTOS's VGIC which
- * requires full domain/vcpu infrastructure.
+ * hw-virt partitions (Linux guests).
  *
  * http://www.prtos.org/
  */
@@ -23,14 +22,10 @@
 /* GICv3 MMIO regions (QEMU virt standard addresses) */
 #define PRTOS_VGIC_GICD_BASE    0x08000000ULL
 #define PRTOS_VGIC_GICD_SIZE    0x10000ULL
-#define PRTOS_VGIC_GICC_BASE    0x08010000ULL   /* GICv2 CPU interface (emulated) */
+#define PRTOS_VGIC_GICC_BASE    0x08010000ULL
 #define PRTOS_VGIC_GICC_SIZE    0x10000ULL
 #define PRTOS_VGIC_GICR_BASE   0x080A0000ULL
-#define PRTOS_VGIC_GICR_STRIDE 0x20000ULL   /* per-vCPU: RD_base(64KB) + SGI_base(64KB) */
-/* Cover the full GICR region declared in the guest DTS (0x200000 bytes).
- * Linux's GICv3 driver iterates through the entire region probing
- * GICR_TYPER until it finds Last=1.  Out-of-range accesses return
- * GICR_TYPER with Last=1 so the driver stops. */
+#define PRTOS_VGIC_GICR_STRIDE 0x20000ULL
 #define PRTOS_VGIC_GICR_SIZE   0x200000ULL
 
 /* GICv3 List Register constants */
@@ -42,7 +37,6 @@
 #define ICH_LR_PRIORITY_SHIFT   48
 #define ICH_LR_PRIORITY_MASK    (0xFFULL << ICH_LR_PRIORITY_SHIFT)
 
-/* Number of list registers (typical for GICv3) */
 #define PRTOS_VGIC_NR_LRS       4
 
 /* Per-interrupt state */
@@ -53,7 +47,7 @@ struct prtos_vgic_irq {
     prtos_u8_t priority;
     prtos_u8_t config;       /* 0=level, 2=edge */
     prtos_u8_t group;        /* 0=group0, 1=group1 */
-    prtos_u8_t target_vcpu;  /* IROUTER Aff0 (simplified) */
+    prtos_u8_t target_vcpu;
     prtos_u8_t _pad;
 };
 
@@ -61,46 +55,32 @@ struct prtos_vgic_irq {
 struct prtos_vgic_vcpu {
     prtos_u32_t gicr_ctlr;
     prtos_u32_t gicr_waker;
-    struct prtos_vgic_irq sgis[PRTOS_VGIC_NR_SGIS];  /* INTID 0-15 */
-    struct prtos_vgic_irq ppis[PRTOS_VGIC_NR_PPIS];  /* INTID 16-31 */
+    struct prtos_vgic_irq sgis[PRTOS_VGIC_NR_SGIS];
+    struct prtos_vgic_irq ppis[PRTOS_VGIC_NR_PPIS];
 };
 
 /* Per-partition VGIC state */
 struct prtos_vgic_state {
-    prtos_u32_t gicd_ctlr;       /* ARE_NS=1, EnableGrp1NS */
-    prtos_u32_t num_irqs;        /* Total interrupt lines */
+    prtos_u32_t gicd_ctlr;
+    prtos_u32_t num_irqs;
     prtos_u32_t num_vcpus;
-    prtos_u32_t gicc_bpr;        /* Shadow of GICC_BPR (hw clamps minimum) */
-    struct prtos_vgic_irq spis[PRTOS_VGIC_NR_SPIS];  /* INTID 32-127 */
+    prtos_u32_t gicc_bpr;
+    struct prtos_vgic_irq spis[PRTOS_VGIC_NR_SPIS];
     struct prtos_vgic_vcpu vcpu[PRTOS_VGIC_MAX_VCPUS];
 };
 
-/* Forward declarations */
 struct cpu_user_regs;
 
-/*
- * Initialize VGIC state for a partition.
- */
 void prtos_vgic_init(struct prtos_vgic_state *vgic, prtos_u32_t num_vcpus);
 
-/*
- * Route a stage-2 data abort to the VGIC MMIO emulator.
- * Parameters are pre-decoded from ESR_EL2 syndrome by the caller.
- * Returns 0 if handled, -1 if the GPA is not a VGIC region.
- */
 int prtos_mmio_dispatch(struct cpu_user_regs *regs, prtos_u64_t gpa,
                         int is_write, int reg, int size);
 
-/*
- * Flush pending virtual IRQs to ICH_LR registers for the current vCPU.
- * Called from leave_hypervisor_to_guest() before ERET.
- */
 void prtos_vgic_flush_lrs_current(void);
 
-/*
- * Inject a virtual SGI (IPI) to a target vCPU.
- */
 void prtos_vgic_inject_sgi(struct prtos_vgic_state *vgic,
                             prtos_u32_t target_vcpu, prtos_u32_t intid);
+
+void prtos_vgic_inject_spi(struct prtos_vgic_state *vgic, prtos_u32_t intid);
 
 #endif /* _PRTOS_VGIC_H_ */

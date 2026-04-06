@@ -100,14 +100,8 @@ void rsw_main(void) {
     xprintf("[RSW] Config signature OK\n");
 
     // Load PRTOS Core file to the specified memory address
-#if defined(CONFIG_AARCH64)
-    prtos_address_t OFFSET = -CONFIG_PRTOS_OFFSET + CONFIG_PRTOS_LOAD_ADDR;
-    prtos_hdr = load_pef_file(&pef_file, 0, 0, 0) + OFFSET;
-    hpv_entry_point[0] = pef_file.hdr->entry_point + OFFSET;
-#else
     prtos_hdr = load_pef_file(&pef_file, 0, 0, 0);
     hpv_entry_point[0] = pef_file.hdr->entry_point;
-#endif
     xprintf("[RSW] PRTOS core loaded, hdr=0x%x, entry=0x%x\n", (prtos_u32_t)(prtos_address_t)prtos_hdr, (prtos_u32_t)hpv_entry_point[0]);
     if ((prtos_hdr->start_signature != PRTOS_EXEC_HYP_MAGIC) || (prtos_hdr->end_signature != PRTOS_EXEC_HYP_MAGIC)) {
         xprintf("[RSW] prtos signature not found (start=0x%x, end=0x%x)\n", prtos_hdr->start_signature, prtos_hdr->end_signature);
@@ -186,6 +180,10 @@ void rsw_main(void) {
         prtos_conf_boot_partition_table[container.partition_table[e].id].entry_point = pef_file.hdr->entry_point;
         prtos_conf_boot_partition_table[container.partition_table[e].id].image_start = (prtos_address_t)pef_file.hdr;
         prtos_conf_boot_partition_table[container.partition_table[e].id].img_size = pef_file.hdr->file_size;
+        xprintf("[RSW] Partition[%d] entry=0x%lx boot_table=0x%lx\n",
+                container.partition_table[e].id,
+                (unsigned long)pef_file.hdr->entry_point,
+                (unsigned long)&prtos_conf_boot_partition_table[container.partition_table[e].id]);
         // Loading additional custom files
         min = (container.partition_table[e].num_of_custom_files > part_hdr->num_of_custom_files) ? part_hdr->num_of_custom_files
                                                                                                  : container.partition_table[e].num_of_custom_files;

@@ -1,7 +1,7 @@
 /*
  * FILE: arch_types.h
  *
- * Types defined by the architecture
+ * Types defined by the AArch64 architecture
  *
  * http://www.prtos.org/
  */
@@ -30,7 +30,7 @@ typedef long long prtos_s64_t;
 #define MAX_S64 0x7FFFFFFFFFFFFFFFLL
 
 // Extended types
-#define PRTOS_LOG2_WORD_SZ 6  //  for 64 bit word width
+#define PRTOS_LOG2_WORD_SZ 6  // for 64 bit word width
 typedef prtos_s64_t prtos_time_t;
 #define MAX_PRTOSTIME MAX_S64
 typedef long prtos_long_t;

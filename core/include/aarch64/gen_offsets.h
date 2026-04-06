@@ -1,7 +1,7 @@
 /*
  * FILE: gen_offsets.h
  *
- * ASM offsets, this file only can be included from asm-offset.c
+ * ASM offsets for AArch64
  *
  * http://www.prtos.org/
  */
@@ -26,32 +26,25 @@
 #include "../../kernel/aarch64/prtos_vgic.h"
 
 static inline void generate_offsets(void) {
-    // local_processor_t
+    /* local_processor_t */
     DEFINE(local_sched, offsetof(local_processor_t, sched), );
     DEFINE(current_kthread, offsetof(local_processor_t, sched) + offsetof(local_sched_t, current_kthread), );
 
-    // kthread_t
+    /* kthread_t */
     DEFINE(ctrl, offsetof(kthread_t, ctrl), );
 
-    // guest
+    /* guest */
     DEFINE(part_ctrl_table, offsetof(struct guest, part_ctrl_table), );
 
-    // struct __kthread
+    /* struct __kthread */
     DEFINE(g, offsetof(struct __kthread, g), );
     DEFINE(kstack, offsetof(struct __kthread, kstack), );
     DEFINE(irq_cpu_ctxt, offsetof(struct __kthread, irq_cpu_ctxt), );
 
-    // gctrl_t
+    /* partition_control_table_t */
     DEFINE(id, offsetof(partition_control_table_t, id), );
-    // DEFINE(iflags, offsetof(partition_control_table_t, iflags), );
-    //  DEFINE(flags, offsetof(cpu_ctxt_t, flags), );
-    //  DEFINE(cs, offsetof(cpu_ctxt_t, cs), );
-    //  DEFINE(ax, offsetof(cpu_ctxt_t, ax), );
-    //  DEFINE(err_code, offsetof(cpu_ctxt_t, err_code), );
-    //  DEFINE(prev, offsetof(cpu_ctxt_t, prev), );
-    //  DEFINE(local_cpu_cpu_ctxt, offsetof(local_cpu_t, cpu_ctxt),);
-    //  DEFINE(local_time_flags, offsetof(local_time_t, flags),);
-    //  sizeof
+
+    /* sizeof */
     DEFINE2(kthread_t, sizeof(kthread_t), );
     DEFINE2(kthreadptr_t, sizeof(kthread_t *), );
     DEFINE2(partition_t, sizeof(partition_t), );
@@ -70,10 +63,10 @@ static inline void generate_offsets(void) {
     DEFINE2(partition_control_table_t, sizeof(partition_control_table_t), );
     DEFINE2(prtos_physical_mem_map, sizeof(struct prtos_physical_mem_map), );
     DEFINE2(local_time_t, sizeof(local_time_t), );
+    DEFINE2(prtos_vgic_state, sizeof(struct prtos_vgic_state), );
 #ifdef CONFIG_SMP
     DEFINE2(local_processor_t, sizeof(local_processor_t), );
 #endif
-    DEFINE2(prtos_vgic_state, sizeof(struct prtos_vgic_state), );
 }
 
 #endif

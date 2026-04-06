@@ -42,6 +42,29 @@ static inline void do_preemption(void) {
 
     do_nop();
 
+#ifdef CONFIG_AARCH64
+    /* AArch64: call schedule() unconditionally so that newly READY
+     * kthreads (e.g. from PSCI CPU_ON) are picked up quickly.
+     * Also process the CNTHP timer if it expired. */
+    {
+        prtos_u64_t _cval, _pct;
+        __asm__ __volatile__("mrs %0, cnthp_cval_el2" : "=r"(_cval));
+        __asm__ __volatile__("mrs %0, cntpct_el0" : "=r"(_pct));
+
+        if (_pct >= _cval && _cval != 0) {
+            hw_cli();
+            extern timer_handler_t aarch64_timer_handler;
+            if (aarch64_timer_handler)
+                aarch64_timer_handler();
+            hw_sti();
+        }
+        hw_cli();
+        set_sched_pending();
+        schedule();
+        hw_sti();
+    }
+#endif
+
     hw_cli();
     for (e = 0; e < HWIRQS_VECTOR_SIZE; e++) {
         hw_irq_set_mask(e, info->sched.current_kthread->ctrl.irq_mask[e]);

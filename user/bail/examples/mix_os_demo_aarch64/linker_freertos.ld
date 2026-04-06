@@ -1,11 +1,11 @@
 ENTRY(_boot)
 
-STACKTOP = 0x41000000;
+STACKTOP = 0x6200000;
 
 SECTIONS
 {
-	/* Partition 0 IPA base: 0x40000000 (64MB area) */
-	. = 0x40000000;
+	/* Partition 1 IPA base: 0x6000000 (2MB area) */
+	. = 0x6000000;
 	__start = .;
 
 	.prtos_image_hdr : { KEEP(*(.prtos_image_hdr)) }

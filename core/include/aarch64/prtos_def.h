@@ -1,7 +1,7 @@
 /*
  * FILE: prtos_def.h
  *
- * prtos's ia32 hardware configuration
+ * AArch64 hardware configuration
  *
  * http://www.prtos.org/
  */
@@ -12,7 +12,7 @@
 #ifdef _PRTOS_KERNEL_
 
 #define __ARCH_MEMCPY
-#define NR_PPAG 3
+#define NR_PPAG 4
 
 #endif
 
