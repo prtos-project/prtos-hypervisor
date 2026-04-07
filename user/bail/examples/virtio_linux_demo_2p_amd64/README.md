@@ -6,6 +6,8 @@ This demo demonstrates **Virtio device virtualization** on the PRTOS Type-1 Hype
 
 The **System Partition** owns all hardware resources (PCI, legacy I/O, IRQs) and runs virtio backend daemons that serve virtualized devices to the **Guest Partition** via shared memory regions. The Guest runs a **userspace frontend daemon** (`virtio_frontend`) that bridges the custom shared-memory protocol to standard Linux devices (`/dev/vda` via NBD, `/dev/hvc0` via PTY, `tap0`/`tap1`/`tap2` via TUN/TAP). Both partitions run full Linux (kernel 6.19.9) with dual-console support: UART for System, VGA+telnet for Guest. All services auto-start via init scripts.
 
+**Guest Virtio Frontend**: Standard `virtio-mmio` kernel drivers cannot be used because (1) the kernel's MMIO cmdline parser rejects `irq=0`, and (2) PRTOS VMX run loop does not inject IPVI doorbells as external interrupts. Instead, a userspace daemon (`virtio_frontend`) bridges shared memory to standard Linux devices via NBD (block), PTY (console), and TUN/TAP (network) using polling.
+
 ## Architecture
 
 ```
@@ -376,7 +378,6 @@ bash scripts/run_test.sh --arch amd64 check-all
 - **HPET disabled**: Both kernels use `nokaslr noapic nolapic` to avoid hardware timer and interrupt controller sharing issues between partitions.
 - **Quiet System boot**: System kernel cmdline includes `quiet loglevel=0` to suppress boot messages for clean login experience.
 - **PCI legacy mode**: Demo targets add QEMU PCI devices with `disable-modern=on,vectors=0` to force legacy INTx. Both MSI-X (`vectors=0`) and modern virtio (`disable-modern=on`) are disabled because PRTOS does not support MSI-X routing to L2 partitions.
-- **Guest Virtio Frontend**: Standard `virtio-mmio` kernel drivers cannot be used because (1) the kernel's MMIO cmdline parser rejects `irq=0`, and (2) PRTOS VMX run loop does not inject IPVI doorbells as external interrupts. Instead, a userspace daemon (`virtio_frontend`) bridges shared memory to standard Linux devices via NBD (block), PTY (console), and TUN/TAP (network) using polling.
 - **Networking**: Each virtio-net instance uses a pair of TUN/TAP devices (one on System, one on Guest) bridged through the shared memory packet ring. The backend creates `/dev/net/tun` via `mknod` and opens TAP devices for all 3 instances. IP addresses are assigned by init scripts.
 - **Static linking**: `virtio_backend`, `virtio_frontend`, and `prtos_manager` are all statically linked for portability inside the partition rootfs.
 - **Auto-start**: Both partitions use Buildroot init scripts (`S99virtio_backend`, `S99virtio_guest`) to automatically start all services at boot. No manual intervention is required.
