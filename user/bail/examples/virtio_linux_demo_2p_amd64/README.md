@@ -20,15 +20,15 @@ The **System Partition** owns all hardware resources (PCI, legacy I/O, IRQs) and
 │  │ 128MB @ 0x6000000     │  │ 128MB @ 0xE000000      │         │
 │  │ console=ttyS0 (UART)  │  │ console=tty0 (VGA)     │         │
 │  │                       │  │ + ttyS1 (COM2/telnet)  │         │
-│  │ Services (auto-start): │  │                        │         │
+│  │ Services (auto-start): │  │                       │         │
 │  │ - prtos_manager       │  │ Virtio Frontend:       │         │
 │  │ - virtio_backend      │  │ - virtio_frontend      │         │
 │  │   - Console backend   │  │   - NBD (/dev/vda)     │         │
 │  │   - 3x Net backend    │  │   - PTY (/dev/hvc0)    │         │
 │  │   - Blk backend       │  │   - TAP (tap0/1/2)     │         │
-│  │   tap0: 10.0.1.1/24   │  │   tap0: 10.0.1.2/24   │         │
-│  │   tap1: 10.0.2.1/24   │  │   tap1: 10.0.2.2/24   │         │
-│  │   tap2: 10.0.3.1/24   │  │   tap2: 10.0.3.2/24   │         │
+│  │   tap0: 10.0.1.1/24   │  │   tap0: 10.0.1.2/24    │         │
+│  │   tap1: 10.0.2.1/24   │  │   tap1: 10.0.2.2/24    │         │
+│  │   tap2: 10.0.3.1/24   │  │   tap2: 10.0.3.2/24    │         │
 │  │                       │  │ - /opt/virtio_test.sh  │         │
 │  └──────────┬────────────┘  └──────────┬─────────────┘         │
 │             │     Shared Memory        │                       │
