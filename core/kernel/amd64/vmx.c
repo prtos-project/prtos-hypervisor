@@ -296,7 +296,7 @@ int vmx_is_enabled(void) {
 
 static void vmx_setup_ept(struct vmx_partition_shared *shared,
                           struct prtos_conf_memory_area *mem_areas,
-                          prtos_s32_t num_areas,
+                          prtos_s32_t num_areas, prtos_s32_t num_vcpus,
                           void *pml4_page, void *pdpt_page, void *pd_page) {
     prtos_u64_t *pml4 = (prtos_u64_t *)pml4_page;
     prtos_u64_t *pdpt = (prtos_u64_t *)pdpt_page;
@@ -304,13 +304,9 @@ static void vmx_setup_ept(struct vmx_partition_shared *shared,
     prtos_u64_t addr;
     prtos_s32_t i;
 
-    /* Determine if this partition needs the full 1GB identity map + LAPIC/IOAPIC.
-     * Linux partitions need this; FreeRTOS/bare-metal typically don't.
-     * Heuristic: if total memory >= 128MB, enable full mapping. */
-    prtos_u64_t total_mem = 0;
-    for (i = 0; i < num_areas; i++)
-        total_mem += mem_areas[i].size;
-    int needs_full_map = (total_mem >= 0x8000000ULL);  /* 128MB */
+    /* Multi-vCPU partitions need full 1GB identity map + LAPIC/IOAPIC
+     * for SMP support via INIT/SIPI emulation. */
+    int needs_full_map = (num_vcpus > 1);
 
     memset(pml4, 0, PAGE_SIZE);
     shared->ept_pml4 = pml4;
@@ -334,7 +330,16 @@ static void vmx_setup_ept(struct vmx_partition_shared *shared,
         }
     }
 
-    if (needs_full_map) {
+    /* All hw-virt partitions need the full first 1GB identity-mapped so the
+     * guest can access real-mode IVT/BIOS area and legacy low memory. */
+    for (i = 0; i < 512; i++) {
+        if (!pd[i]) {
+            pd[i] = ((prtos_u64_t)i << 21) | EPT_RWX | EPT_MEM_TYPE_WB | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
+        }
+    }
+
+    /* All hw-virt partitions need LAPIC/IOAPIC EPT mapping for timers and interrupts. */
+    {
         prtos_u64_t *pd_high;
 
         /* Allocate PD for 3-4GB range to map LAPIC (0xFEE00000) and IOAPIC (0xFEC00000) */
@@ -342,27 +347,15 @@ static void vmx_setup_ept(struct vmx_partition_shared *shared,
         memset(pd_high, 0, PAGE_SIZE);
         pdpt[3] = _VIRT2PHYS((prtos_u64_t)(unsigned long)pd_high) | EPT_RWX;
 
-        /* Map the entire first 1GB (all 512 PD entries) as identity mapped. */
-        for (i = 0; i < 512; i++) {
-            if (!pd[i]) {
-                pd[i] = ((prtos_u64_t)i << 21) | EPT_RWX | EPT_MEM_TYPE_WB | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
-            }
-        }
-
-        /* Identity-map all 2MB pages in 3-4GB range as UC (PCI MMIO, IOAPIC, etc.)
-         * LAPIC page and IOAPIC pages are overwritten below with specific entries. */
+        /* Identity-map all 2MB pages in 3-4GB range as UC (PCI MMIO, IOAPIC, etc.) */
         for (i = 0; i < 512; i++) {
             prtos_u64_t gpa = 0xC0000000ULL + ((prtos_u64_t)i << 21);
             pd_high[i] = gpa | EPT_RWX | EPT_MEM_TYPE_UC | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
         }
 
-        /* Map IOAPIC (0xFEC00000) as 2MB large page (identity, UC) — already done above */
-
-        /* Map LAPIC 2MB region via a 4KB page table so we can redirect
-         * the LAPIC page (GPA 0xFEE00000) to the APIC-access page.
-         * The VMX APIC-access page feature requires that the EPT-translated
-         * HPA matches VMCS_APIC_ACCESS_ADDR for exits to fire. */
-        {
+        /* Multi-vCPU partitions: redirect LAPIC page to APIC-access page
+         * via a 4KB page table for INIT/SIPI emulation support. */
+        if (needs_full_map) {
             void *apic_page;
             prtos_u64_t *lapic_pt;
             int lapic_pd_idx = (0xFEE00000 >> 21) & 0x1FF;
@@ -772,7 +765,7 @@ int vmx_setup_partition(void *kthread_ptr) {
     GET_MEMAZ(ept_pd, PAGE_SIZE, PAGE_SIZE);
 
     /* Setup EPT (stored in shared state) */
-    vmx_setup_ept(shared, mem_areas, num_areas, ept_pml4, ept_pdpt, ept_pd);
+    vmx_setup_ept(shared, mem_areas, num_areas, p->cfg->num_of_vcpus, ept_pml4, ept_pdpt, ept_pd);
 
     /* Copy EPT pointers to per-vCPU state for fast access */
     vmx->eptp = shared->eptp;
@@ -848,6 +841,12 @@ int vmx_setup_secondary_vcpu(void *kthread_ptr, void *vcpu0_kthread_ptr) {
 
     vmx->launched = 0;
     vmx->ipi_pending_bitmap = 0;
+
+    /* VMCLEAR to flush all VMCS data from processor-internal cache to memory.
+     * Intel SDM requires this before a VMCS is accessed on another logical
+     * processor (this AP's pCPU will VMPTRLD this VMCS on first schedule). */
+    vmx_vmclear(&vmx->vmcs_phys);
+    vmx->launched = 0;
 
     kprintf("[VMX] Partition %d vCPU %d (AP): VMCS at phys 0x%llx, wait-for-SIPI\n",
             p->cfg->id, vmx->vcpu_id, vmx->vmcs_phys);

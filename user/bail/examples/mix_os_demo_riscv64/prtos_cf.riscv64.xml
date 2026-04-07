@@ -57,7 +57,7 @@
     </PRTOSHypervisor>
 
     <PartitionTable>
-        <Partition id="0" name="Linux_HMI" flags="system" console="Uart" noVCpus="3">
+        <Partition id="0" name="Linux_HMI" flags="system" hw_virt="true" console="Uart" noVCpus="3">
             <PhysicalMemoryAreas>
                 <Area start="0x90000000" size="256MB" />
                 <!-- UART device pass-through (16550 at 0x10000000) -->

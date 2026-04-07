@@ -133,8 +133,15 @@ void arch_mmu_rsv_mem(FILE *out_file) {
 #include <prtos_inc/arch/asm_offsets.h>
 
 void arch_vmx_rsv_mem(FILE *out_file) {
-    int i;
+    int i, has_vmx_partition = 0;
     (void)out_file;
+
+    /* Check if any partition uses VMX hw-virt (explicit hw_virt flag) */
+    for (i = 0; i < prtos_conf.num_of_partitions; i++) {
+        if (prtos_conf_partition_table[i].flags & PRTOS_PART_HWVIRT) { has_vmx_partition = 1; break; }
+    }
+    if (!has_vmx_partition)
+        return;  /* No VMX partitions — skip all VMX reserved memory */
 
     /* VMXON region: one page per CPU */
     for (i = 0; i < (int)prtos_conf.hpv.num_of_cpus; i++)
@@ -143,13 +150,10 @@ void arch_vmx_rsv_mem(FILE *out_file) {
     /* MSR bitmap: one page shared across all VMX partitions */
     rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX MSR bitmap");
 
-    /* Per hw-virt partition: detect using same heuristic as kernel (mem >= 64MB) */
+    /* Per hw-virt partition: use explicit hw_virt flag */
     for (i = 0; i < prtos_conf.num_of_partitions; i++) {
-        prtos_u64_t total_mem = 0;
-        int ma, nvcpus, v;
-        for (ma = 0; ma < (int)prtos_conf_partition_table[i].num_of_physical_memory_areas; ma++)
-            total_mem += prtos_conf_mem_area_table[prtos_conf_partition_table[i].physical_memory_areas_offset + ma].size;
-        if (total_mem >= (64ULL * 1024 * 1024)) {
+        int nvcpus, v;
+        if (prtos_conf_partition_table[i].flags & PRTOS_PART_HWVIRT) {
             nvcpus = (int)prtos_conf_partition_table[i].num_of_vcpus;
             if (nvcpus < 1) nvcpus = 1;
 
@@ -166,13 +170,14 @@ void arch_vmx_rsv_mem(FILE *out_file) {
             rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PML4");
             /* EPT PDPT: 1 page */
             rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PDPT");
-            /* EPT PD: 1 page */
+            /* EPT PD: 1 page (first 1GB) */
             rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PD");
+            /* EPT PD high: 1 page (3-4GB range for LAPIC/IOAPIC) */
+            rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PD high");
 
-            /* For partitions with >= 128MB memory (needs_full_map in kernel):
-             * EPT PD for 3-4GB range (LAPIC/IOAPIC) + LAPIC PT + APIC-access page */
-            if (total_mem >= (128ULL * 1024 * 1024)) {
-                rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PD high");
+            /* Multi-vCPU partitions: APIC-access page + LAPIC PT
+             * for INIT/SIPI emulation */
+            if (nvcpus > 1) {
                 rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX APIC access page");
                 rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX LAPIC PT");
             }
@@ -184,7 +189,9 @@ void arch_vmx_rsv_mem(FILE *out_file) {
 void arch_loader_rsv_mem(FILE *out_file) {
     prtos_s32_t i;
     for (i = 0; i < prtos_conf.num_of_partitions; i++) {
-        /*        rsv_block(PTDL2SIZE, PTDL2SIZE, "ptdL2Ldr");*/
+        /* hw-virt partitions skip the partition loader, no Ldr stack needed. */
+        if (prtos_conf_partition_table[i].flags & PRTOS_PART_HWVIRT)
+            continue;
         rsv_block(18 * PAGE_SIZE, PAGE_SIZE, "Ldr stack");
     }
 }

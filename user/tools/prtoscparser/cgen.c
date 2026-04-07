@@ -411,11 +411,8 @@ static void generate_rsv_mem(FILE *out_file) {
     }
 
 #if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_amd64)
-    /* Reserve kthread + guest for each secondary CPU idle thread (SMP) */
-    for (i = 1; i < prtos_conf.hpv.num_of_cpus; i++) {
-        rsv_block(_KTHREAD_T_SIZEOF, ALIGNMENT, "secondary idle kthread");
-        rsv_block(_STRUCT_GUEST_SIZEOF, ALIGNMENT, "secondary idle vcpu");
-    }
+    /* Secondary CPU idle kthreads are statically allocated in BSS
+     * (__idle_kthread / __idle_kthreads) — no reserved memory needed. */
 #endif
 
     // Partitions

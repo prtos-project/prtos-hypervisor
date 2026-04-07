@@ -207,26 +207,16 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
                 GET_MEMAZ(k->ctrl.g->karch.s2_l3[tbl], PAGE_SIZE, PAGE_SIZE);
             k->ctrl.g->karch.s2_l3_count = 0;
 
-            /* Allocate VGIC state for hw-virt partitions.
-             * Heuristic: partitions with memory >= 64MB are hw-virt guests
-             * that need full GIC emulation.  Para-virt BAIL partitions
-             * keep vgic=NULL and use the PCT hypercall path. */
+            /* Allocate VGIC state for hw-virt partitions (explicit hw_virt flag).
+             * Para-virt BAIL partitions keep vgic=NULL and use the PCT hypercall path. */
             k->ctrl.g->karch.vgic = 0;
-            {
-                struct prtos_conf_memory_area *mem_areas =
-                    &prtos_conf_phys_mem_area_table[cfg->physical_memory_areas_offset];
-                prtos_u64_t total_mem = 0;
-                prtos_s32_t ma;
-                for (ma = 0; ma < (prtos_s32_t)cfg->num_of_physical_memory_areas; ma++)
-                    total_mem += mem_areas[ma].size;
-                if (total_mem >= (64ULL * 1024 * 1024)) {
-                    extern void prtos_vgic_init(struct prtos_vgic_state *vgic,
-                                                prtos_u32_t num_vcpus);
-                    struct prtos_vgic_state *vgic;
-                    GET_MEMAZ(vgic, sizeof(struct prtos_vgic_state), ALIGNMENT);
-                    prtos_vgic_init(vgic, cfg->num_of_vcpus);
-                    k->ctrl.g->karch.vgic = vgic;
-                }
+            if (cfg->flags & PRTOS_PART_HWVIRT) {
+                extern void prtos_vgic_init(struct prtos_vgic_state *vgic,
+                                            prtos_u32_t num_vcpus);
+                struct prtos_vgic_state *vgic;
+                GET_MEMAZ(vgic, sizeof(struct prtos_vgic_state), ALIGNMENT);
+                prtos_vgic_init(vgic, cfg->num_of_vcpus);
+                k->ctrl.g->karch.vgic = vgic;
             }
         } else {
             prtos_s32_t tbl;
@@ -270,16 +260,9 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         k->ctrl.g->karch.hsm_opaque = 0;
 #endif
 #ifdef CONFIG_VMX
-        /* Detect hw-virt partitions by memory size (same heuristic as aarch64 VGIC).
-         * Partitions with >= 64MB memory are treated as hw-virt guests. */
+        /* Setup VMX for hw-virt partitions (explicit hw_virt flag). */
         if (i == 0) {
-            struct prtos_conf_memory_area *mem_areas =
-                &prtos_conf_phys_mem_area_table[cfg->physical_memory_areas_offset];
-            prtos_u64_t total_mem = 0;
-            prtos_s32_t ma;
-            for (ma = 0; ma < (prtos_s32_t)cfg->num_of_physical_memory_areas; ma++)
-                total_mem += mem_areas[ma].size;
-            if (total_mem >= (64ULL * 1024 * 1024)) {
+            if (cfg->flags & PRTOS_PART_HWVIRT) {
                 extern int vmx_setup_partition(void *kthread_ptr);
                 vmx_setup_partition(k);
             }

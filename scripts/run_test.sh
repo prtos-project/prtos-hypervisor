@@ -852,6 +852,19 @@ try:
     if idx != 0:
         print('LINUX_TEST_FAIL: uname did not return expected kernel')
         child.close(force=True); sys.exit(1)
+    child.expect([r'[\$#] ', pexpect.TIMEOUT], timeout=5)
+    # Verify all 4 vCPUs are online (XML assigns noVCpus="4")
+    expected_cpus = 4
+    time.sleep(1); child.sendline('cat /proc/cpuinfo | grep processor | wc -l')
+    child.expect([r'[\$#] ', pexpect.TIMEOUT], timeout=10)
+    cpu_output = child.before.strip()
+    # Extract the last number from the output
+    import re
+    nums = re.findall(r'\b(\d+)\b', cpu_output)
+    actual_cpus = int(nums[-1]) if nums else 0
+    if actual_cpus != expected_cpus:
+        print(f'LINUX_TEST_FAIL: expected {expected_cpus} CPUs online but got {actual_cpus}')
+        child.close(force=True); sys.exit(1)
     print('Verification Passed')
     child.close(force=True)
 except Exception as e:
@@ -1013,7 +1026,7 @@ sg_pre = "sg kvm -c '" if kvm_ok == 2 else ""
 sg_post = "'" if kvm_ok == 2 else ""
 cmd = (f"{sg_pre}qemu-system-x86_64 "
     "-enable-kvm -cpu host,-waitpkg "
-       "-m 512 -smp 2 "
+       "-m 1024 -smp 4 "
        "-nographic -no-reboot "
        "-cdrom resident_sw.iso "
        "-serial mon:stdio "

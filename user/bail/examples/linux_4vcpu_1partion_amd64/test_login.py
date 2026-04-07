@@ -67,6 +67,21 @@ if idx != 0:
 child.expect(["#", pexpect.TIMEOUT], timeout=5)
 child.sendline("cat /proc/cpuinfo | grep processor | wc -l")
 child.expect(["#", pexpect.TIMEOUT], timeout=10)
+cpu_output = child.before.strip()
+import re
+nums = re.findall(r'\b(\d+)\b', cpu_output)
+actual_cpus = int(nums[-1]) if nums else 0
+expected_cpus = 4
+if actual_cpus != expected_cpus:
+    print(f"\n\n=== FAIL: expected {expected_cpus} CPUs but got {actual_cpus} ===")
+    sys.exit(1)
+print(f"\n\n=== All {expected_cpus} vCPUs online ===")
+
+child.sendline("poweroff")
+time.sleep(5)
+child.close(force=True)
+print("\n\n=== PASS ===")
+sys.exit(0)
 
 print("\n\n=== ALL TESTS PASSED ===")
 child.sendline("poweroff")

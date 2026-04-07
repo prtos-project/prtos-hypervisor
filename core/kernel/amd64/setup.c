@@ -14,6 +14,7 @@
 #include <arch/pic.h>
 #ifdef CONFIG_VMX
 #include <arch/vmx.h>
+#include <prtosconf.h>
 #endif
 
 volatile prtos_s8_t local_info_init = 0;
@@ -59,7 +60,15 @@ void __VBOOT setup_arch_common(void) {
     cpu_khz = get_cpu_khz();
     init_pic(0x20, 0x28);
 #ifdef CONFIG_VMX
-    vmx_init();
+    {
+        /* Only initialize VMX if any partition uses hw-virt (explicit hw_virt flag) */
+        int i, any_vmx = 0;
+        for (i = 0; i < prtos_conf_table.num_of_partitions; i++) {
+            if (prtos_conf_partition_table[i].flags & PRTOS_PART_HWVIRT) { any_vmx = 1; break; }
+        }
+        if (any_vmx)
+            vmx_init();
+    }
 #endif
 #ifdef CONFIG_SMP
     SET_NRCPUS(init_smp());

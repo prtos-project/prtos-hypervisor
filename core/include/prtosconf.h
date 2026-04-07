@@ -126,6 +126,7 @@ struct prtos_conf_part {
     prtos_u32_t flags;
 #define PRTOS_PART_SYSTEM 0x100
 #define PRTOS_PART_FP 0x200
+#define PRTOS_PART_HWVIRT 0x400
     prtos_u32_t num_of_vcpus;
     prtos_u32_t hw_irqs;
     prtos_s32_t num_of_physical_memory_areas;

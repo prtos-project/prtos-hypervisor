@@ -351,6 +351,7 @@
     <xs:attribute name="name" type="idString_t" use="optional" />
     <xs:attribute name="console" type="idString_t" use="optional" />
     <xs:attribute name="flags" type="partitionFlagsList_t" use="optional" default="none" />
+    <xs:attribute name="hw_virt" type="xs:boolean" use="optional" default="false" />
     <xs:attribute name="noVCpus" type="xs:positiveInteger" use="optional" default="1" />
   </xs:complexType>
 

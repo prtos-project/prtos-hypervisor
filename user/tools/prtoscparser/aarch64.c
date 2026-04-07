@@ -144,16 +144,9 @@ void arch_mmu_rsv_mem(FILE *out_file) {
         for (j = 0; j < 8; j++)
             rsv_block(PAGE_SIZE, PAGE_SIZE, "s2 L3 table");
 
-        /* Reserve VGIC state for hw-virt partitions (mem >= 64MB heuristic,
-         * matching the allocation logic in core/kernel/kthread.c) */
-        {
-            prtos_u64_t total_mem = 0;
-            int ma;
-            for (ma = 0; ma < (int)prtos_conf_partition_table[i].num_of_physical_memory_areas; ma++)
-                total_mem += prtos_conf_mem_area_table[prtos_conf_partition_table[i].physical_memory_areas_offset + ma].size;
-            if (total_mem >= (2ULL * 1024 * 1024))
-                rsv_block(_PRTOS_VGIC_STATE_SIZEOF, ALIGNMENT, "VGIC state");
-        }
+        /* Reserve VGIC state for hw-virt partitions (explicit hw_virt flag) */
+        if (prtos_conf_partition_table[i].flags & PRTOS_PART_HWVIRT)
+            rsv_block(_PRTOS_VGIC_STATE_SIZEOF, ALIGNMENT, "VGIC state");
     }
 #else
     prtos_address_t end;

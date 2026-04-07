@@ -48,6 +48,8 @@ void rsv_mem_debug(void) {
         if (!(prtos_conf_rsv_mem_table[e].used_align & RSV_MEM_USED)) {
             PWARN("Reserved memory not used %d:%d:0x%llx\n", prtos_conf_rsv_mem_table[e].used_align, prtos_conf_rsv_mem_table[e].size,
                   prtos_conf_rsv_mem_table[e].obj);
+            system_panic(0, "Reserved memory not used %d:%d:0x%llx\n", prtos_conf_rsv_mem_table[e].used_align, prtos_conf_rsv_mem_table[e].size,
+                         prtos_conf_rsv_mem_table[e].obj);
         }
 }
 #endif

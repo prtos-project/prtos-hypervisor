@@ -110,7 +110,7 @@
              - Runs virtio backend daemon for Guest
              - Console: COM1/UART (stdio)
              ================================================================ -->
-        <Partition id="0" name="System" flags="system" console="Uart" noVCpus="2">
+        <Partition id="0" name="System" flags="system" hw_virt="true" console="Uart" noVCpus="2">
             <PhysicalMemoryAreas>
                 <!-- Partition RAM (128MB) -->
                 <Area start="0x6000000" size="128MB" />
@@ -161,7 +161,7 @@
              - Uses virtio devices via shared memory provided by System
              - Console: VGA (VNC :1) + COM2/ttyS1 (telnet :4321)
              ================================================================ -->
-        <Partition id="1" name="Guest" console="Vga" noVCpus="2">
+        <Partition id="1" name="Guest" hw_virt="true" console="Vga" noVCpus="2">
             <PhysicalMemoryAreas>
                 <!-- Partition RAM (128MB) -->
                 <Area start="0xE000000" size="128MB" />
