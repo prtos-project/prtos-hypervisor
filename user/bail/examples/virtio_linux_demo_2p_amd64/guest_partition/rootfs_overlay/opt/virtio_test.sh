@@ -28,39 +28,70 @@ echo "[Guest] Network interfaces:"
 ip link show 2>/dev/null || ifconfig -a 2>/dev/null
 echo ""
 
-# Configure interfaces if available
-for iface in eth0 eth1 eth2; do
-    if [ -d "/sys/class/net/$iface" ]; then
-        echo "[Guest] Configuring $iface..."
-        ip addr add 10.0.$(($(echo $iface | tr -dc '0-9') + 1)).2/24 dev $iface 2>/dev/null
-        ip link set $iface up 2>/dev/null
-    fi
-done
-
 echo "[Guest] IP addresses:"
 ip addr show 2>/dev/null | grep "inet " || echo "  (no addresses configured)"
 echo ""
 
-# Test NAT connectivity (QEMU user networking gateway is usually 10.0.2.2)
-echo "[Guest] Testing NAT connectivity..."
-ping -c 2 -W 2 10.0.2.2 2>/dev/null && echo "  NAT ping OK" || echo "  NAT ping failed (expected without QEMU user-net)"
+# Test p2p connectivity (System Partition TAP addresses: 10.0.x.1)
+echo "[Guest] Testing System<->Guest connectivity..."
+PING_OK=0
+for i in 0 1 2; do
+    SYSTEM_IP="10.0.$((i + 1)).1"
+    if [ -d "/sys/class/net/tap$i" ]; then
+        if ping -c 2 -W 2 $SYSTEM_IP > /dev/null 2>&1; then
+            echo "  tap$i -> $SYSTEM_IP: OK"
+            PING_OK=1
+        else
+            echo "  tap$i -> $SYSTEM_IP: FAIL"
+        fi
+    fi
+done
+if [ $PING_OK -eq 0 ]; then
+    echo "  No TAP interfaces available (expected without virtio_frontend --net)"
+fi
 echo ""
 
 # ===== Block Device Test =====
 echo "--- Block Device Test ---"
+BLK_DEV=""
 if [ -b /dev/vda ]; then
-    echo "[Guest] /dev/vda found:"
-    fdisk -l /dev/vda 2>/dev/null || echo "  (fdisk not available)"
+    BLK_DEV=/dev/vda
+elif [ -b /dev/nbd0 ]; then
+    BLK_DEV=/dev/nbd0
+fi
+
+if [ -n "$BLK_DEV" ]; then
+    echo "[Guest] $BLK_DEV found:"
+    fdisk -l $BLK_DEV 2>/dev/null || echo "  (fdisk not available)"
     echo ""
-    echo "[Guest] Attempting mount..."
+
+    # Create ext2 filesystem on raw disk
+    echo "[Guest] Creating ext2 filesystem on $BLK_DEV ..."
+    mke2fs -F $BLK_DEV >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        echo "  Filesystem created successfully"
+    else
+        echo "  Failed to create filesystem"
+    fi
+
+    echo "[Guest] Mounting $BLK_DEV ..."
     mkdir -p /mnt/vda
-    mount /dev/vda1 /mnt/vda 2>/dev/null && {
-        echo "  Mounted /dev/vda1 at /mnt/vda"
-        ls -la /mnt/vda/
+    if mount $BLK_DEV /mnt/vda 2>/dev/null; then
+        echo "  Mounted $BLK_DEV at /mnt/vda"
+        # Write a test file
+        echo "Hello from PRTOS Guest Partition!" > /mnt/vda/test.txt 2>/dev/null
+        echo "  Wrote test file:"
+        cat /mnt/vda/test.txt
+        ls -la /mnt/vda/test.txt
+        df -h /mnt/vda 2>/dev/null | grep -v Filesystem
         umount /mnt/vda
-    } || echo "  Mount failed (no filesystem on vda, expected for raw disk)"
+        echo "  Unmounted $BLK_DEV"
+    else
+        echo "  Mount failed"
+    fi
 else
     echo "[Guest] /dev/vda not found"
+    echo "[Guest] /dev/nbd0 not found"
 fi
 echo ""
 

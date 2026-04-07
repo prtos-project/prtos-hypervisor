@@ -18,6 +18,26 @@ case "$1" in
             /sbin/getty -L ttyS1 115200 vt100 &
             echo "getty on ttyS1 started (telnet localhost 4321)"
         fi
+
+        # Start Virtio Frontend daemon (bridges shared memory to /dev/nbd0, /dev/hvc0, tap*)
+        if [ -x /usr/bin/virtio_frontend ]; then
+            echo "Starting Virtio Frontend daemon..."
+            /usr/bin/virtio_frontend --all &
+            sleep 2
+            # Create /dev/vda symlink to /dev/nbd0 for compatibility
+            if [ -b /dev/nbd0 ]; then
+                ln -sf /dev/nbd0 /dev/vda 2>/dev/null
+                echo "Virtio-Blk: /dev/vda -> /dev/nbd0"
+            fi
+            # Configure TAP IP addresses for Guest<->System networking
+            for i in 0 1 2; do
+                if [ -d "/sys/class/net/tap$i" ]; then
+                    ip addr add 10.0.$((i + 1)).2/24 dev tap$i 2>/dev/null
+                    ip link set tap$i up 2>/dev/null
+                    echo "  tap$i: 10.0.$((i + 1)).2/24"
+                fi
+            done
+        fi
         ;;
     stop)
         ;;

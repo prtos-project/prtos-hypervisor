@@ -132,13 +132,17 @@ prtos_manager: $(MGR_OBJS)
 # Contains: /usr/bin/prtos_manager, /usr/bin/virtio_backend
 # ============================================================================
 
-rootfs_overlay.cpio: prtos_manager virtio_backend
+rootfs_overlay.cpio: prtos_manager virtio_backend \
+                     system_partition/rootfs_overlay/etc/init.d/S99virtio_backend
 	@rm -rf _overlay_root
 	@mkdir -p _overlay_root/usr/bin
+	@mkdir -p _overlay_root/etc/init.d
 	@cp prtos_manager  _overlay_root/usr/bin/
 	@cp virtio_backend _overlay_root/usr/bin/
+	@cp system_partition/rootfs_overlay/etc/init.d/S99virtio_backend _overlay_root/etc/init.d/
 	@chmod 755 _overlay_root/usr/bin/prtos_manager
 	@chmod 755 _overlay_root/usr/bin/virtio_backend
+	@chmod 755 _overlay_root/etc/init.d/S99virtio_backend
 	@(cd _overlay_root && find . | cpio -o -H newc --quiet) > $@
 	@rm -rf _overlay_root
 	@echo "[Build] System rootfs overlay CPIO built: $@ ($$(stat -c%s $@) bytes)"
@@ -146,24 +150,34 @@ rootfs_overlay.cpio: prtos_manager virtio_backend
 # ============================================================================
 # Guest Partition Rootfs CPIO Overlay
 # Contains: /opt/virtio_test.sh, /opt/set_serial_poll, /etc/init.d/S99virtio_guest
+#           /usr/bin/virtio_frontend
 # ============================================================================
 
 set_serial_poll: set_serial_poll.c
 	@gcc -static -O2 -o $@ $<
 	@echo "[Build] $@ built"
 
+# Guest Virtio Frontend daemon (bridges shared memory -> NBD + PTY)
+virtio_frontend: guest_partition/src/virtio_frontend.c
+	@gcc -static -O2 -Wall -lpthread -o $@ $<
+	@echo "[Build] $@ built"
+
 guest_rootfs_overlay.cpio: guest_partition/rootfs_overlay/opt/virtio_test.sh \
                            guest_partition/rootfs_overlay/etc/init.d/S99virtio_guest \
-                           set_serial_poll
+                           set_serial_poll \
+                           virtio_frontend
 	@rm -rf _guest_overlay_root
 	@mkdir -p _guest_overlay_root/opt
 	@mkdir -p _guest_overlay_root/etc/init.d
+	@mkdir -p _guest_overlay_root/usr/bin
 	@cp guest_partition/rootfs_overlay/opt/virtio_test.sh _guest_overlay_root/opt/
 	@cp guest_partition/rootfs_overlay/etc/init.d/S99virtio_guest _guest_overlay_root/etc/init.d/
 	@cp set_serial_poll _guest_overlay_root/opt/
+	@cp virtio_frontend _guest_overlay_root/usr/bin/
 	@chmod 755 _guest_overlay_root/opt/virtio_test.sh
 	@chmod 755 _guest_overlay_root/etc/init.d/S99virtio_guest
 	@chmod 755 _guest_overlay_root/opt/set_serial_poll
+	@chmod 755 _guest_overlay_root/usr/bin/virtio_frontend
 	@(cd _guest_overlay_root && find . | cpio -o -H newc --quiet) > $@
 	@rm -rf _guest_overlay_root
 	@echo "[Build] Guest rootfs overlay CPIO built: $@ ($$(stat -c%s $@) bytes)"
@@ -302,12 +316,13 @@ run.amd64.demo: disk.img
 		-serial telnet::4321,server,nowait \
 		-vga std -display none -vnc :1 \
 		-netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
-		-device virtio-net-pci,netdev=net0,disable-modern=on \
+		-device virtio-net-pci,netdev=net0,disable-modern=on,vectors=0 \
 		-netdev user,id=net1 \
-		-device virtio-net-pci,netdev=net1,disable-modern=on \
+		-device virtio-net-pci,netdev=net1,disable-modern=on,vectors=0 \
 		-netdev socket,id=net2,listen=:1234 \
-		-device virtio-net-pci,netdev=net2,disable-modern=on \
-		-drive file=disk.img,if=virtio,format=raw
+		-device virtio-net-pci,netdev=net2,disable-modern=on,vectors=0 \
+		-drive file=disk.img,if=none,id=drv0,format=raw \
+		-device virtio-blk-pci,drive=drv0,disable-modern=on,vectors=0
 
 # Demo without TAP (no root required, NAT only + p2p + block)
 run.amd64.demo.nat: disk.img
@@ -327,11 +342,12 @@ run.amd64.demo.nat: disk.img
 		-serial telnet::4321,server,nowait \
 		-vga std -display none -vnc :1 \
 		-netdev user,id=net1 \
-		-device virtio-net-pci,netdev=net1,disable-modern=on \
-		-drive file=disk.img,if=virtio,format=raw
+		-device virtio-net-pci,netdev=net1,disable-modern=on,vectors=0 \
+		-drive file=disk.img,if=none,id=drv0,format=raw \
+		-device virtio-blk-pci,drive=drv0,disable-modern=on,vectors=0
 
 clean:
-	@rm -f partition_system partition_guest virtio_backend prtos_manager
+	@rm -f partition_system partition_guest virtio_backend prtos_manager virtio_frontend
 	@rm -f rootfs_overlay.cpio guest_rootfs_overlay.cpio
 	@rm -rf _overlay_root _guest_overlay_root
 	@rm -f *.pef *.prtos_conf container.bin resident_sw resident_sw.iso

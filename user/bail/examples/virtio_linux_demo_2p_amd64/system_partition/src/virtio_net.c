@@ -98,8 +98,18 @@ int virtio_net_init(struct virtio_net_instance *inst)
         break;
     case VIRTIO_NET_MODE_NAT:
     case VIRTIO_NET_MODE_P2P:
-        /* These modes use loopback for now; extensible to real sockets */
-        inst->backend_fd = -1;
+        /* p2p mode: open a TAP device for System<->Guest communication */
+        {
+            char tap_name[16];
+            snprintf(tap_name, sizeof(tap_name), "tap%d", inst->id);
+            inst->backend_fd = open_tap_device(tap_name);
+            if (inst->backend_fd < 0) {
+                printf("[Backend] Net%d: TAP unavailable, falling back to loopback\n",
+                       inst->id);
+                inst->mode = VIRTIO_NET_MODE_LOOPBACK;
+                net->mode = VIRTIO_NET_MODE_LOOPBACK;
+            }
+        }
         break;
     default:
         inst->backend_fd = -1;
@@ -133,20 +143,20 @@ void virtio_net_process(struct virtio_net_instance *inst)
                    inst->id, slot->len);
 
             if (inst->backend_fd >= 0) {
-                /* Bridge mode: write to TAP device */
+                /* TAP mode: write to TAP device */
                 ssize_t n = write(inst->backend_fd, slot->data, slot->len);
                 if (n < 0)
                     fprintf(stderr, "[Backend] Net%d: TAP write error: %s\n",
                             inst->id, strerror(errno));
+            } else {
+                /* Loopback: echo packet back to Guest's RX ring */
+                uint32_t rx_idx = net->rx_head % net->num_slots;
+                struct virtio_net_pkt_slot *rx_slot = &net->rx_slots[rx_idx];
+                memcpy(rx_slot->data, slot->data, slot->len);
+                rx_slot->len = slot->len;
+                __sync_synchronize();
+                net->rx_head = (net->rx_head + 1) % net->num_slots;
             }
-
-            /* Loopback: echo packet back to Guest's RX ring */
-            uint32_t rx_idx = net->rx_head % net->num_slots;
-            struct virtio_net_pkt_slot *rx_slot = &net->rx_slots[rx_idx];
-            memcpy(rx_slot->data, slot->data, slot->len);
-            rx_slot->len = slot->len;
-            __sync_synchronize();
-            net->rx_head = (net->rx_head + 1) % net->num_slots;
 
             slot->len = 0;  /* Mark as consumed */
         }
