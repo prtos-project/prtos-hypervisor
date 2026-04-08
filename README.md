@@ -229,6 +229,32 @@ This launches QEMU with dual consoles:
 
 See `user/bail/examples/virtio_linux_demo_2p_amd64/README.md` for full documentation.
 
+#### 4.1.5.4 Compiling and Running PRTOS `virtio_linux_demo_2p_aarch64` (Dual SMP Linux + Virtio)
+```
+cd prtos-hypervisor
+cp prtos_config.aarch64 prtos_config
+make defconfig
+make
+cd user/bail/examples/virtio_linux_demo_2p_aarch64
+make run.aarch64
+```
+System Partition PL011 UART console on stdio. Login `root`/`1234`.
+
+See `user/bail/examples/virtio_linux_demo_2p_aarch64/README.md` for full documentation.
+
+#### 4.1.5.5 Compiling and Running PRTOS `virtio_linux_demo_2p_riscv64` (Dual SMP Linux + Virtio)
+```
+cd prtos-hypervisor
+cp prtos_config.riscv64 prtos_config
+make defconfig
+make
+cd user/bail/examples/virtio_linux_demo_2p_riscv64
+make run.riscv64
+```
+System Partition NS16550 UART console on stdio. Login `root`/`1234`.
+
+See `user/bail/examples/virtio_linux_demo_2p_riscv64/README.md` for full documentation.
+
 ## 4.2 **Commands to Automatically Run Test Suites for All Platforms**
 ```
 bash scripts/run_test.sh -h
@@ -293,9 +319,11 @@ The test report of run `bash scripts/run_test.sh --arch x86 check-all` should be
   mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    SKIP
+  virtio_linux_demo_2p_aarch64 SKIP
+  virtio_linux_demo_2p_riscv64 SKIP
   virtio_linux_demo_2p_amd64 SKIP
 --------------------------------------
-  Total: 25  Pass: 11  Fail: 0  Skip: 14
+  Total: 27  Pass: 11  Fail: 0  Skip: 16
 ======================================
 
 ```
@@ -330,9 +358,11 @@ The test report of run `bash scripts/run_test.sh --arch aarch64 check-all` shoul
   mix_os_demo_aarch64  PASS
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    SKIP
+  virtio_linux_demo_2p_aarch64 PASS
+  virtio_linux_demo_2p_riscv64 SKIP
   virtio_linux_demo_2p_amd64 SKIP
 --------------------------------------
-  Total: 25  Pass: 16  Fail: 0  Skip: 9
+  Total: 27  Pass: 17  Fail: 0  Skip: 10
 ======================================
 
 ```
@@ -366,9 +396,11 @@ The test report of run `bash scripts/run_test.sh --arch riscv64 check-all` shoul
   mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  PASS
   mix_os_demo_amd64    SKIP
+  virtio_linux_demo_2p_aarch64 SKIP
+  virtio_linux_demo_2p_riscv64 PASS
   virtio_linux_demo_2p_amd64 SKIP
 --------------------------------------
-  Total: 25  Pass: 15  Fail: 0  Skip: 10
+  Total: 27  Pass: 16  Fail: 0  Skip: 11
 ======================================
 
 ```
@@ -402,9 +434,11 @@ The test report of run `bash scripts/run_test.sh --arch amd64 check-all` should 
   mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    PASS
+  virtio_linux_demo_2p_aarch64 SKIP
+  virtio_linux_demo_2p_riscv64 SKIP
   virtio_linux_demo_2p_amd64 PASS
 --------------------------------------
-  Total: 25  Pass: 16  Fail: 0  Skip: 9
+  Total: 27  Pass: 16  Fail: 0  Skip: 11
 ======================================
 ```
 
