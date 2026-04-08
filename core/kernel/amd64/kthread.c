@@ -76,7 +76,14 @@ void switch_kthread_arch_post(kthread_t *current) {
         } else
 #endif
         {
-            load_cr0(current->ctrl.g->karch.cr0);
+            prtos_u64_t cr0 = current->ctrl.g->karch.cr0;
+#ifdef CONFIG_VMX
+            /* When VMX root mode is active on this CPU, CR0 must still
+             * satisfy VMX fixed bits even for para-virt partitions. */
+            if (vmx_is_enabled())
+                cr0 |= (prtos_u32_t)read_msr(MSR_IA32_VMX_CR0_FIXED0);
+#endif
+            load_cr0(cr0);
             load_part_page_table(current);
         }
     }

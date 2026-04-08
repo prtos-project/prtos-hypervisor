@@ -186,7 +186,7 @@ cp prtos_config.amd64 prtos_config
 make defconfig
 make
 cd user/bail/examples/linux_4vcpu_1partion_amd64
-run.amd64.kvm.nographic
+make run.amd64.kvm.nographic
 ```
 以用户名`root`, 密码`1234`登录，输出如下：
 ```
@@ -205,6 +205,22 @@ processor       : 3
 #
 
 ```
+
+#### 6.5.3 PRTOS 编译和运行 `virtio_linux_demo_2p_amd64`（双 SMP Linux + Virtio 设备虚拟化）
+```
+cd prtos-hypervisor
+cp prtos_config.amd64 prtos_config
+make defconfig
+make
+cd user/bail/examples/virtio_linux_demo_2p_amd64
+make run.amd64
+```
+该命令启动 QEMU 并提供三个控制台访问方式：
+- **系统分区** (COM1/stdio)：当前终端登录，用户名 `root`，密码 `1234`，然后运行 `prtos_manager &` 和 `virtio_backend &`
+- **客户分区** (COM2/telnet)：`telnet localhost 4321`，用户名 `root`，密码 `1234`
+- **客户VGA** (VNC)：`vnc://localhost:5901`
+
+详细文档参见 `user/bail/examples/virtio_linux_demo_2p_amd64/README.md`。
 
 ## 7. 测试
 
@@ -272,8 +288,9 @@ The test report of run `bash scripts/run_test.sh --arch x86 check-all` should be
   mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    SKIP
+  virtio_linux_demo_2p_amd64 SKIP
 --------------------------------------
-  Total: 24  Pass: 11  Fail: 0  Skip: 13
+  Total: 25  Pass: 11  Fail: 0  Skip: 14
 ======================================
 
 ```
@@ -308,8 +325,9 @@ The test report of run `bash scripts/run_test.sh --arch aarch64 check-all` shoul
   mix_os_demo_aarch64  PASS
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    SKIP
+  virtio_linux_demo_2p_amd64 SKIP
 --------------------------------------
-  Total: 24  Pass: 16  Fail: 0  Skip: 8
+  Total: 25  Pass: 16  Fail: 0  Skip: 9
 ======================================
 ```
 
@@ -342,8 +360,9 @@ The test report of run `bash scripts/run_test.sh --arch riscv64 check-all` shoul
   mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  PASS
   mix_os_demo_amd64    SKIP
+  virtio_linux_demo_2p_amd64 SKIP
 --------------------------------------
-  Total: 24  Pass: 15  Fail: 0  Skip: 9
+  Total: 25  Pass: 15  Fail: 0  Skip: 10
 ======================================
 ```
 
@@ -376,8 +395,9 @@ The test report of run `bash scripts/run_test.sh --arch amd64 check-all` should 
   mix_os_demo_aarch64  SKIP
   mix_os_demo_riscv64  SKIP
   mix_os_demo_amd64    PASS
+  virtio_linux_demo_2p_amd64 PASS
 --------------------------------------
-  Total: 24  Pass: 15  Fail: 0  Skip: 9
+  Total: 25  Pass: 16  Fail: 0  Skip: 9
 ======================================
 ```
 

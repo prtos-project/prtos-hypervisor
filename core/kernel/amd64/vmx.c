@@ -13,6 +13,7 @@
 
 #include <assert.h>
 #include <boot.h>
+#include <hypercalls.h>
 #include <kthread.h>
 #include <physmm.h>
 #include <prtosconf.h>
@@ -295,7 +296,7 @@ int vmx_is_enabled(void) {
 
 static void vmx_setup_ept(struct vmx_partition_shared *shared,
                           struct prtos_conf_memory_area *mem_areas,
-                          prtos_s32_t num_areas,
+                          prtos_s32_t num_areas, prtos_s32_t num_vcpus,
                           void *pml4_page, void *pdpt_page, void *pd_page) {
     prtos_u64_t *pml4 = (prtos_u64_t *)pml4_page;
     prtos_u64_t *pdpt = (prtos_u64_t *)pdpt_page;
@@ -303,13 +304,9 @@ static void vmx_setup_ept(struct vmx_partition_shared *shared,
     prtos_u64_t addr;
     prtos_s32_t i;
 
-    /* Determine if this partition needs the full 1GB identity map + LAPIC/IOAPIC.
-     * Linux partitions need this; FreeRTOS/bare-metal typically don't.
-     * Heuristic: if total memory >= 128MB, enable full mapping. */
-    prtos_u64_t total_mem = 0;
-    for (i = 0; i < num_areas; i++)
-        total_mem += mem_areas[i].size;
-    int needs_full_map = (total_mem >= 0x8000000ULL);  /* 128MB */
+    /* Multi-vCPU partitions need full 1GB identity map + LAPIC/IOAPIC
+     * for SMP support via INIT/SIPI emulation. */
+    int needs_full_map = (num_vcpus > 1);
 
     memset(pml4, 0, PAGE_SIZE);
     shared->ept_pml4 = pml4;
@@ -333,7 +330,16 @@ static void vmx_setup_ept(struct vmx_partition_shared *shared,
         }
     }
 
-    if (needs_full_map) {
+    /* All hw-virt partitions need the full first 1GB identity-mapped so the
+     * guest can access real-mode IVT/BIOS area and legacy low memory. */
+    for (i = 0; i < 512; i++) {
+        if (!pd[i]) {
+            pd[i] = ((prtos_u64_t)i << 21) | EPT_RWX | EPT_MEM_TYPE_WB | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
+        }
+    }
+
+    /* All hw-virt partitions need LAPIC/IOAPIC EPT mapping for timers and interrupts. */
+    {
         prtos_u64_t *pd_high;
 
         /* Allocate PD for 3-4GB range to map LAPIC (0xFEE00000) and IOAPIC (0xFEC00000) */
@@ -341,27 +347,15 @@ static void vmx_setup_ept(struct vmx_partition_shared *shared,
         memset(pd_high, 0, PAGE_SIZE);
         pdpt[3] = _VIRT2PHYS((prtos_u64_t)(unsigned long)pd_high) | EPT_RWX;
 
-        /* Map the entire first 1GB (all 512 PD entries) as identity mapped. */
-        for (i = 0; i < 512; i++) {
-            if (!pd[i]) {
-                pd[i] = ((prtos_u64_t)i << 21) | EPT_RWX | EPT_MEM_TYPE_WB | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
-            }
-        }
-
-        /* Identity-map all 2MB pages in 3-4GB range as UC (PCI MMIO, IOAPIC, etc.)
-         * LAPIC page and IOAPIC pages are overwritten below with specific entries. */
+        /* Identity-map all 2MB pages in 3-4GB range as UC (PCI MMIO, IOAPIC, etc.) */
         for (i = 0; i < 512; i++) {
             prtos_u64_t gpa = 0xC0000000ULL + ((prtos_u64_t)i << 21);
             pd_high[i] = gpa | EPT_RWX | EPT_MEM_TYPE_UC | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
         }
 
-        /* Map IOAPIC (0xFEC00000) as 2MB large page (identity, UC) — already done above */
-
-        /* Map LAPIC 2MB region via a 4KB page table so we can redirect
-         * the LAPIC page (GPA 0xFEE00000) to the APIC-access page.
-         * The VMX APIC-access page feature requires that the EPT-translated
-         * HPA matches VMCS_APIC_ACCESS_ADDR for exits to fire. */
-        {
+        /* Multi-vCPU partitions: redirect LAPIC page to APIC-access page
+         * via a 4KB page table for INIT/SIPI emulation support. */
+        if (needs_full_map) {
             void *apic_page;
             prtos_u64_t *lapic_pt;
             int lapic_pd_idx = (0xFEE00000 >> 21) & 0x1FF;
@@ -440,6 +434,7 @@ static void vmx_init_vmcs_controls(struct vmx_state *vmx, kthread_t *k) {
     if (vmx->shared && vmx->shared->apic_access_page) {
         vmx_vmwrite(VMCS_APIC_ACCESS_ADDR, vmx->shared->apic_access_page_phys);
     }
+
 
     /* MSR bitmap */
     if (!vmx_msr_bitmap_initialized) {
@@ -715,7 +710,12 @@ int vmx_setup_partition(void *kthread_ptr) {
     /* Allocate shared partition state */
     GET_MEMAZ(shared, sizeof(struct vmx_partition_shared), ALIGNMENT);
     shared->num_vcpus = p->cfg->num_of_vcpus;
+    shared->partition_id = p->cfg->id;
     memset(shared->vcpu_vmx, 0, sizeof(shared->vcpu_vmx));
+
+    /* Initialize I/O bitmap pointers (not used — all partitions use unconditional I/O exiting) */
+    shared->io_bitmap_a = 0;
+    shared->io_bitmap_b = 0;
 
     /* Allocate per-vCPU VMX state */
     GET_MEMAZ(vmx, sizeof(struct vmx_state), ALIGNMENT);
@@ -765,7 +765,7 @@ int vmx_setup_partition(void *kthread_ptr) {
     GET_MEMAZ(ept_pd, PAGE_SIZE, PAGE_SIZE);
 
     /* Setup EPT (stored in shared state) */
-    vmx_setup_ept(shared, mem_areas, num_areas, ept_pml4, ept_pdpt, ept_pd);
+    vmx_setup_ept(shared, mem_areas, num_areas, p->cfg->num_of_vcpus, ept_pml4, ept_pdpt, ept_pd);
 
     /* Copy EPT pointers to per-vCPU state for fast access */
     vmx->eptp = shared->eptp;
@@ -841,6 +841,12 @@ int vmx_setup_secondary_vcpu(void *kthread_ptr, void *vcpu0_kthread_ptr) {
 
     vmx->launched = 0;
     vmx->ipi_pending_bitmap = 0;
+
+    /* VMCLEAR to flush all VMCS data from processor-internal cache to memory.
+     * Intel SDM requires this before a VMCS is accessed on another logical
+     * processor (this AP's pCPU will VMPTRLD this VMCS on first schedule). */
+    vmx_vmclear(&vmx->vmcs_phys);
+    vmx->launched = 0;
 
     kprintf("[VMX] Partition %d vCPU %d (AP): VMCS at phys 0x%llx, wait-for-SIPI\n",
             p->cfg->id, vmx->vcpu_id, vmx->vmcs_phys);
@@ -1498,26 +1504,41 @@ void __attribute__((noreturn)) vmx_run_guest(void *kthread_ptr) {
                 vmx_handle_cpuid_exit(vmx);
                 break;
 
+            case EXIT_REASON_VMCALL: {
+                /* Guest issued vmcall - dispatch as PRTOS hypercall.
+                 * Register convention matches para-virt (int $0x82):
+                 *   rax = hypercall number
+                 *   rbx = arg0, rcx = arg1, rdx = arg2, rsi = arg3, rdi = arg4
+                 * EPT is identity-mapped (GPA == HPA), so buffer pointers
+                 * from the guest can be used directly by hypercall handlers.
+                 */
+                extern prtos_s32_t (*hypercalls_table[NR_HYPERCALLS])(prtos_word_t, ...);
+                prtos_u64_t hc_nr = vmx->guest_regs[VMX_REG_RAX];
+                prtos_s32_t hc_ret;
+
+                if (hc_nr < NR_HYPERCALLS && hypercalls_table[hc_nr]) {
+                    hc_ret = hypercalls_table[hc_nr](
+                        (prtos_word_t)vmx->guest_regs[VMX_REG_RBX],
+                        (prtos_word_t)vmx->guest_regs[VMX_REG_RCX],
+                        (prtos_word_t)vmx->guest_regs[VMX_REG_RDX],
+                        (prtos_word_t)vmx->guest_regs[VMX_REG_RSI],
+                        (prtos_word_t)vmx->guest_regs[VMX_REG_RDI]);
+                } else {
+                    hc_ret = PRTOS_UNKNOWN_HYPERCALL;
+                }
+                vmx->guest_regs[VMX_REG_RAX] = (prtos_u64_t)(prtos_s64_t)hc_ret;
+                /* Advance past vmcall instruction (3 bytes: 0F 01 C1) */
+                vmx_vmwrite(VMCS_GUEST_RIP, vmx_vmread(VMCS_GUEST_RIP) + 3);
+                break;
+            }
+
             case EXIT_REASON_PREEMPTION_TIMER: {
                 prtos_u64_t now = get_sys_clock_usec();
                 if (vmx->vcpu_id == 0) {
                     vpit_tick(vmx, now);
                     vuart_poll_host(vmx);
 
-                    /* Heartbeat: show timer state every 60s */
-                    {
-                        extern prtos_u32_t g_pic_inj_cnt, g_pic_defer_cnt, g_pic_busy_cnt;
-                        extern prtos_u32_t g_lapic_inj_cnt, g_vuart_tx_cnt, g_vuart_irq4_cnt, g_vmentry_cnt;
-                        static prtos_u64_t next_hb = 60000000;
-                        if (now >= next_hb) {
-                            kprintf("[HB] PIC=%u LAPIC=%u TX=%u VM=%u IER=0x%x\n",
-                                    g_pic_inj_cnt,
-                                    g_lapic_inj_cnt,
-                                    g_vuart_tx_cnt, g_vmentry_cnt,
-                                    vmx->shared->vuart.ier);
-                            next_hb = now + 10000000;
-                        }
-                    }
+
                 }
                 vmx_vmwrite(VMCS_VMX_PREEMPT_TIMER_VALUE, vmx->preempt_timer_val);
                 break;
@@ -2139,7 +2160,11 @@ static void vuart_update_irq(struct vmx_state *vmx) {
 
 static void vuart_poll_host(struct vmx_state *vmx) {
     struct vuart_state *uart = &vmx->shared->vuart;
-    /* Poll host UART for incoming data */
+    /* Only route COM1 input to partition 0 (System).
+     * This prevents the input race condition where both partitions
+     * consume characters from the same physical serial port. */
+    if (vmx->shared->partition_id != 0)
+        return;
     while (in_byte(0x3FD) & 0x01) {
         prtos_u8_t ch = in_byte(0x3F8);
         prtos_u8_t next = (uart->rx_head + 1) % sizeof(uart->rx_buf);
@@ -2163,12 +2188,12 @@ static void vuart_write(struct vmx_state *vmx, prtos_u16_t port, prtos_u8_t val)
     }
 
     switch (offset) {
-    case 0: /* THR: write character to hypervisor console */
+    case 0: /* THR: write character to COM1 via hypervisor console */
         {
             extern void console_put_char(prtos_u8_t c);
             console_put_char((prtos_u8_t)val);
-            g_vuart_tx_cnt++;
         }
+        g_vuart_tx_cnt++;
         uart->thr_empty = 1;
         vuart_update_irq(vmx);
         break;
@@ -2282,6 +2307,41 @@ static void vmx_handle_io_exit(kthread_t *k, struct vmx_state *vmx) {
             val32 = vuart_read(vmx, port);
         else if (port == 0x64)
             val32 = 0;  /* keyboard status: no data */
+        else if (port >= 0x2F8 && port <= 0x2FF && vmx->shared->partition_id != 0) {
+            /* COM2 ports — passthrough to QEMU COM2 (Guest only).
+             * Guest spawns getty on ttyS1 for telnet login.
+             * set_serial_poll forces irq=0 so 8250 uses timer polling. */
+            if (size == 4) {
+                __asm__ __volatile__("inl %w1, %0" : "=a"(val32) : "Nd"(port));
+                handled_wide = 1;
+            } else if (size == 2) {
+                prtos_u16_t v16;
+                __asm__ __volatile__("inw %w1, %0" : "=a"(v16) : "Nd"(port));
+                val32 = v16;
+            } else {
+                prtos_u8_t v8;
+                __asm__ __volatile__("inb %w1, %b0" : "=a"(v8) : "Nd"(port));
+                val32 = v8;
+            }
+        }
+        else if (port >= 0x3B0 && port <= 0x3DF && vmx->shared->partition_id != 0) {
+            /* VGA I/O ports — passthrough to QEMU VGA device (Guest only).
+             * Guest uses console=tty0 (vgacon) which needs CRT controller,
+             * attribute controller, sequencer, DAC, and misc registers.
+             * System partition returns default 0xFF (no VGA overhead). */
+            if (size == 4) {
+                __asm__ __volatile__("inl %w1, %0" : "=a"(val32) : "Nd"(port));
+                handled_wide = 1;
+            } else if (size == 2) {
+                prtos_u16_t v16;
+                __asm__ __volatile__("inw %w1, %0" : "=a"(v16) : "Nd"(port));
+                val32 = v16;
+            } else {
+                prtos_u8_t v8;
+                __asm__ __volatile__("inb %w1, %b0" : "=a"(v8) : "Nd"(port));
+                val32 = v8;
+            }
+        }
         else if (port == 0xCF8 || (port >= 0xCFC && port <= 0xCFF)) {
             /* PCI config space — passthrough to real hardware (QEMU emulated) */
             if (size == 4) {
@@ -2319,6 +2379,28 @@ static void vmx_handle_io_exit(kthread_t *k, struct vmx_state *vmx) {
             vpic_write(&vmx->shared->vpic, port, val);
         else if (port >= 0x3F8 && port <= 0x3FF)
             vuart_write(vmx, port, val);
+        else if (port >= 0x2F8 && port <= 0x2FF && vmx->shared->partition_id != 0) {
+            /* COM2 ports — passthrough to QEMU COM2 (Guest only) */
+            prtos_u32_t val32_out = (prtos_u32_t)(vmx->guest_regs[VMX_REG_RAX] & 0xFFFFFFFF);
+            if (size == 4) {
+                __asm__ __volatile__("outl %0, %w1" :: "a"(val32_out), "Nd"(port));
+            } else if (size == 2) {
+                __asm__ __volatile__("outw %w0, %w1" :: "a"((prtos_u16_t)val32_out), "Nd"(port));
+            } else {
+                __asm__ __volatile__("outb %b0, %w1" :: "a"((prtos_u8_t)val32_out), "Nd"(port));
+            }
+        }
+        else if (port >= 0x3B0 && port <= 0x3DF && vmx->shared->partition_id != 0) {
+            /* VGA I/O ports — passthrough to QEMU VGA device (Guest only) */
+            prtos_u32_t val32_out = (prtos_u32_t)(vmx->guest_regs[VMX_REG_RAX] & 0xFFFFFFFF);
+            if (size == 4) {
+                __asm__ __volatile__("outl %0, %w1" :: "a"(val32_out), "Nd"(port));
+            } else if (size == 2) {
+                __asm__ __volatile__("outw %w0, %w1" :: "a"((prtos_u16_t)val32_out), "Nd"(port));
+            } else {
+                __asm__ __volatile__("outb %b0, %w1" :: "a"((prtos_u8_t)val32_out), "Nd"(port));
+            }
+        }
         else if (port == 0xCF8 || (port >= 0xCFC && port <= 0xCFF)) {
             /* PCI config space — passthrough to real hardware (QEMU emulated) */
             prtos_u32_t val32_out = (prtos_u32_t)(vmx->guest_regs[VMX_REG_RAX] & 0xFFFFFFFF);

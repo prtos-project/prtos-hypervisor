@@ -753,6 +753,13 @@ static void flags_partition_attr_handle(xmlNodePtr node, const xmlChar *val) {
 
 static struct attr_xml flags_partition_attr = {BAD_CAST "flags", flags_partition_attr_handle};
 
+static void hw_virt_partition_attr_handle(xmlNodePtr node, const xmlChar *val) {
+    if (!strcasecmp((char *)val, "true") || !strcasecmp((char *)val, "1"))
+        prtos_conf_partition_table[C_PARTITION].flags |= PRTOS_PART_HWVIRT;
+}
+
+static struct attr_xml hw_virt_partition_attr = {BAD_CAST "hw_virt", hw_virt_partition_attr_handle};
+
 static void partition_node_handle0(xmlNodePtr node) {
     prtos_conf.num_of_partitions++;
     count_partition = C_PARTITION;
@@ -779,7 +786,7 @@ static struct node_xml partition_node = {
     partition_node_handle0,
     0,
     partition_node_handle2,
-    (struct attr_xml *[]){&id_partition_attr, &name_partition_attr, &console_partition_attr, &flags_partition_attr, &num_of_vcpus_partition_attr, 0},
+    (struct attr_xml *[]){&id_partition_attr, &name_partition_attr, &console_partition_attr, &flags_partition_attr, &hw_virt_partition_attr, &num_of_vcpus_partition_attr, 0},
     (struct node_xml *[]){&mem_area_node, &hm_node, &trace_node, &hw_resources_partition_node, &port_table_node, 0}};
 
 static struct node_xml partition_table_node = {BAD_CAST "PartitionTable", 0, 0, 0, 0, (struct node_xml *[]){&partition_node, 0}};

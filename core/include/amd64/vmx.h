@@ -49,6 +49,7 @@
 #define CPU_BASED_CR8_LOAD_EXITING    (1U << 19)
 #define CPU_BASED_CR8_STORE_EXITING   (1U << 20)
 #define CPU_BASED_UNCOND_IO_EXITING   (1U << 24)
+#define CPU_BASED_USE_IO_BITMAPS      (1U << 25)
 #define CPU_BASED_USE_MSR_BITMAPS     (1U << 28)
 #define CPU_BASED_MONITOR_TRAP_FLAG   (1U << 27)
 #define CPU_BASED_ACTIVATE_SEC_CTLS   (1U << 31)
@@ -318,6 +319,13 @@ struct vmx_partition_shared {
     struct vpic_state  vpic;
     struct vuart_state vuart;
     prtos_u8_t port61;         /* Speaker/PIT gate register (port 0x61) */
+    prtos_u32_t partition_id;  /* PRTOS partition ID (0=System, 1=Guest, ...) */
+
+    /* I/O bitmap for selective port pass-through (Guest partition COM2) */
+    void *io_bitmap_a;              /* ports 0x0000-0x7FFF (4KB, phys-aligned) */
+    void *io_bitmap_b;              /* ports 0x8000-0xFFFF (4KB, phys-aligned) */
+    prtos_u64_t io_bitmap_a_phys;
+    prtos_u64_t io_bitmap_b_phys;
 
     /* Per-vCPU VMX state pointers (for SIPI cross-vCPU wakeup) */
     prtos_u32_t num_vcpus;
