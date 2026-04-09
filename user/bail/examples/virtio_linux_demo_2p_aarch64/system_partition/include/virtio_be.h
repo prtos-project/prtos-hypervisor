@@ -205,6 +205,7 @@ struct virtio_net_instance {
 
 void virtio_console_init(struct virtio_console_shm *con);
 void virtio_console_process(struct virtio_console_shm *con);
+void virtio_console_cleanup(void);
 
 int  virtio_net_init(struct virtio_net_instance *inst);
 void virtio_net_process(struct virtio_net_instance *inst);

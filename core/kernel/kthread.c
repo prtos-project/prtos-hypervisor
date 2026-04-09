@@ -75,7 +75,16 @@ void start_up_guest(prtos_address_t entry) {
 
     // JMP_PARTITION must enable interrupts
 #ifdef CONFIG_AARCH64
-    setup_stage2_mmu(k);
+    /* For PSCI secondary vCPU boot, page tables are already set up by the
+     * primary vCPU and shared via karch.  Skip setup_stage2_mmu to avoid
+     * modifying shared page tables while the primary vCPU is using them.
+     * Just copy the VTTBR from the primary vCPU. */
+    if (k->ctrl.g->karch.psci_entry != 0) {
+        partition_t *p = &partition_table[KID2PARTID(k->ctrl.g->id)];
+        k->ctrl.g->karch.vttbr_el2 = p->kthread[0]->ctrl.g->karch.vttbr_el2;
+    } else {
+        setup_stage2_mmu(k);
+    }
 
     /*
      * Call switch_kthread_arch_post AFTER setup_stage2_mmu so that
@@ -216,6 +225,13 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
                 struct prtos_vgic_state *vgic;
                 GET_MEMAZ(vgic, sizeof(struct prtos_vgic_state), ALIGNMENT);
                 prtos_vgic_init(vgic, cfg->num_of_vcpus);
+                /* Store physical CPU mapping for GICR_TYPER affinity */
+                {
+                    prtos_s32_t v;
+                    for (v = 0; v < (prtos_s32_t)cfg->num_of_vcpus && v < 4; v++)
+                        vgic->vcpu_to_pcpu[v] = prtos_conf_vcpu_table[
+                            (cfg->id * prtos_conf_table.hpv.num_of_cpus) + v].cpu;
+                }
                 k->ctrl.g->karch.vgic = vgic;
             }
         } else {

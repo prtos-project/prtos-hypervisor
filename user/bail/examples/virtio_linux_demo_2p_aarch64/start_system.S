@@ -26,8 +26,9 @@ _boot:
 	mov	x2, xzr
 	mov	x3, xzr
 
-	/* Set up initrd location in DTB is not needed - we pass as separate
-	 * CPIO overlay. Linux will find it via the chosen node in DTB. */
+	/* Set up initrd location in DTB is done at build time - the Makefile
+	 * injects linux,initrd-start/end into the DTB chosen node with
+	 * the correct addresses (0x14000000 + CPIO size). */
 
 	/* Jump to Linux Image entry point */
 	adrp	x4, _linux_image_sys_start

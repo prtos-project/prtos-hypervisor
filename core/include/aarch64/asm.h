@@ -206,6 +206,9 @@ static inline prtos_s32_t asm_ronly_check(prtos_address_t param, prtos_u_size_t 
             "msr tcr_el1, xzr\n\t"                                                                       \
             "msr mair_el1, xzr\n\t"                                                                      \
             "msr vbar_el1, xzr\n\t"                                                                      \
+            /* Enable FP/SIMD at EL1: CPACR_EL1.FPEN = 0b11 (bits [21:20]) */                           \
+            "mov x2, #(3 << 20)\n\t"                                                                     \
+            "msr cpacr_el1, x2\n\t"                                                                      \
             "isb\n\t"                                                                                    \
             "mov x0, %1\n\t"             /* context_id */                                                \
             "isb\n\t"                                                                                    \

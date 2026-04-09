@@ -19,7 +19,8 @@
 #
 # Usage:
 #   make                     # Build container.bin and resident_sw
-#   make run.aarch64         # Build and run on QEMU
+#   make run.aarch64         # Build and run on QEMU (UART + telnet)
+#   make run.aarch64.nographic # Nographic mode (for testing)
 #   make clean               # Clean all build artifacts
 
 BAIL_PATH=../../
@@ -38,7 +39,7 @@ PARTITIONS=partition_system.pef partition_guest.pef
 # ============================================================================
 # Linux Workspace Paths
 # ============================================================================
-LINUX_WORKSPACE=../native_linux_run_on_qemu_a57_virt
+LINUX_WORKSPACE=/home/chenweis/hdd/Repo/aarch64_linux_workspace
 LINUX_IMAGE=$(LINUX_WORKSPACE)/linux-6.19.9/arch/arm64/boot/Image
 
 # ============================================================================
@@ -75,12 +76,24 @@ $(OBJDIR):
 Image: $(LINUX_IMAGE)
 	cp $< $@
 
-# Compile device trees
-linux_system.dtb: linux_system.dts
-	$(DTC) -I dts -O dtb -o $@ $<
+# Compile device trees (inject initrd addresses from linker-placed CPIO overlays)
+# System initrd: starts at 0x14000000 (linker_system.ld), size = rootfs_overlay.cpio
+# Guest  initrd: starts at 0x1C000000 (linker_guest.ld),  size = guest_rootfs_overlay.cpio
+linux_system.dtb: linux_system.dts rootfs_overlay.cpio
+	@CPIO_SZ=$$(stat -c%s rootfs_overlay.cpio); \
+	END_ADDR=$$(printf '0x%x' $$((0x14000000 + $$CPIO_SZ))); \
+	sed '/bootargs/a\		linux,initrd-start = <0x0 0x14000000>;\n\t\tlinux,initrd-end = <0x0 '"$$END_ADDR"'>;' $< > _tmp_system.dts && \
+	$(DTC) -I dts -O dtb -o $@ _tmp_system.dts && \
+	rm -f _tmp_system.dts
+	@echo "[Build] System DTB with initrd @ 0x14000000 (size $$(stat -c%s rootfs_overlay.cpio) bytes)"
 
-linux_guest.dtb: linux_guest.dts
-	$(DTC) -I dts -O dtb -o $@ $<
+linux_guest.dtb: linux_guest.dts guest_rootfs_overlay.cpio
+	@CPIO_SZ=$$(stat -c%s guest_rootfs_overlay.cpio); \
+	END_ADDR=$$(printf '0x%x' $$((0x1C000000 + $$CPIO_SZ))); \
+	sed '/bootargs/a\\t\tlinux,initrd-start = <0x0 0x1C000000>;\n\t\tlinux,initrd-end = <0x0 '"$$END_ADDR"'>;' $< > _tmp_guest.dts && \
+	$(DTC) -I dts -O dtb -o $@ _tmp_guest.dts && \
+	rm -f _tmp_guest.dts
+	@echo "[Build] Guest DTB with initrd @ 0x1C000000 (size $$(stat -c%s guest_rootfs_overlay.cpio) bytes)"
 
 # ============================================================================
 # System Partition Userspace: Virtio Backend Daemon
@@ -138,16 +151,20 @@ prtos_manager: $(MGR_OBJS)
 # ============================================================================
 
 rootfs_overlay.cpio: prtos_manager virtio_backend \
-                     system_partition/rootfs_overlay/etc/init.d/S99virtio_backend
+                     system_partition/rootfs_overlay/etc/init.d/S99virtio_backend \
+                     system_partition/rootfs_overlay/opt/diag_tcp_bridge.sh
 	@rm -rf _overlay_root
 	@mkdir -p _overlay_root/usr/bin
 	@mkdir -p _overlay_root/etc/init.d
+	@mkdir -p _overlay_root/opt
 	@cp prtos_manager  _overlay_root/usr/bin/
 	@cp virtio_backend _overlay_root/usr/bin/
 	@cp system_partition/rootfs_overlay/etc/init.d/S99virtio_backend _overlay_root/etc/init.d/
+	@cp system_partition/rootfs_overlay/opt/diag_tcp_bridge.sh _overlay_root/opt/
 	@chmod 755 _overlay_root/usr/bin/prtos_manager
 	@chmod 755 _overlay_root/usr/bin/virtio_backend
 	@chmod 755 _overlay_root/etc/init.d/S99virtio_backend
+	@chmod 755 _overlay_root/opt/diag_tcp_bridge.sh
 	@(cd _overlay_root && find . | cpio -o -H newc --quiet) > $@
 	@rm -rf _overlay_root
 	@echo "[Build] System rootfs overlay CPIO built: $@ ($$(stat -c%s $@) bytes)"
@@ -240,7 +257,7 @@ include ../run.mk
 # U-Boot Build (custom with larger CONFIG_SYS_BOOTM_LEN for ~103MB image)
 # ============================================================================
 
-UBOOT_SRC ?= $(realpath $(BAIL_PATH)/../../../../u-boot)
+UBOOT_SRC = /home/chenweis/hdd/Repo/fork_os/u-boot
 UBOOT_BIN = u-boot/u-boot.bin
 
 $(UBOOT_BIN): | u-boot
@@ -268,7 +285,31 @@ run.aarch64: $(UBOOT_BIN)
 	@echo "=== Creating bootable image ==="
 	@aarch64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S resident_sw resident_sw.bin
 	@mkimage -A arm64 -O linux -C none -a 0x40200000 -e 0x40200000 -d resident_sw.bin resident_sw_image
-	@echo "=== Starting QEMU ==="
+	@echo "================================================================"
+	@echo "  System Partition: this terminal (PL011/stdio) | root/1234"
+	@echo "  Guest Partition:  from System shell, run:"
+	@echo "      telnet 127.0.0.1 4321"
+	@echo "    then login with root/1234"
+	@echo "================================================================"
+	qemu-system-aarch64 \
+		-machine virt,gic_version=3 \
+		-machine virtualization=true \
+		-cpu cortex-a72 \
+		-machine type=virt \
+		-m 4096 \
+		-smp 4 \
+		-bios ./u-boot/u-boot.bin \
+		-device loader,file=./resident_sw_image,addr=0x40200000,force-raw=on \
+		-nographic -no-reboot
+
+# Nographic mode for automated testing (same as run.aarch64)
+run.aarch64.nographic: $(UBOOT_BIN)
+	@make clean
+	@make resident_sw
+	@make $(UBOOT_BIN)
+	@echo "=== Creating bootable image ==="
+	@aarch64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S resident_sw resident_sw.bin
+	@mkimage -A arm64 -O linux -C none -a 0x40200000 -e 0x40200000 -d resident_sw.bin resident_sw_image
 	qemu-system-aarch64 \
 		-machine virt,gic_version=3 \
 		-machine virtualization=true \

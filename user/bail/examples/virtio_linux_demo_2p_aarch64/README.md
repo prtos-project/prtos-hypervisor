@@ -4,13 +4,15 @@
 
 This demo demonstrates **Virtio device virtualization** on the PRTOS Type-1 Hypervisor using two SMP Linux partitions communicating through shared memory on the AArch64 (ARMv8) platform with hardware-assisted virtualization (EL2/vGIC).
 
-The **System Partition** runs virtio backend daemons that serve virtualized devices to the **Guest Partition** via shared memory regions. The Guest runs a **userspace frontend daemon** (`virtio_frontend`) that bridges the custom shared-memory protocol to standard Linux devices (`/dev/vda` via NBD, `/dev/hvc0` via PTY, `tap0`/`tap1`/`tap2` via TUN/TAP). Both partitions run full Linux (kernel 6.19.9) with Buildroot rootfs. System Partition has PL011 UART console; Guest has no direct console (uses virtio-console). All services auto-start via init scripts.
+The **System Partition** owns the PL011 UART and runs virtio backend daemons that serve virtualized devices to the **Guest Partition** via shared memory regions. The Guest runs a **userspace frontend daemon** (`virtio_frontend`) that bridges the custom shared-memory protocol to standard Linux devices (`/dev/vda` via NBD, `/dev/hvc0` via PTY, `tap0`/`tap1`/`tap2` via TUN/TAP). Both partitions run full Linux (kernel 6.19.9). The System console is on the PL011 UART (stdio). The Guest console is accessible via a **TCP bridge** in the virtio backend daemon — from the System shell, run `telnet 127.0.0.1 4321` to reach the Guest's `/dev/hvc0`. All services auto-start via init scripts.
+
+**Guest Virtio Frontend**: Standard `virtio-mmio` kernel drivers cannot be used because PRTOS's AArch64 HVC instruction only works from EL1+, not from Linux userspace (EL0). Instead, a userspace daemon (`virtio_frontend`) bridges shared memory to standard Linux devices via NBD (block), PTY (console), and TUN/TAP (network) using polling.
 
 ## Architecture
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│  L0: Host Linux + QEMU (aarch64, virt, GICv3, 4096MB RAM)      │
+│  L0: Host Linux + QEMU (aarch64, virt, GICv3, 4096MB RAM, 4 CPUs) │
 ├────────────────────────────────────────────────────────────────┤
 │  L1: PRTOS Type-1 Hypervisor (32MB)                            │
 │  ┌───────────────────────┐  ┌────────────────────────┐         │
@@ -18,17 +20,18 @@ The **System Partition** runs virtio backend daemons that serve virtualized devi
 │  │ Linux + Virtio Backend│  │ Linux + Virtio Frontend│         │
 │  │ 2 vCPU (pCPU 0-1)     │  │ 2 vCPU (pCPU 2-3)      │         │
 │  │ 128MB @ 0x10000000    │  │ 128MB @ 0x18000000     │         │
-│  │ console=PL011 UART    │  │ console=none (virtio)  │         │
-│  │                       │  │                        │         │
-│  │ Services (auto-start): │  │ Virtio Frontend:       │         │
-│  │ - prtos_manager       │  │ - virtio_frontend      │         │
-│  │ - virtio_backend      │  │   - NBD (/dev/vda)     │         │
-│  │   - Console backend   │  │   - PTY (/dev/hvc0)    │         │
-│  │   - 3x Net backend    │  │   - TAP (tap0/1/2)     │         │
-│  │   - Blk backend       │  │                        │         │
+│  │ console=PL011 (UART)  │  │ console=/dev/hvc0      │         │
+│  │                       │  │ (TCP bridge :4321)     │         │
+│  │ Services (auto-start): │  │                       │         │
+│  │ - prtos_manager       │  │ Virtio Frontend:       │         │
+│  │ - virtio_backend      │  │ - virtio_frontend      │         │
+│  │   - Console backend   │  │   - NBD (/dev/vda)     │         │
+│  │   - 3x Net backend    │  │   - PTY (/dev/hvc0)    │         │
+│  │   - Blk backend       │  │   - TAP (tap0/1/2)     │         │
 │  │   tap0: 10.0.1.1/24   │  │   tap0: 10.0.1.2/24    │         │
 │  │   tap1: 10.0.2.1/24   │  │   tap1: 10.0.2.2/24    │         │
 │  │   tap2: 10.0.3.1/24   │  │   tap2: 10.0.3.2/24    │         │
+│  │                       │  │ - /opt/virtio_test.sh  │         │
 │  └──────────┬────────────┘  └──────────┬─────────────┘         │
 │             │     Shared Memory        │                       │
 │             │  ┌──────────────────────┐│                       │
@@ -74,28 +77,48 @@ Scheduler: 10ms major frame, dedicated pCPU mapping.
 
 ## Console Assignment
 
-| Partition | Console   | Access Method            |
-|-----------|----------|--------------------------|
-| System    | PL011 UART | Terminal (stdio)       |
-| Guest     | None     | virtio-console via `/dev/hvc0` |
+| Partition | Console              | Mechanism                                  | Access Method            |
+|-----------|---------------------|--------------------------------------------|--------------------------|
+| System    | PL011 UART (0x09000000)  | `-nographic` (QEMU serial → stdio)    | Terminal (direct)        |
+| Guest     | /dev/hvc0 (PTY)     | virtio-console shared memory + TCP bridge  | `telnet 127.0.0.1 4321` (from System) |
+
+The Guest partition has no direct hardware UART. Instead, `virtio_frontend` creates a PTY pair (`/dev/hvc0`) and bridges it to the console shared memory region. On the System side, `virtio_backend` reads/writes the shared memory and also listens on TCP port 4321 inside the System partition. To access the Guest console, log into the System partition first, then run `telnet 127.0.0.1 4321`. An init script (`S99virtio_guest`) waits for `/dev/hvc0` and spawns `getty` on it automatically.
 
 ## Virtio Devices
 
 ### Virtio-Console
-- **Mechanism**: 4KB character ring buffer in shared memory (`Virtio_Con`)
+- **Mechanism**: 4KB bidirectional character ring buffer in shared memory (`Virtio_Con`)
 - **Guest device**: `/dev/hvc0` (PTY pair created by `virtio_frontend`)
-- **Data flow**: Guest writes → shared memory → Backend reads → System UART
+- **Backend TCP bridge**: `virtio_backend` listens on TCP port 4321 inside System partition
+- **Data flow (Guest → System)**: Guest writes to `/dev/hvc0` → `virtio_frontend` copies to `tx_buf` → Backend reads, prints to System UART and sends to TCP client
+- **Data flow (System → Guest)**: TCP client sends data → Backend writes to `rx_buf` → `virtio_frontend` reads `rx_buf` → writes to PTY master → Guest reads from `/dev/hvc0`
+- **Interactive access**: From System shell: `telnet 127.0.0.1 4321` → Guest getty login
+- **Verify**: `echo "Hello PRTOS" > /dev/hvc0` (from Guest) → appears on System console
 
 ### Virtio-Net (×3)
-- **Mechanism**: 64-slot packet ring buffer per instance, bridged via TUN/TAP
-- **Net0**: System `tap0` (10.0.1.1) ↔ Guest `tap0` (10.0.1.2)
-- **Net1**: System `tap1` (10.0.2.1) ↔ Guest `tap1` (10.0.2.2)
-- **Net2**: System `tap2` (10.0.3.1) ↔ Guest `tap2` (10.0.3.2)
+- **Mechanism**: 64-slot packet ring buffer (up to 1536 bytes/slot) per instance, bridged via TUN/TAP on both partitions
+- **Net0**: System `tap0` (10.0.1.1) ↔ shared memory ↔ Guest `tap0` (10.0.1.2)
+- **Net1**: System `tap1` (10.0.2.1) ↔ shared memory ↔ Guest `tap1` (10.0.2.2)
+- **Net2**: System `tap2` (10.0.3.1) ↔ shared memory ↔ Guest `tap2` (10.0.3.2)
+- **Data flow**: Guest TAP → `tx_slots` in shared memory → Backend reads → Backend TAP (and reverse for RX)
+- **Verify**: `ping 10.0.x.1` from Guest, or `ping 10.0.x.2` from System
 
 ### Virtio-Blk
 - **Mechanism**: 16-slot block request ring (sector-addressed, 512B sectors)
 - **Backend**: 1MB in-memory RAM disk (default fallback)
-- **Guest device**: `/dev/vda` (symlink to `/dev/nbd0`)
+- **Guest device**: `/dev/vda` (symlink to `/dev/nbd0`, served by `virtio_frontend` via NBD protocol)
+- **Operations**: IN (read), OUT (write), FLUSH, GET_ID
+- **Verify**: The test script (`virtio_test.sh`) creates an ext2 filesystem on `/dev/vda`, mounts it, writes a test file, and verifies the contents
+
+## IP Address Assignment
+
+| Network | System (tap) | Guest (tap) | Subnet |
+|---------|-------------|------------|--------|
+| Net0    | 10.0.1.1    | 10.0.1.2   | /24    |
+| Net1    | 10.0.2.1    | 10.0.2.2   | /24    |
+| Net2    | 10.0.3.1    | 10.0.3.2   | /24    |
+
+IP addresses are assigned automatically by init scripts (`S99virtio_backend` on System, `S99virtio_guest` on Guest).
 
 ## Inter-Partition Communication (IPVI)
 
@@ -145,6 +168,7 @@ Apply extra configs (`make menuconfig`):
 |---|---|---|
 | `CONFIG_BLK_DEV_NBD` | `y` | NBD block device |
 | `CONFIG_TUN` | `y` | TUN/TAP device |
+| `CONFIG_STRICT_DEVMEM` | `n` | Allow /dev/mem mmap for shared memory |
 | `CONFIG_INITRAMFS_SOURCE` | `/path/to/buildroot/output/images/rootfs.cpio` | Embed rootfs |
 
 ```bash
@@ -194,11 +218,21 @@ The resulting `u-boot.bin` is placed in `u-boot/u-boot.bin` within the demo dire
 
 ## Running
 
+### Interactive Mode
 ```bash
 make run.aarch64
 ```
+System Partition PL011 UART on stdio. Login with `root`/`1234`, then access the Guest from System shell:
+```bash
+telnet 127.0.0.1 4321
+# Login: root / 1234
+```
 
-Boots via U-Boot (`-bios u-boot.bin`) with the PRTOS image loaded at 0x40200000 via QEMU device loader. U-Boot's `preboot` command automatically invokes `bootm` to boot the image. System Partition PL011 UART appears on stdio.
+### Nographic Mode (automated testing)
+```bash
+make run.aarch64.nographic
+```
+Same as `run.aarch64`. System UART on stdio. Used by the test framework.
 
 ### Manual QEMU Command
 ```bash
@@ -220,8 +254,52 @@ qemu-system-aarch64 \
 4. U-Boot verifies the image checksum, loads it, and jumps to the PRTOS RSW entry point
 5. RSW unpacks the container (PRTOS core + 2 partition PEFs) and starts the hypervisor
 
-## Platform-Specific Notes
+## Demo Workflow
 
+All virtio services auto-start via init scripts (`S99virtio_backend` on System, `S99virtio_guest` on Guest). No manual steps are required to start the backend or frontend.
+
+### Step 1: Launch QEMU
+```bash
+make run.aarch64
+```
+
+### Step 2: Boot System Partition (UART/stdio)
+System auto-starts `prtos_manager` and `virtio_backend` via `S99virtio_backend`:
+```
+=== PRTOS System Partition ===
+PRTOS Partition manager running on partition 0
+=== PRTOS Virtio Backend Daemon ===
+[Backend] All 5 Virtio devices initialized. Entering poll loop...
+
+Welcome to Buildroot
+buildroot login: root
+Password: 1234
+```
+
+### Step 3: Access Guest Partition
+```bash
+# From the System partition shell (after logging in):
+telnet 127.0.0.1 4321
+# Login: root / 1234
+```
+Guest auto-starts `virtio_frontend` via `S99virtio_guest`. The frontend waits for the backend to initialize shared memory (polls magic values up to 300s), then creates `/dev/nbd0` (block) and `/dev/hvc0` (console). The init script waits for `/dev/hvc0` and spawns `getty` on it. The backend's TCP bridge on port 4321 connects telnet to `/dev/hvc0` via shared memory.
+
+> **Note**: Unlike AMD64 (which provides host-level `telnet localhost 4321` via COM2), AArch64 QEMU virt only has one PL011 UART. Guest console access is through the System partition's shell using the virtio-console TCP bridge.
+
+### Step 4: Test Virtio Devices (Guest)
+```bash
+/opt/virtio_test.sh   # Automated test for all virtio devices
+```
+Expected output includes:
+- Network: 3 TAP interfaces (tap0/tap1/tap2) with IPs, all pings to System partition OK
+- Block device (`/dev/vda` → `/dev/nbd0`): ext2 filesystem created, mounted, test file written and verified
+- Console (`/dev/hvc0`): message "Hello PRTOS from Guest!" forwarded to System UART
+- Shared memory magic values verified (NET0=0x4E455430, BLK0=0x424C4B30, CONS=0x434F4E53)
+- `Verification Passed`
+
+## Platform-Specific Notes
+CONFIG_STRICT_DEVMEM**: Must be disabled (`=n`) in the kernel config. The default ARM64 setting (`=y`) blocks `/dev/mem` mmap for addresses outside declared RAM, which prevents `virtio_frontend` from mapping the shared memory regions at 0x20000000+.
+- **
 - **Hypercall mechanism**: AArch64 HVC instruction only works from EL1+, not from Linux userspace (EL0). The `prtos_vmcall()` function is stubbed to return -1. Virtio operates in **polling mode** (no IPVI doorbell notifications).
 - **Boot method**: Uses U-Boot with custom `CONFIG_SYS_BOOTM_LEN=0x10000000` (256MB) to accommodate the ~103MB image containing 2 Linux partitions. The standard qemu_arm64 U-Boot default (128MB) is insufficient.
 - **GIC**: GICv3 with maintenance interrupt on IRQ 25.
@@ -230,6 +308,15 @@ qemu-system-aarch64 \
 ## Testing
 
 ```bash
+# Automated login test:
+python3 test_login.py
+
+# Guest console (TCP bridge) test:
+python3 test_com2.py
+
+# Guest console (TCP bridge) test:
+python3 test_com2.py
+
 # Via the test framework:
 cd ../../../../  # back to prtos-hypervisor root
 bash scripts/run_test.sh --arch aarch64 check-virtio_linux_demo_2p_aarch64
@@ -242,32 +329,67 @@ bash scripts/run_test.sh --arch aarch64 check-all
 
 | File / Directory | Description |
 |-----------------|-------------|
-| `config/resident_sw.xml` | PRTOS system configuration |
-| `Makefile` | Build system |
+| `config/resident_sw.xml` | PRTOS system configuration (2 SMP partitions, 5 shared memory regions, 6 IPVIs, dual console) |
+| `prtos_cf.aarch64.xml` | Symlink → `config/resident_sw.xml` |
+| `Makefile` | Build system (partitions, backend, manager, CPIO overlays, QEMU targets) |
 | `start_system.S` | Boot stub for System Partition (ARM64 boot protocol) |
 | `start_guest.S` | Boot stub for Guest Partition |
-| `hdr_system.c` / `hdr_guest.c` | PRTOS image headers |
-| `linker_system.ld` | Linker script (base `0x10000000`, initrd at +64MB) |
-| `linker_guest.ld` | Linker script (base `0x18000000`, initrd at +64MB) |
-| `linux_system.dts` | Device tree (128MB, 2 CPUs, GICv3, PL011 UART) |
-| `linux_guest.dts` | Device tree (128MB, 2 CPUs, GICv3, no UART) |
+| `hdr_system.c` / `hdr_guest.c` | PRTOS image headers (magic `0x24584d69`) |
+| `linker_system.ld` | Linker script (System, base `0x10000000`, initrd at +64MB) |
+| `linker_guest.ld` | Linker script (Guest, base `0x18000000`, initrd at +64MB) |
+| `linux_system.dts` | Device tree (128MB, 2 CPUs, GICv3, PL011 UART @ 0x09000000) |
+| `linux_guest.dts` | Device tree (128MB, 1 CPU, GICv3, no UART — uses virtio-console) |
 | `set_serial_poll.c` | Utility for serial polling mode |
+| `test_login.py` | Automated test: QEMU launch, PL011 login, `uname` check |
+| `test_com2.py` | Automated test: Guest console access via TCP bridge from System |
 | **`system_partition/`** | |
-| `  include/virtio_be.h` | Shared data structures (addresses at 0x20xxxxxx) |
-| `  src/` | Backend daemon sources |
-| `  rootfs_overlay/` | System init scripts |
+| `  include/virtio_be.h` | Shared data structures: `net_shm` (64-slot ring), `blk_shm` (16-slot ring), `console_shm` (4KB ring) |
+| `  src/main.c` | Backend daemon: mmap 5 `/dev/mem` regions, init all devices, 1ms poll loop |
+| `  src/virtio_console.c` | Console backend: poll `tx_buf` ring → `putchar` + TCP client; TCP client → `rx_buf` ring |
+| `  src/virtio_net.c` | Net backend: TAP for bridge, loopback for NAT/p2p |
+| `  src/virtio_blk.c` | Block backend: 1MB RAM disk |
+| `  src/doorbell.c` | IPVI signaling (stubbed on AArch64, polling mode) |
+| `  src/manager_if.c` | Manager wrapper: query Guest partition status |
+| `  rootfs_overlay/etc/init.d/S99virtio_backend` | Init script: create `/dev/net/tun`, auto-start `prtos_manager` and `virtio_backend`, configure TAP IPs |
 | **`lib_prtos_manager/`** | |
-| `  include/prtos_hv.h` | Hypercall API (HVC stub, mailbox at 0x20500000) |
-| `  common/` | Manager and hypercall implementations |
+| `  include/prtos_hv.h` | Hypercall API: HVC stub (returns -1 from EL0), status structs |
+| `  include/prtos_manager.h` | Manager device interface |
+| `  common/prtos_hv.c` | Hypercall implementation: `/dev/mem` mmap mailbox |
+| `  common/prtos_manager.c` | Command dispatcher: help, list, partition ops, plan, write, quit |
+| `  common/hypervisor.c` | Partition commands: list, halt, reset, resume, status, suspend |
+| `  linux/prtos_manager_main.c` | Linux main: stdin/stdout, `-d` dry-run mode |
 | **`guest_partition/`** | |
-| `  src/virtio_frontend.c` | Userspace frontend daemon |
-| `  rootfs_overlay/` | Guest init scripts and test script |
+| `  src/virtio_frontend.c` | Userspace frontend daemon: maps shared memory via `/dev/mem`, creates NBD server for `/dev/nbd0` (block), PTY pair for `/dev/hvc0` (console), TUN/TAP devices for networking |
+| `  rootfs_overlay/etc/init.d/S99virtio_guest` | Init script: start `virtio_frontend`, wait for `/dev/hvc0`, spawn `getty`, configure TAP IPs, create `/dev/vda` symlink |
+| `  rootfs_overlay/opt/virtio_test.sh` | Guest test script: network (3 ifaces), block, console, shmem check |
+
+## Design Notes
+
+- **4096MB QEMU RAM**: Total memory is 4GB. PRTOS Stage-2 page tables identity-map device MMIO regions.
+- **Console architecture**: System Partition uses PL011 UART at 0x09000000 (stdio). Guest Partition has no direct UART — unlike AMD64 (which has COM2), AArch64 QEMU virt only provides one PL011. Guest console is accessible via a bidirectional **TCP bridge** in `virtio_backend`: the backend listens on TCP port 4321 inside the System partition and bridges data to/from the console shared memory. To reach the Guest, log into System and run `telnet 127.0.0.1 4321`.
+- **Quiet System boot**: System kernel cmdline includes `quiet loglevel=0` to suppress boot messages for clean login experience.
+- **Networking**: Each virtio-net instance uses a pair of TUN/TAP devices (one on System, one on Guest) bridged through the shared memory packet ring. IP addresses are assigned by init scripts.
+- **Static linking**: `virtio_backend`, `virtio_frontend`, and `prtos_manager` are all statically linked for portability inside the partition rootfs.
+- **Auto-start**: Both partitions use Buildroot init scripts (`S99virtio_backend`, `S99virtio_guest`) to automatically start all services at boot. No manual intervention is required.
+- **Polling mode**: AArch64 HVC instruction only works from EL1+ (kernel mode). Userspace daemons cannot invoke hypercalls. IPVI doorbells are stubbed; virtio devices operate in polling mode with 1ms intervals.
 
 ## Dependencies
 
-- **Linux kernel 6.19.9** (AArch64 Image) with `CONFIG_BLK_DEV_NBD=y`, `CONFIG_TUN=y`, embedded initramfs
-- **Buildroot** rootfs with NBD client, root password `1234`, CPIO format
-- **PRTOS Hypervisor** built for aarch64
+- **Linux kernel 6.19.9** (AArch64 Image) with `CONFIG_BLK_DEV_NBD=y`, `CONFIG_TUN=y`, `CONFIG_STRICT_DEVMEM=n`, embedded initramfs (see [Prerequisites](#prerequisites))
+- **Buildroot** rootfs with NBD client, root password `1234`, CPIO format output
+- **PRTOS Hypervisor** built for aarch64 (`cp prtos_config.aarch64 prtos_config && make defconfig && make`)
 - **U-Boot source** at `../../../u-boot/` (sibling of `prtos-hypervisor/`), auto-built with custom config
-- **QEMU** (`qemu-system-aarch64`) with virt machine, GICv3
+- **QEMU** (`qemu-system-aarch64`) with virt machine, GICv3, platform bus support
 - **Cross-compiler**: `aarch64-linux-gnu-gcc`
+
+## Linux Kernel Command Lines
+
+**System Partition** (`linux_system.dts`):
+```
+console=ttyAMA0 earlycon=pl011,0x09000000 quiet loglevel=0 nokaslr
+```
+
+**Guest Partition** (`linux_guest.dts`):
+```
+nokaslr
+```

@@ -309,7 +309,8 @@ int main(int argc, char *argv[])
 
     printf("\n[Backend] Shutting down.\n");
 
-    /* Cleanup net backends */
+    /* Cleanup */
+    virtio_console_cleanup();
     for (i = 0; i < VIRTIO_NUM_NET; i++)
         virtio_net_cleanup(&net_instances[i]);
 
