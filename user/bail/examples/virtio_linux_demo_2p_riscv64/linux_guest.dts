@@ -13,7 +13,7 @@
 	#size-cells = <2>;
 
 	chosen {
-		bootargs = "earlycon=sbi console=tty0 quiet loglevel=0 nokaslr";
+		bootargs = "nokaslr";
 	};
 
 	memory@90000000 {

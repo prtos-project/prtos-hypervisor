@@ -38,7 +38,7 @@ PARTITIONS=partition_system.pef partition_guest.pef
 # ============================================================================
 # Linux Workspace Paths
 # ============================================================================
-LINUX_WORKSPACE=../native_linux_run_on_qemu_riscv64_virt
+LINUX_WORKSPACE=/home/chenweis/riscv64_linux_workspace
 LINUX_IMAGE=$(LINUX_WORKSPACE)/linux-6.19.9/arch/riscv/boot/Image
 
 # ============================================================================
@@ -75,12 +75,24 @@ $(OBJDIR):
 Image: $(LINUX_IMAGE)
 	cp $< $@
 
-# Compile device trees
-linux_system.dtb: linux_system.dts
-	$(DTC) -I dts -O dtb -o $@ $<
+# Compile device trees (inject initrd addresses from linker-placed CPIO overlays)
+# System initrd: starts at 0x8C000000 (linker_system.ld), size = rootfs_overlay.cpio
+# Guest  initrd: starts at 0x94000000 (linker_guest.ld),  size = guest_rootfs_overlay.cpio
+linux_system.dtb: linux_system.dts rootfs_overlay.cpio
+	@CPIO_SZ=$$(stat -c%s rootfs_overlay.cpio); \
+	END_ADDR=$$(printf '0x%x' $$((0x8C000000 + $$CPIO_SZ))); \
+	sed '/bootargs/a\		linux,initrd-start = <0x0 0x8C000000>;\n\t\tlinux,initrd-end = <0x0 '"$$END_ADDR"'>;' $< > _tmp_system.dts && \
+	$(DTC) -I dts -O dtb -o $@ _tmp_system.dts && \
+	rm -f _tmp_system.dts
+	@echo "[Build] System DTB with initrd @ 0x8C000000 (size $$(stat -c%s rootfs_overlay.cpio) bytes)"
 
-linux_guest.dtb: linux_guest.dts
-	$(DTC) -I dts -O dtb -o $@ $<
+linux_guest.dtb: linux_guest.dts guest_rootfs_overlay.cpio
+	@CPIO_SZ=$$(stat -c%s guest_rootfs_overlay.cpio); \
+	END_ADDR=$$(printf '0x%x' $$((0x94000000 + $$CPIO_SZ))); \
+	sed '/bootargs/a\\t\tlinux,initrd-start = <0x0 0x94000000>;\n\t\tlinux,initrd-end = <0x0 '"$$END_ADDR"'>;' $< > _tmp_guest.dts && \
+	$(DTC) -I dts -O dtb -o $@ _tmp_guest.dts && \
+	rm -f _tmp_guest.dts
+	@echo "[Build] Guest DTB with initrd @ 0x94000000 (size $$(stat -c%s guest_rootfs_overlay.cpio) bytes)"
 
 # ============================================================================
 # System Partition Userspace: Virtio Backend Daemon
@@ -202,7 +214,7 @@ partition_system: $(SYS_OBJS) linker_system.ld
 	$(LNX_LD) -T linker_system.ld $(SYS_OBJS) -o $@
 
 partition_system.pef: partition_system
-	$(PEF) $< -o $@
+	$(PEF) $< -c -o $@
 
 # ============================================================================
 # Guest Partition (Partition 1) - PRTOS PEF Image
@@ -220,7 +232,7 @@ partition_guest: $(GUEST_OBJS) linker_guest.ld
 	$(LNX_LD) -T linker_guest.ld $(GUEST_OBJS) -o $@
 
 partition_guest.pef: partition_guest
-	$(PEF) $< -o $@
+	$(PEF) $< -c -o $@
 
 # ============================================================================
 # PRTOS Packaging (2 partitions)

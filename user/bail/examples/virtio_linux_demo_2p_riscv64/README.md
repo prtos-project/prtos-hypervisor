@@ -53,7 +53,7 @@ The **System Partition** runs virtio backend daemons that serve virtualized devi
 | Shared Memory       | 0x98000000  | ~5.25MB| 0x9853FFFF   |
 | **QEMU RAM Total**  |             | 1GB    |              |
 
-**Note**: The container (PRTOS + partition PEFs) is embedded in the RSW binary at 0x80280000. With two full Linux partitions (~31MB each), the container is ~62MB and must fit within the gap before PRTOS at 0x84000000 (61.5MB). Rootfs CPIO overlays are gzip-compressed and binaries are stripped to keep the container within this limit.
+**Note**: The container (PRTOS + partition PEFs) is embedded in the RSW binary at 0x80280000. With two full Linux partitions (~38MB each), the container would exceed the 61.5MB gap before PRTOS at 0x84000000. PEF compression (`-c` flag) reduces each PEF to ~25MB, keeping the container within limits. Rootfs CPIO overlays are also gzip-compressed.
 
 ## Shared Memory Layout (5 Regions)
 
@@ -116,11 +116,21 @@ Two **Sampling Channels** provide control-plane messaging (8B each).
 
 ## Prerequisites
 
+### Workspace Layout
+
+| Component | Path |
+|-----------|------|
+| Linux kernel source | `/home/chenweis/hdd/Repo/linux_workspace/linux-6.19.9/` |
+| RISC-V Linux workspace | `/home/chenweis/hdd/Repo/riscv64_linux_workspace/` |
+| RISC-V Buildroot output | `/home/chenweis/hdd/Repo/riscv64_linux_workspace/buildroot_output/` |
+| Buildroot source | `/home/chenweis/hdd/Repo/aarch64_linux_workspace/buildroot/` |
+
 ### Step 1: Build Buildroot rootfs (RISC-V 64)
 
 ```bash
-cd buildroot
-make qemu_riscv64_virt_defconfig
+cd /home/chenweis/hdd/Repo/aarch64_linux_workspace/buildroot
+make O=/home/chenweis/hdd/Repo/riscv64_linux_workspace/buildroot_output qemu_riscv64_virt_defconfig
+cd /home/chenweis/hdd/Repo/riscv64_linux_workspace/buildroot_output
 ```
 
 Apply configuration (`make menuconfig`):
@@ -136,10 +146,12 @@ Apply configuration (`make menuconfig`):
 make -j$(nproc)
 ```
 
+Output: `/home/chenweis/hdd/Repo/riscv64_linux_workspace/buildroot_output/images/rootfs.cpio`
+
 ### Step 2: Build Linux kernel (RISC-V 64)
 
 ```bash
-cd linux-6.19.9
+cd /home/chenweis/hdd/Repo/riscv64_linux_workspace/linux-6.19.9
 make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- defconfig
 ```
 
@@ -149,11 +161,13 @@ Apply extra configs (`make menuconfig`):
 |---|---|---|
 | `CONFIG_BLK_DEV_NBD` | `y` | NBD block device |
 | `CONFIG_TUN` | `y` | TUN/TAP device |
-| `CONFIG_INITRAMFS_SOURCE` | `/path/to/buildroot/output/images/rootfs.cpio` | Embed rootfs |
+| `CONFIG_INITRAMFS_SOURCE` | `/home/chenweis/hdd/Repo/riscv64_linux_workspace/buildroot_output/images/rootfs.cpio` | Embed rootfs |
 
 ```bash
 make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- -j$(nproc) Image
 ```
+
+Output: `/home/chenweis/hdd/Repo/riscv64_linux_workspace/linux-6.19.9/arch/riscv/boot/Image`
 
 ### Step 3: Build PRTOS Hypervisor
 
@@ -197,16 +211,65 @@ qemu-system-riscv64 \
     -serial stdio
 ```
 
+## Demo Workflow
+
+All virtio services auto-start via init scripts (`S99virtio_backend` on System, `S99virtio_guest` on Guest). No manual steps are required to start the backend or frontend.
+
+### Step 1: Launch QEMU
+```bash
+make run.riscv64
+```
+
+### Step 2: Boot System Partition (UART/stdio)
+System auto-starts `prtos_manager` and `virtio_backend` via `S99virtio_backend`:
+```
+=== PRTOS System Partition ===
+PRTOS Partition manager running on partition 0
+=== PRTOS Virtio Backend Daemon ===
+[Backend] All 5 Virtio devices initialized. Entering poll loop...
+
+Welcome to Buildroot
+buildroot login: root
+Password: 1234
+```
+
+### Step 3: Access Guest Partition
+```bash
+# From the System partition shell (after logging in):
+telnet 127.0.0.1 4321
+# Login: root / 1234
+```
+Guest auto-starts `virtio_frontend` via `S99virtio_guest`. The frontend waits for the backend to initialize shared memory (polls magic values up to 300s), then creates `/dev/nbd0` (block) and `/dev/hvc0` (console). The init script waits for `/dev/hvc0` and spawns `getty` on it. The backend's TCP bridge on port 4321 connects telnet to `/dev/hvc0` via shared memory.
+
+> **Note**: RISC-V QEMU virt only has one NS16550 UART. Guest console access is through the System partition's shell using the virtio-console TCP bridge.
+
+### Step 4: Test Virtio Devices (Guest)
+```bash
+/opt/virtio_test.sh   # Automated test for all virtio devices
+```
+Expected output includes:
+- Network: 3 TAP interfaces (tap0/tap1/tap2) with IPs, all pings to System partition OK
+- Block device (`/dev/vda` → `/dev/nbd0`): ext2 filesystem created, mounted, test file written and verified
+- Console (`/dev/hvc0`): message "Hello PRTOS from Guest!" forwarded to System UART
+- Shared memory magic values verified (NET0=0x4E455430, BLK0=0x424C4B30, CONS=0x434F4E53)
+- `Verification Passed`
+
 ## Platform-Specific Notes
 
 - **Hypercall mechanism**: RISC-V ecall from VU-mode (Linux userspace) is trapped by the VS-mode kernel, not the hypervisor. The `prtos_vmcall()` function is stubbed to return -1. Virtio operates in **polling mode** (no IPVI doorbell notifications).
-- **Container size constraint**: The RSW container (at 0x80280000) must fit before PRTOS (at 0x84000000), a gap of only 61.5MB. With two Linux partitions (~31MB each), rootfs CPIO overlays are gzip-compressed and binaries are stripped to stay within this limit.
+- **Container size constraint**: The RSW container (at 0x80280000) must fit before PRTOS (at 0x84000000), a gap of only 61.5MB. With two Linux partitions (~38MB each uncompressed), PEF compression (`-c` flag) is required; each compressed PEF is ~25MB, keeping the ~50MB container within limits.
 - **Boot method**: OpenSBI firmware loads at 0x80000000, then transfers control to the RSW at 0x80200000 which unpacks the PRTOS container.
 - **UART passthrough**: NS16550 UART at 0x10000000 is passed through to the System Partition for console output.
 
 ## Testing
 
 ```bash
+# Automated login test:
+python3 test_login.py
+
+# Guest console (TCP bridge) test:
+python3 test_com2.py
+
 # Via the test framework:
 cd ../../../../  # back to prtos-hypervisor root
 bash scripts/run_test.sh --arch riscv64 check-virtio_linux_demo_2p_riscv64

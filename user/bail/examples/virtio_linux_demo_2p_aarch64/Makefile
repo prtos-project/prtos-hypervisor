@@ -39,7 +39,7 @@ PARTITIONS=partition_system.pef partition_guest.pef
 # ============================================================================
 # Linux Workspace Paths
 # ============================================================================
-LINUX_WORKSPACE=/home/chenweis/hdd/Repo/aarch64_linux_workspace
+LINUX_WORKSPACE=/home/chenweis/aarch64_linux_workspace
 LINUX_IMAGE=$(LINUX_WORKSPACE)/linux-6.19.9/arch/arm64/boot/Image
 
 # ============================================================================
@@ -257,7 +257,7 @@ include ../run.mk
 # U-Boot Build (custom with larger CONFIG_SYS_BOOTM_LEN for ~103MB image)
 # ============================================================================
 
-UBOOT_SRC = /home/chenweis/hdd/Repo/fork_os/u-boot
+UBOOT_SRC = /home/chenweis/aarch64_linux_workspace/u-boot
 UBOOT_BIN = u-boot/u-boot.bin
 
 $(UBOOT_BIN): | u-boot
