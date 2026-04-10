@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# S99virtio_guest - Guest Partition init script (RISC-V 64).
+# Starts Virtio Frontend daemon and spawns getty on /dev/hvc0 (PTY via shared memory).
+# Guest console accessible from System partition: telnet 127.0.0.1 4321
+#
+
+case "$1" in
+    start)
+        # Redirect all Guest init output to /dev/null (no physical console).
+        # All console I/O goes through virtio-console shared memory bridge.
+        exec > /dev/null 2>&1
+
+        # Start Virtio Frontend daemon (bridges shared memory to /dev/nbd0, /dev/hvc0, tap*)
+        if [ -x /usr/bin/virtio_frontend ]; then
+            /usr/bin/virtio_frontend --all &
+            sleep 2
+            # Create /dev/vda symlink to /dev/nbd0 for compatibility
+            if [ -b /dev/nbd0 ]; then
+                ln -sf /dev/nbd0 /dev/vda 2>/dev/null
+            fi
+            # Configure TAP IP addresses for Guest<->System networking
+            for i in 0 1 2; do
+                if [ -d "/sys/class/net/tap$i" ]; then
+                    ip addr add 10.0.$((i + 1)).2/24 dev tap$i 2>/dev/null
+                    ip link set tap$i up 2>/dev/null
+                fi
+            done
+        fi
+
+        # Spawn getty on /dev/hvc0 (PTY slave created by virtio_frontend).
+        # The backend bridges /dev/hvc0 to a TCP socket on port 4321 inside
+        # the System partition. Connect from System shell: telnet 127.0.0.1 4321
+        (
+            # Wait for virtio_frontend to create /dev/hvc0
+            tries=30
+            while [ $tries -gt 0 ] && [ ! -e /dev/hvc0 ]; do
+                sleep 1
+                tries=$((tries - 1))
+            done
+            if [ -e /dev/hvc0 ]; then
+                /sbin/getty -L hvc0 115200 vt100 &
+            fi
+        ) &
+        ;;
+    stop)
+        ;;
+    *)
+        echo "Usage: $0 {start|stop}"
+        exit 1
+        ;;
+esac
