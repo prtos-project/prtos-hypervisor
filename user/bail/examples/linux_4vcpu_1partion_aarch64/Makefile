@@ -27,7 +27,7 @@ PARTITIONS=partition.pef
 # ============================================================================
 # Linux Workspace Paths
 # ============================================================================
-LINUX_WORKSPACE=/home/chenweis/hdd/Repo/aarch64_linux_workspace
+LINUX_WORKSPACE=/home/chenweis/aarch64_linux_workspace
 LINUX_IMAGE=$(LINUX_WORKSPACE)/linux-6.19.9/arch/arm64/boot/Image
 
 # ============================================================================

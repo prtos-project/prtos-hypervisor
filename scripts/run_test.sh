@@ -1060,13 +1060,24 @@ except Exception as e:
 PYTEST
 
     local rc=$?
-    if [[ ${rc} -eq 0 ]]; then
-        echo -e "${GREEN}Check virtio_linux_demo_2p_aarch64 PASS${NC}"
-        return 0
-    else
-        echo -e "${RED}Check virtio_linux_demo_2p_aarch64 FAILED${NC}"
+    if [[ ${rc} -ne 0 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_aarch64 FAILED${NC} (login test)"
         return 1
     fi
+
+    # Run console tests (clean console, telnet, backspace, tab)
+    if [[ -f "${test_dir}/test_console.py" ]]; then
+        echo "+++ Running console tests for virtio_linux_demo_2p_aarch64"
+        python3 -u "${test_dir}/test_console.py" 2>&1
+        local console_rc=$?
+        if [[ ${console_rc} -ne 0 ]]; then
+            echo -e "${RED}Check virtio_linux_demo_2p_aarch64 FAILED${NC} (console test)"
+            return 1
+        fi
+    fi
+
+    echo -e "${GREEN}Check virtio_linux_demo_2p_aarch64 PASS${NC}"
+    return 0
 }
 
 # Run the Virtio Linux 2-partition demo test (riscv64)
@@ -1117,13 +1128,24 @@ except Exception as e:
 PYTEST
 
     local rc=$?
-    if [[ ${rc} -eq 0 ]]; then
-        echo -e "${GREEN}Check virtio_linux_demo_2p_riscv64 PASS${NC}"
-        return 0
-    else
-        echo -e "${RED}Check virtio_linux_demo_2p_riscv64 FAILED${NC}"
+    if [[ ${rc} -ne 0 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_riscv64 FAILED${NC} (login test)"
         return 1
     fi
+
+    # Run console tests (clean console, telnet, backspace, tab)
+    if [[ -f "${test_dir}/test_console.py" ]]; then
+        echo "+++ Running console tests for virtio_linux_demo_2p_riscv64"
+        python3 -u "${test_dir}/test_console.py" 2>&1
+        local console_rc=$?
+        if [[ ${console_rc} -ne 0 ]]; then
+            echo -e "${RED}Check virtio_linux_demo_2p_riscv64 FAILED${NC} (console test)"
+            return 1
+        fi
+    fi
+
+    echo -e "${GREEN}Check virtio_linux_demo_2p_riscv64 PASS${NC}"
+    return 0
 }
 
 # Run the Virtio Linux 2-partition demo test (amd64 only, requires KVM)
@@ -1193,13 +1215,25 @@ except Exception as e:
 PYTEST
 
     local rc=$?
-    if [[ ${rc} -eq 0 ]]; then
-        echo -e "${GREEN}Check virtio_linux_demo_2p_amd64 PASS${NC}"
-        return 0
-    else
-        echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC}"
+    if [[ ${rc} -ne 0 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (login test)"
         return 1
     fi
+
+    # Run console tests (clean console, telnet, backspace, tab)
+    if [[ -f "${test_dir}/test_console.py" ]]; then
+        echo "+++ Running console tests for virtio_linux_demo_2p_amd64"
+        cd "${test_dir}"
+        python3 -u "${test_dir}/test_console.py" 2>&1
+        local console_rc=$?
+        if [[ ${console_rc} -ne 0 ]]; then
+            echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (console test)"
+            return 1
+        fi
+    fi
+
+    echo -e "${GREEN}Check virtio_linux_demo_2p_amd64 PASS${NC}"
+    return 0
 }
 
 # Run a single test case

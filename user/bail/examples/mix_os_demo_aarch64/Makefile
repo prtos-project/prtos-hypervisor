@@ -58,7 +58,7 @@ FRT_OBJS = $(addprefix $(OBJDIR), $(FREERTOS_OBJS) $(FREERTOS_MEMMANG_OBJS) \
 # ============================================================================
 # Linux Build Configuration (Partition 1)
 # ============================================================================
-LINUX_WORKSPACE=/home/chenweis/hdd/Repo/aarch64_linux_workspace
+LINUX_WORKSPACE=/home/chenweis/aarch64_linux_workspace
 LINUX_IMAGE=$(LINUX_WORKSPACE)/linux-6.19.9/arch/arm64/boot/Image
 
 # ============================================================================

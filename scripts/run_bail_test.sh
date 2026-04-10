@@ -32,12 +32,15 @@ ALL_CASES=(
     "freertos_para_virt_amd64:1:20:amd64"
     "freertos_hw_virt_amd64:0:30:amd64"
     "linux_aarch64:0:180:aarch64"
-    "linux_4vcpu_1partion_aarch64:0:360:aarch64"
-    "linux_4vcpu_1partion_riscv64:0:360:riscv64"
-    "linux_4vcpu_1partion_amd64:0:360:amd64"
-    "mix_os_demo_aarch64:0:420:aarch64"
-    "mix_os_demo_riscv64:0:420:riscv64"
-    "mix_os_demo_amd64:0:420:amd64"
+    "linux_4vcpu_1partion_aarch64:0:60:aarch64"
+    "linux_4vcpu_1partion_riscv64:0:60:riscv64"
+    "linux_4vcpu_1partion_amd64:0:60:amd64"
+    "mix_os_demo_aarch64:0:60:aarch64"
+    "mix_os_demo_riscv64:0:60:riscv64"
+    "mix_os_demo_amd64:0:60:amd64"
+    "virtio_linux_demo_2p_aarch64:0:60:aarch64"
+    "virtio_linux_demo_2p_riscv64:0:60:riscv64"
+    "virtio_linux_demo_2p_amd64:0:60:amd64"
 )
 
 # Colors for output

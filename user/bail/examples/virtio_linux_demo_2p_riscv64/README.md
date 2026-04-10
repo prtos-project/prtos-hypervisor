@@ -221,12 +221,9 @@ make run.riscv64
 ```
 
 ### Step 2: Boot System Partition (UART/stdio)
-System auto-starts `prtos_manager` and `virtio_backend` via `S99virtio_backend`:
+System auto-starts `prtos_manager` and `virtio_backend` via `S99virtio_backend` (output redirected to `/var/log/`):
 ```
 === PRTOS System Partition ===
-PRTOS Partition manager running on partition 0
-=== PRTOS Virtio Backend Daemon ===
-[Backend] All 5 Virtio devices initialized. Entering poll loop...
 
 Welcome to Buildroot
 buildroot login: root
@@ -270,6 +267,9 @@ python3 test_login.py
 # Guest console (TCP bridge) test:
 python3 test_com2.py
 
+# Console test (clean output, backspace, tab completion):
+python3 test_console.py
+
 # Via the test framework:
 cd ../../../../  # back to prtos-hypervisor root
 bash scripts/run_test.sh --arch riscv64 check-virtio_linux_demo_2p_riscv64
@@ -292,6 +292,9 @@ bash scripts/run_test.sh --arch riscv64 check-all
 | `linux_system.dts` | Device tree (128MB, 2 CPUs, NS16550 UART) |
 | `linux_guest.dts` | Device tree (128MB, 2 CPUs, no UART) |
 | `set_serial_poll.c` | Utility for serial polling mode |
+| `test_login.py` | Automated test: QEMU launch, UART login, `uname` check |
+| `test_com2.py` | Automated test: Guest console access via TCP bridge from System |
+| `test_console.py` | Console test: clean output (no backend noise), telnet backspace + tab completion |
 | **`system_partition/`** | |
 | `  include/virtio_be.h` | Shared data structures (addresses at 0x98xxxxxx) |
 | `  src/` | Backend daemon sources |

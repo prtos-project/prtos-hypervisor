@@ -264,12 +264,9 @@ make run.aarch64
 ```
 
 ### Step 2: Boot System Partition (UART/stdio)
-System auto-starts `prtos_manager` and `virtio_backend` via `S99virtio_backend`:
+System auto-starts `prtos_manager` and `virtio_backend` via `S99virtio_backend` (output redirected to `/var/log/`):
 ```
 === PRTOS System Partition ===
-PRTOS Partition manager running on partition 0
-=== PRTOS Virtio Backend Daemon ===
-[Backend] All 5 Virtio devices initialized. Entering poll loop...
 
 Welcome to Buildroot
 buildroot login: root
@@ -314,8 +311,8 @@ python3 test_login.py
 # Guest console (TCP bridge) test:
 python3 test_com2.py
 
-# Guest console (TCP bridge) test:
-python3 test_com2.py
+# Console test (clean output, backspace, tab completion):
+python3 test_console.py
 
 # Via the test framework:
 cd ../../../../  # back to prtos-hypervisor root
@@ -342,6 +339,7 @@ bash scripts/run_test.sh --arch aarch64 check-all
 | `set_serial_poll.c` | Utility for serial polling mode |
 | `test_login.py` | Automated test: QEMU launch, PL011 login, `uname` check |
 | `test_com2.py` | Automated test: Guest console access via TCP bridge from System |
+| `test_console.py` | Console test: clean output (no backend noise), telnet backspace + tab completion |
 | **`system_partition/`** | |
 | `  include/virtio_be.h` | Shared data structures: `net_shm` (64-slot ring), `blk_shm` (16-slot ring), `console_shm` (4KB ring) |
 | `  src/main.c` | Backend daemon: mmap 5 `/dev/mem` regions, init all devices, 1ms poll loop |
