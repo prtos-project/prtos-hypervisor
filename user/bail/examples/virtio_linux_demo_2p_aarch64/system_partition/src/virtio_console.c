@@ -28,6 +28,15 @@
 #define CONSOLE_TCP_PORT    4321
 #define CONSOLE_TCP_BACKLOG 1
 
+/* Telnet protocol constants */
+#define TELNET_IAC   255
+#define TELNET_WILL  251
+#define TELNET_WONT  252
+#define TELNET_DO    253
+#define TELNET_DONT  254
+#define TELNET_OPT_ECHO     1
+#define TELNET_OPT_SGA      3   /* Suppress Go Ahead */
+
 static int listen_fd = -1;
 static int client_fd = -1;
 
@@ -108,8 +117,19 @@ void virtio_console_process(struct virtio_console_shm *con)
             int opt = 1;
             setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
 
+            /* Send telnet negotiation: character-at-a-time mode.
+             * WILL ECHO: server handles echo (prevents double-echo)
+             * WILL SGA:  suppress go-ahead (full-duplex)
+             * DO SGA:    request client suppress go-ahead too
+             */
+            static const unsigned char telnet_init[] = {
+                TELNET_IAC, TELNET_WILL, TELNET_OPT_ECHO,
+                TELNET_IAC, TELNET_WILL, TELNET_OPT_SGA,
+                TELNET_IAC, TELNET_DO,   TELNET_OPT_SGA,
+            };
+            (void)write(fd, telnet_init, sizeof(telnet_init));
+
             client_fd = fd;
-            printf("[Backend] Console TCP client connected\n");
         }
     }
 
@@ -124,7 +144,6 @@ void virtio_console_process(struct virtio_console_shm *con)
         if (client_fd >= 0) {
             ssize_t w = write(client_fd, &c, 1);
             if (w < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                printf("[Backend] Console TCP client disconnected (write)\n");
                 close(client_fd);
                 client_fd = -1;
             }
@@ -146,6 +165,12 @@ void virtio_console_process(struct virtio_console_shm *con)
             __sync_synchronize();
             head = con->rx_head;
             for (ssize_t i = 0; i < n; i++) {
+                unsigned char ch = (unsigned char)buf[i];
+                /* Filter telnet IAC sequences (IAC + cmd + option = 3 bytes) */
+                if (ch == TELNET_IAC) {
+                    i += 2;  /* skip command and option bytes */
+                    continue;
+                }
                 uint32_t next_head = (head + 1) % con->buf_size;
                 if (next_head == con->rx_tail)
                     break;  /* Ring full */
@@ -155,11 +180,9 @@ void virtio_console_process(struct virtio_console_shm *con)
             con->rx_head = head;
             __sync_synchronize();
         } else if (n == 0) {
-            printf("[Backend] Console TCP client disconnected\n");
             close(client_fd);
             client_fd = -1;
         } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            printf("[Backend] Console TCP client error: %s\n", strerror(errno));
             close(client_fd);
             client_fd = -1;
         }

@@ -6,8 +6,8 @@ case "$1" in
         # Create /dev/net/tun for TAP networking
         mkdir -p /dev/net
         mknod /dev/net/tun c 10 200 2>/dev/null
-        /usr/bin/prtos_manager &
-        /usr/bin/virtio_backend &
+        /usr/bin/prtos_manager > /var/log/prtos_manager.log 2>&1 &
+        /usr/bin/virtio_backend > /var/log/virtio_backend.log 2>&1 &
         sleep 2
         # Configure TAP IP addresses for System<->Guest p2p networking
         for i in 0 1 2; do
