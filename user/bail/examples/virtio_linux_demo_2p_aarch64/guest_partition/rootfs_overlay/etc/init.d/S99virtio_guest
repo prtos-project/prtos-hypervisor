@@ -4,6 +4,17 @@
 # Starts Virtio Frontend daemon and spawns getty on /dev/hvc0 (PTY via shared memory).
 # Guest console accessible from System partition: telnet 127.0.0.1 4321
 #
+# Getty is respawned automatically when it exits (e.g., after user logout),
+# so subsequent telnet connections always find a live login prompt.
+#
+
+# Respawn getty in an infinite loop.
+respawn_getty() {
+    while true; do
+        /sbin/getty "$@"
+        sleep 1
+    done
+}
 
 case "$1" in
     start)
@@ -39,7 +50,7 @@ case "$1" in
                 tries=$((tries - 1))
             done
             if [ -e /dev/hvc0 ]; then
-                /sbin/getty -L hvc0 115200 vt100 &
+                respawn_getty -L hvc0 115200 vt100 &
             fi
         ) &
         ;;
