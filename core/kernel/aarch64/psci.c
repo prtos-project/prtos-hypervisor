@@ -39,6 +39,24 @@
 /* External: partition table */
 extern partition_t *partition_table;
 extern struct prtos_conf_vcpu *prtos_conf_vcpu_table;
+extern const struct prtos_conf prtos_conf_table;
+
+/* Map a target MPIDR (physical CPU affinity) to vCPU index within a partition.
+ * VMPIDR_EL2 uses physical CPU IDs so that ICC_SGI1_EL1 routing works.
+ * When the guest calls PSCI CPU_ON with a target MPIDR matching the DTS reg
+ * value (= physical CPU), we must resolve which vCPU index that corresponds to. */
+static int mpidr_to_vcpu(prtos_s32_t part_id, prtos_u32_t num_vcpus,
+                          prtos_u64_t target_mpidr) {
+    int target_pcpu = (int)(target_mpidr & 0xFF);
+    int i;
+    for (i = 0; i < (int)num_vcpus; i++) {
+        prtos_u8_t cpu = prtos_conf_vcpu_table[
+            (part_id * prtos_conf_table.hpv.num_of_cpus) + i].cpu;
+        if (cpu == target_pcpu)
+            return i;
+    }
+    return -1;
+}
 
 /*
  * prtos_psci_cpu_on - Start a secondary vCPU.
@@ -51,8 +69,8 @@ static long prtos_psci_cpu_on(prtos_u64_t target_mpidr,
     prtos_s32_t part_id = KID2PARTID(k->ctrl.g->id);
     partition_t *p = &partition_table[part_id];
 
-    int target_vcpu = (int)(target_mpidr & 0xFF);  /* Aff0 = vCPU ID */
-    if (target_vcpu >= (int)p->cfg->num_of_vcpus)
+    int target_vcpu = mpidr_to_vcpu(part_id, p->cfg->num_of_vcpus, target_mpidr);
+    if (target_vcpu < 0)
         return PSCI_INVALID_PARAMETERS;
 
     kthread_t *target_k = p->kthread[target_vcpu];
@@ -102,8 +120,8 @@ static long prtos_psci_affinity_info(prtos_u64_t target_mpidr,
     prtos_s32_t part_id = KID2PARTID(k->ctrl.g->id);
     partition_t *p = &partition_table[part_id];
 
-    int target_vcpu = (int)(target_mpidr & 0xFF);
-    if (target_vcpu >= (int)p->cfg->num_of_vcpus)
+    int target_vcpu = mpidr_to_vcpu(part_id, p->cfg->num_of_vcpus, target_mpidr);
+    if (target_vcpu < 0)
         return PSCI_INVALID_PARAMETERS;
 
     kthread_t *target_k = p->kthread[target_vcpu];

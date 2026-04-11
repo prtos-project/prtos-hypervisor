@@ -96,6 +96,20 @@ void switch_kthread_arch_post(kthread_t *current) {
                 "isb\n\t"
                 : : "r"(vttbr) : "memory");
 
+            /* Virtualize MPIDR so each partition's vCPUs see physical
+             * CPU IDs matching DTS reg values.  Using the physical CPU ID
+             * ensures that ICC_SGI1_EL1 (which routes using physical
+             * MPIDR affinity) delivers SGIs to the correct CPUs.
+             * VMPIDR_EL2 bit 31 is RES1 (indicates multiprocessor). */
+            {
+                int cpu_id = GET_CPU_ID();
+                prtos_u64_t vmpidr = (1ULL << 31) | (prtos_u64_t)cpu_id;
+                __asm__ __volatile__(
+                    "msr vmpidr_el2, %0\n\t"
+                    "isb\n\t"
+                    : : "r"(vmpidr) : "memory");
+            }
+
             prtos_u64_t hcr = PRTOS_HCR_EL2_VAL;
             __asm__ __volatile__(
                 "msr hcr_el2, %0\n\t"
@@ -159,17 +173,23 @@ void switch_kthread_arch_post(kthread_t *current) {
                 /* Re-enable any physical SPIs that were disabled during
                  * interrupt forwarding. The guest has had a chance to
                  * process and EOI the virtual IRQ. */
-                if (current->ctrl.g->karch.spi_fwd_mask) {
-                    prtos_u64_t mask = current->ctrl.g->karch.spi_fwd_mask;
-                    current->ctrl.g->karch.spi_fwd_mask = 0;
-                    int bit;
-                    for (bit = 0; bit < 64 && mask; bit++) {
-                        if (mask & (1ULL << bit)) {
-                            prtos_u32_t intid = bit + 32;
-                            volatile prtos_u32_t *gicd_isenabler =
-                                (volatile prtos_u32_t *)(GIC_DIST_BASE + 0x100 + 4 * (intid / 32));
-                            *gicd_isenabler = (1U << (intid % 32));
-                            mask &= ~(1ULL << bit);
+                if (current->ctrl.g->karch.spi_fwd_mask[0] |
+                    current->ctrl.g->karch.spi_fwd_mask[1] |
+                    current->ctrl.g->karch.spi_fwd_mask[2] |
+                    current->ctrl.g->karch.spi_fwd_mask[3]) {
+                    int wi;
+                    for (wi = 0; wi < 4; wi++) {
+                        prtos_u64_t mask = current->ctrl.g->karch.spi_fwd_mask[wi];
+                        current->ctrl.g->karch.spi_fwd_mask[wi] = 0;
+                        int bit;
+                        for (bit = 0; bit < 64 && mask; bit++) {
+                            if (mask & (1ULL << bit)) {
+                                prtos_u32_t intid = (wi * 64 + bit) + 32;
+                                volatile prtos_u32_t *gicd_isenabler =
+                                    (volatile prtos_u32_t *)(GIC_DIST_BASE + 0x100 + 4 * (intid / 32));
+                                *gicd_isenabler = (1U << (intid % 32));
+                                mask &= ~(1ULL << bit);
+                            }
                         }
                     }
                 }

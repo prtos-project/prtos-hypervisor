@@ -173,6 +173,9 @@ int main(int argc, char *argv[])
         }
     }
 
+    /* Force line-buffered stdout so log file gets flushed per line */
+    setlinebuf(stdout);
+
     printf("=== PRTOS Virtio Backend Daemon ===\n");
     printf("System Partition - Virtio Device Virtualization Demo\n");
     printf("Devices: %d x net + 1 x blk + 1 x console\n", VIRTIO_NUM_NET);
@@ -308,6 +311,9 @@ int main(int argc, char *argv[])
     }
 
     printf("\n[Backend] Shutting down.\n");
+
+    /* Cleanup console TCP bridge */
+    virtio_console_cleanup();
 
     /* Cleanup net backends */
     for (i = 0; i < VIRTIO_NUM_NET; i++)

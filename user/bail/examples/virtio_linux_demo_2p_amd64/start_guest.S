@@ -158,7 +158,7 @@ _boot:
  * This avoids sharing COM1 with System partition. */
 	.section .rodata
 _guest_cmdline:
-	.asciz "console=tty0 nokaslr noapic nolapic prtos_role=guest prtos_shmem_base=0x16000000 prtos_shmem_size=0x540000"
+	.asciz "console=tty0 nokaslr no_timer_check nohpet tsc=reliable clocksource=tsc nr_cpus=2 prtos_role=guest prtos_shmem_base=0x16000000 prtos_shmem_size=0x540000"
 
 /* Embedded bzImage for Guest partition */
 	.section .bzimage_guest, "ax", @progbits

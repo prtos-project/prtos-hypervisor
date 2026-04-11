@@ -37,6 +37,8 @@ ALL_CASES=(
     "mix_os_demo_aarch64:0:420:aarch64"
     "mix_os_demo_riscv64:0:420:riscv64"
     "mix_os_demo_amd64:0:420:amd64"
+    "virtio_linux_demo_2p_aarch64:0:540:aarch64"
+    "virtio_linux_demo_2p_riscv64:0:480:riscv64"
     "virtio_linux_demo_2p_amd64:0:480:amd64"
 )
 
@@ -68,6 +70,8 @@ Commands:
                          mix_os_demo_aarch64 (aarch64 only),
                          mix_os_demo_riscv64 (riscv64 only),
                          mix_os_demo_amd64 (amd64 only),
+                         virtio_linux_demo_2p_aarch64 (aarch64 only),
+                         virtio_linux_demo_2p_riscv64 (riscv64 only),
                          virtio_linux_demo_2p_amd64 (amd64 only)
   check-all              Check all test cases.
 
@@ -984,6 +988,166 @@ PYTEST
     fi
 }
 
+# Run the Virtio Linux 2-partition demo test (aarch64)
+# Two Linux partitions (System + Guest) communicating via shared memory Virtio.
+function run_test_virtio_linux_demo_2p_aarch64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/virtio_linux_demo_2p_aarch64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/virtio_linux_demo_2p_aarch64 [${ARCH}]"
+    cd "${test_dir}"
+
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_aarch64 FAILED${NC} (build error)"
+        return 1
+    fi
+
+    # Create bootable image
+    aarch64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S \
+        resident_sw resident_sw.bin
+    mkimage -A arm64 -O linux -C none -a 0x40200000 -e 0x40200000 \
+        -d resident_sw.bin resident_sw_image > /dev/null 2>&1
+
+    # Build U-Boot with larger CONFIG_SYS_BOOTM_LEN for ~103MB image
+    local uboot_src
+    uboot_src="$(realpath "${MONOREPO_ROOT}/../u-boot" 2>/dev/null || echo "")"
+    if [[ -z "${uboot_src}" || ! -d "${uboot_src}" ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_aarch64 FAILED${NC} (u-boot source not found at ${MONOREPO_ROOT}/../u-boot)"
+        return 1
+    fi
+    mkdir -p u-boot
+    if [[ ! -f u-boot/u-boot.bin ]]; then
+        make -C "${uboot_src}" qemu_arm64_defconfig > /dev/null 2>&1
+        "${uboot_src}/scripts/config" --file "${uboot_src}/.config" \
+            --set-val CONFIG_SYS_BOOTM_LEN 0x10000000
+        "${uboot_src}/scripts/config" --file "${uboot_src}/.config" \
+            --set-str CONFIG_PREBOOT 'bootm 0x40200000 - ${fdtcontroladdr}'
+        make -C "${uboot_src}" -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- > /dev/null 2>&1
+        cp "${uboot_src}/u-boot.bin" u-boot/u-boot.bin
+    fi
+
+    python3 -u << 'PYTEST' 2>&1
+import pexpect, sys, time
+child = pexpect.spawn(
+    'qemu-system-aarch64 '
+    '-machine virt,gic_version=3 '
+    '-machine virtualization=true '
+    '-cpu cortex-a72 -machine type=virt '
+    '-m 4096 -smp 4 '
+    '-bios ./u-boot/u-boot.bin '
+    '-device loader,file=./resident_sw_image,addr=0x40200000,force-raw=on '
+    '-nographic -no-reboot',
+    timeout=520, encoding='utf-8', codec_errors='replace'
+)
+try:
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=500)
+    if idx != 0:
+        print('VIRTIO_TEST_FAIL: login prompt not reached')
+        child.close(force=True); sys.exit(1)
+    print('Login prompt reached - boot complete')
+    print('Verification Passed')
+    child.close(force=True)
+except Exception as e:
+    print(f'VIRTIO_TEST_FAIL: {e}')
+    try: child.close(force=True)
+    except: pass
+    sys.exit(1)
+PYTEST
+
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_aarch64 FAILED${NC} (login test)"
+        return 1
+    fi
+
+    # Run console tests (clean console, telnet, backspace, tab)
+    if [[ -f "${test_dir}/test_console.py" ]]; then
+        echo "+++ Running console tests for virtio_linux_demo_2p_aarch64"
+        python3 -u "${test_dir}/test_console.py" 2>&1
+        local console_rc=$?
+        if [[ ${console_rc} -ne 0 ]]; then
+            echo -e "${RED}Check virtio_linux_demo_2p_aarch64 FAILED${NC} (console test)"
+            return 1
+        fi
+    fi
+
+    echo -e "${GREEN}Check virtio_linux_demo_2p_aarch64 PASS${NC}"
+    return 0
+}
+
+# Run the Virtio Linux 2-partition demo test (riscv64)
+# Two Linux partitions (System + Guest) communicating via shared memory Virtio.
+function run_test_virtio_linux_demo_2p_riscv64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/virtio_linux_demo_2p_riscv64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/virtio_linux_demo_2p_riscv64 [${ARCH}]"
+    cd "${test_dir}"
+
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_riscv64 FAILED${NC} (build error)"
+        return 1
+    fi
+
+    riscv64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S \
+        resident_sw resident_sw.bin
+
+    python3 -u << 'PYTEST' 2>&1
+import pexpect, sys, time
+child = pexpect.spawn(
+    'qemu-system-riscv64 '
+    '-machine virt -cpu rv64 -smp 4 -m 1G '
+    '-nographic -no-reboot '
+    '-bios default -kernel resident_sw.bin '
+    '-monitor none -serial stdio',
+    timeout=460, encoding='utf-8', codec_errors='replace'
+)
+try:
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=440)
+    if idx != 0:
+        print('VIRTIO_TEST_FAIL: login prompt not reached')
+        child.close(force=True); sys.exit(1)
+    print('Login prompt reached - boot complete')
+    print('Verification Passed')
+    child.close(force=True)
+except Exception as e:
+    print(f'VIRTIO_TEST_FAIL: {e}')
+    try: child.close(force=True)
+    except: pass
+    sys.exit(1)
+PYTEST
+
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_riscv64 FAILED${NC} (login test)"
+        return 1
+    fi
+
+    # Run console tests (clean console, telnet, backspace, tab)
+    if [[ -f "${test_dir}/test_console.py" ]]; then
+        echo "+++ Running console tests for virtio_linux_demo_2p_riscv64"
+        python3 -u "${test_dir}/test_console.py" 2>&1
+        local console_rc=$?
+        if [[ ${console_rc} -ne 0 ]]; then
+            echo -e "${RED}Check virtio_linux_demo_2p_riscv64 FAILED${NC} (console test)"
+            return 1
+        fi
+    fi
+
+    echo -e "${GREEN}Check virtio_linux_demo_2p_riscv64 PASS${NC}"
+    return 0
+}
+
 # Run the Virtio Linux 2-partition demo test (amd64 only, requires KVM)
 # Two Linux partitions (System + Guest) communicating via shared memory Virtio.
 function run_test_virtio_linux_demo_2p_amd64() {
@@ -1020,7 +1184,7 @@ function run_test_virtio_linux_demo_2p_amd64() {
     export KVM_OK=${kvm_ok}
 
     python3 -u << 'PYTEST' 2>&1
-import pexpect, sys, time, os
+import pexpect, sys, time, os, re
 kvm_ok = int(os.environ.get('KVM_OK', '1'))
 sg_pre = "sg kvm -c '" if kvm_ok == 2 else ""
 sg_post = "'" if kvm_ok == 2 else ""
@@ -1035,13 +1199,43 @@ child = pexpect.spawn('/bin/bash', ['-c', cmd],
                       timeout=460, encoding='utf-8', codec_errors='replace')
 try:
     # Wait for login prompt to confirm full boot completion
-    # (kernel uses 'quiet' cmdline so banner/cmdline messages are suppressed)
     idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=240)
     if idx != 0:
         print('VIRTIO_TEST_FAIL: login prompt not reached')
         child.close(force=True); sys.exit(1)
     print('Login prompt reached - boot complete')
     print('Verification Passed')
+
+    # Login to verify SMP vCPU count
+    time.sleep(1)
+    child.sendline('root')
+    idx = child.expect(['assword', 'buildroot login:', pexpect.TIMEOUT], timeout=30)
+    if idx == 0:
+        time.sleep(0.5)
+        child.sendline('1234')
+        child.expect([r'[#\$] ', pexpect.TIMEOUT], timeout=30)
+    elif idx == 1:
+        child.sendline('root')
+        child.expect(['assword', pexpect.TIMEOUT], timeout=30)
+        time.sleep(0.5)
+        child.sendline('1234')
+        child.expect([r'[#\$] ', pexpect.TIMEOUT], timeout=30)
+
+    # Check vCPU count via nproc
+    time.sleep(0.5)
+    child.sendline('nproc')
+    child.expect([r'[#\$] ', pexpect.TIMEOUT], timeout=10)
+    nproc_out = child.before.strip()
+    nums = re.findall(r'\b(\d+)\b', nproc_out)
+    nproc_val = int(nums[-1]) if nums else 0
+    expected = 2
+    if nproc_val != expected:
+        print(f'VIRTIO_TEST_FAIL: System partition has {nproc_val} vCPUs, expected {expected}')
+        child.close(force=True); sys.exit(1)
+    print(f'SMP Verification Passed: {nproc_val} vCPUs online in System Partition')
+
+    child.sendline('poweroff')
+    time.sleep(3)
     child.close(force=True)
 except Exception as e:
     print(f'VIRTIO_TEST_FAIL: {e}')
@@ -1051,13 +1245,49 @@ except Exception as e:
 PYTEST
 
     local rc=$?
-    if [[ ${rc} -eq 0 ]]; then
-        echo -e "${GREEN}Check virtio_linux_demo_2p_amd64 PASS${NC}"
-        return 0
-    else
-        echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC}"
+    if [[ ${rc} -ne 0 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (login/smp test)"
         return 1
     fi
+
+    # Run console tests (clean console, backspace, tab)
+    if [[ -f "${test_dir}/test_console.py" ]]; then
+        echo "+++ Running console tests for virtio_linux_demo_2p_amd64"
+        cd "${test_dir}"
+        python3 -u "${test_dir}/test_console.py" 2>&1
+        local console_rc=$?
+        if [[ ${console_rc} -ne 0 ]]; then
+            echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (console test)"
+            return 1
+        fi
+    fi
+
+    # Run TCP bridge test (System -> Guest via virtio-console)
+    if [[ -f "${test_dir}/test_tcp_bridge.py" ]]; then
+        echo "+++ Running TCP bridge test for virtio_linux_demo_2p_amd64"
+        cd "${test_dir}"
+        python3 -u "${test_dir}/test_tcp_bridge.py" 2>&1
+        local bridge_rc=$?
+        if [[ ${bridge_rc} -ne 0 ]]; then
+            echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (TCP bridge test)"
+            return 1
+        fi
+    fi
+
+    # Run COM2 test (Host -> Guest via QEMU serial passthrough)
+    if [[ -f "${test_dir}/test_com2.py" ]]; then
+        echo "+++ Running COM2 test for virtio_linux_demo_2p_amd64"
+        cd "${test_dir}"
+        python3 -u "${test_dir}/test_com2.py" 2>&1
+        local com2_rc=$?
+        if [[ ${com2_rc} -ne 0 ]]; then
+            echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (COM2 test)"
+            return 1
+        fi
+    fi
+
+    echo -e "${GREEN}Check virtio_linux_demo_2p_amd64 PASS${NC}"
+    return 0
 }
 
 # Run a single test case
@@ -1105,6 +1335,14 @@ function run_test() {
     fi
     if [[ "${case_name}" == "mix_os_demo_amd64" ]]; then
         run_test_mix_os_demo_amd64
+        return $?
+    fi
+    if [[ "${case_name}" == "virtio_linux_demo_2p_aarch64" ]]; then
+        run_test_virtio_linux_demo_2p_aarch64
+        return $?
+    fi
+    if [[ "${case_name}" == "virtio_linux_demo_2p_riscv64" ]]; then
+        run_test_virtio_linux_demo_2p_riscv64
         return $?
     fi
     if [[ "${case_name}" == "virtio_linux_demo_2p_amd64" ]]; then
@@ -1203,6 +1441,8 @@ function builder_to_case() {
         check-mix_os_demo_riscv64) echo "mix_os_demo_riscv64" ;;
         check-linux_4vcpu_1partion_amd64) echo "linux_4vcpu_1partion_amd64" ;;
         check-mix_os_demo_amd64) echo "mix_os_demo_amd64" ;;
+        check-virtio_linux_demo_2p_aarch64) echo "virtio_linux_demo_2p_aarch64" ;;
+        check-virtio_linux_demo_2p_riscv64) echo "virtio_linux_demo_2p_riscv64" ;;
         check-virtio_linux_demo_2p_amd64) echo "virtio_linux_demo_2p_amd64" ;;
         check-[0-9]*)         echo "example.${builder#check-}" ;;
         *)                    echo "" ;;

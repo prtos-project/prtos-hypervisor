@@ -76,8 +76,9 @@ struct kthread_arch {
     prtos_u64_t ich_hcr;      /* ICH_HCR_EL2 */
     prtos_u64_t ich_vmcr;     /* ICH_VMCR_EL2 */
 
-    /* Bitmask of forwarded physical SPIs that need re-enabling at GICD */
-    prtos_u64_t spi_fwd_mask;
+    /* Bitmask of forwarded physical SPIs that need re-enabling at GICD.
+     * Array of 4 x 64-bit words supports SPIs 0-255 (GIC intid 32-287). */
+    prtos_u64_t spi_fwd_mask[4];
 
     /* Guest timer emulation */
     prtos_u64_t guest_timer_active;

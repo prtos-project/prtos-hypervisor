@@ -309,6 +309,18 @@ struct vuart_state {
 /* Forward declaration */
 struct vmx_state;
 
+/* Virtual I/O APIC state (one per partition).
+ * Traps guest MMIO at 0xFEC00000 via EPT violation and emulates
+ * IOAPIC registers per-partition. Physical interrupt delivery is
+ * handled separately by PRTOS via VMCS interrupt injection. */
+#define VIOAPIC_NUM_PINS 24
+struct vioapic_state {
+    prtos_u32_t ioregsel;                        /* IOREGSEL (offset 0x00) */
+    prtos_u32_t id;                              /* IOAPIC ID register */
+    prtos_u64_t rte[VIOAPIC_NUM_PINS];           /* Redirection table entries */
+    volatile prtos_u32_t pending;                /* Pending interrupt bitmap (bit N = pin N) */
+};
+
 /* VMX shared partition state (one per partition, shared across vCPUs) */
 struct vmx_partition_shared {
     prtos_u64_t eptp;               /* EPT pointer (PML4 phys | flags) */
@@ -318,6 +330,7 @@ struct vmx_partition_shared {
     struct vpit_state  vpit;
     struct vpic_state  vpic;
     struct vuart_state vuart;
+    struct vioapic_state vioapic;
     prtos_u8_t port61;         /* Speaker/PIT gate register (port 0x61) */
     prtos_u32_t partition_id;  /* PRTOS partition ID (0=System, 1=Guest, ...) */
 

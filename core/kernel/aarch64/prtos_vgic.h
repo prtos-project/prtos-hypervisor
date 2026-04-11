@@ -65,6 +65,7 @@ struct prtos_vgic_state {
     prtos_u32_t num_irqs;
     prtos_u32_t num_vcpus;
     prtos_u32_t gicc_bpr;
+    prtos_u8_t vcpu_to_pcpu[PRTOS_VGIC_MAX_VCPUS]; /* physical CPU for each vCPU */
     struct prtos_vgic_irq spis[PRTOS_VGIC_NR_SPIS];
     struct prtos_vgic_vcpu vcpu[PRTOS_VGIC_MAX_VCPUS];
 };

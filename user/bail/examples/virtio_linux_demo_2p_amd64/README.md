@@ -6,7 +6,6 @@ This demo demonstrates **Virtio device virtualization** on the PRTOS Type-1 Hype
 
 The **System Partition** owns all hardware resources (PCI, legacy I/O, IRQs) and runs virtio backend daemons that serve virtualized devices to the **Guest Partition** via shared memory regions. The Guest runs a **userspace frontend daemon** (`virtio_frontend`) that bridges the custom shared-memory protocol to standard Linux devices (`/dev/vda` via NBD, `/dev/hvc0` via PTY, `tap0`/`tap1`/`tap2` via TUN/TAP). Both partitions run full Linux (kernel 6.19.9) with dual-console support: UART for System, VGA+telnet for Guest. All services auto-start via init scripts.
 
-**Guest Virtio Frontend**: Standard `virtio-mmio` kernel drivers cannot be used because (1) the kernel's MMIO cmdline parser rejects `irq=0`, and (2) PRTOS VMX run loop does not inject IPVI doorbells as external interrupts. Instead, a userspace daemon (`virtio_frontend`) bridges shared memory to standard Linux devices via NBD (block), PTY (console), and TUN/TAP (network) using polling.
 
 ## Architecture
 
@@ -92,10 +91,12 @@ The Guest partition uses `set_serial_poll` (ioctl `TIOCSSERIAL` with `irq=0`) to
 ## Virtio Devices
 
 ### Virtio-Console
-- **Mechanism**: 4KB character ring buffer in shared memory (`Virtio_Con`)
+- **Mechanism**: 4KB character ring buffer in shared memory (`Virtio_Con`) + TCP telnet bridge on port 4321
 - **Guest device**: `/dev/hvc0` (PTY pair created by `virtio_frontend`)
-- **Data flow**: Guest writes to `/dev/hvc0` → `virtio_frontend` copies to `tx_buf` in shared memory → Backend reads and prints to System UART
-- **Verify**: `echo "Hello PRTOS" > /dev/hvc0` (from Guest) → appears on System console
+- **Data flow (TX)**: Guest writes to `/dev/hvc0` → `virtio_frontend` copies to `tx_buf` in shared memory → Backend reads and prints to System UART + sends to TCP telnet client
+- **Data flow (RX)**: TCP telnet client sends data → Backend writes to `rx_buf` in shared memory → Frontend reads `rx_buf` → writes to PTY master → Guest reads `/dev/hvc0`
+- **Telnet access**: From System partition shell: `telnet 127.0.0.1 4321` (login: `root` / `1234`)
+- **Verify**: `echo "Hello PRTOS" > /dev/hvc0` (from Guest) → appears on System console and telnet client
 
 ### Virtio-Net (×3)
 - **Mechanism**: 64-slot packet ring buffer (up to 1536 bytes/slot) per instance, bridged via TUN/TAP on both partitions
@@ -286,12 +287,9 @@ make run.amd64
 ```
 
 ### Step 2: Boot System Partition (UART/stdio)
-System auto-starts `prtos_manager` and `virtio_backend` via `S99virtio_backend`:
+System auto-starts `prtos_manager` and `virtio_backend` via `S99virtio_backend` (output redirected to `/var/log/`):
 ```
 === PRTOS System Partition ===
-PRTOS Partition manager running on partition 0
-=== PRTOS Virtio Backend Daemon ===
-[Backend] All 5 Virtio devices initialized. Entering poll loop...
 
 Welcome to Buildroot
 buildroot login: root
@@ -299,11 +297,23 @@ Password: 1234
 ```
 
 ### Step 3: Access Guest Partition
+
+Two ways to access the Guest console:
+
+**Option A: From the host machine** (via QEMU COM2):
 ```bash
-# From another terminal:
 telnet localhost 4321
 # Login: root / 1234
 ```
+
+**Option B: From the System partition shell** (via TCP bridge):
+```bash
+# After logging into System (Step 2):
+telnet 127.0.0.1 4321
+# Login: root / 1234
+```
+The virtio backend daemon listens on TCP port 4321 inside the System partition, bridging data between the TCP socket and the Guest's `/dev/hvc0` via shared memory.
+
 Guest auto-starts `virtio_frontend` via `S99virtio_guest`. The frontend waits for the backend to initialize shared memory (polls magic values up to 300s), then creates `/dev/nbd0` (block) and `/dev/hvc0` (console).
 
 ### Step 4: Test Virtio Devices (Guest)
@@ -325,6 +335,9 @@ python3 test_login.py
 
 # COM2/telnet test:
 python3 test_com2.py
+
+# Console test (clean output, backspace, tab completion):
+python3 test_console.py
 
 # Via the test framework:
 cd ../../../../  # back to prtos-hypervisor root
@@ -350,10 +363,11 @@ bash scripts/run_test.sh --arch amd64 check-all
 | `set_serial_poll.c` | Utility: `ioctl TIOCSSERIAL` to force `irq=0` polling mode for COM2 |
 | `test_login.py` | Automated test: QEMU launch, COM1 login, `uname` check |
 | `test_com2.py` | Automated test: COM2 telnet connection + Guest login prompt |
+| `test_console.py` | Console test: clean output (no backend noise), COM2 telnet backspace + tab completion |
 | **`system_partition/`** | |
 | `  include/virtio_be.h` | Shared data structures: `net_shm` (64-slot ring), `blk_shm` (16-slot ring), `console_shm` (4KB ring) |
 | `  src/main.c` | Backend daemon: mmap 5 `/dev/mem` regions, init all devices, 1ms poll loop |
-| `  src/virtio_console.c` | Console backend: poll `tx_buf` ring → `putchar` |
+| `  src/virtio_console.c` | Console backend: poll `tx_buf` ring → `putchar` + TCP telnet bridge on port 4321 (bidirectional) |
 | `  src/virtio_net.c` | Net backend: TAP for bridge, loopback for NAT/p2p |
 | `  src/virtio_blk.c` | Block backend: file-backed (`pread`/`pwrite`) or 1MB RAM disk |
 | `  src/doorbell.c` | IPVI signaling via hypercall (signal Guest via IPVI 5) |
@@ -375,9 +389,9 @@ bash scripts/run_test.sh --arch amd64 check-all
 
 - **1024MB QEMU RAM**: Total memory is 1GB. PRTOS EPT identity-maps the first 1GB via a single PDPT entry. All partition and shared memory addresses must be below `0x40000000`.
 - **Dual console**: System Partition uses COM1/UART (stdio). Guest Partition uses VGA (VNC) + COM2 (telnet). COM2 operates in polling mode (`irq=0`) because PRTOS does not route IRQ3 to the Guest.
-- **HPET disabled**: Both kernels use `nokaslr noapic nolapic` to avoid hardware timer and interrupt controller sharing issues between partitions.
+- **x2APIC enabled**: Both kernels boot into x2APIC mode (MSR-based LAPIC access). PRTOS virtualizes the full x2APIC MSR range (0x800–0x83F) including 64-bit ICR (MSR 0x830) and Self-IPI (MSR 0x83F). The APIC-access page is retained for real-mode AP startup (xAPIC stage before x2APIC transition). IOAPIC at 0xFEC00000 is virtualized via EPT fault trapping.
 - **Quiet System boot**: System kernel cmdline includes `quiet loglevel=0` to suppress boot messages for clean login experience.
-- **PCI legacy mode**: Demo targets add QEMU PCI devices with `disable-modern=on,vectors=0` to force legacy INTx. Both MSI-X (`vectors=0`) and modern virtio (`disable-modern=on`) are disabled because PRTOS does not support MSI-X routing to L2 partitions.
+- **PCI legacy mode**: Demo targets add QEMU PCI devices with `disable-modern=on,vectors=0` to force legacy INTx. Modern virtio with MSI-X is available via `make run.amd64.demo` targets.
 - **Networking**: Each virtio-net instance uses a pair of TUN/TAP devices (one on System, one on Guest) bridged through the shared memory packet ring. The backend creates `/dev/net/tun` via `mknod` and opens TAP devices for all 3 instances. IP addresses are assigned by init scripts.
 - **Static linking**: `virtio_backend`, `virtio_frontend`, and `prtos_manager` are all statically linked for portability inside the partition rootfs.
 - **Auto-start**: Both partitions use Buildroot init scripts (`S99virtio_backend`, `S99virtio_guest`) to automatically start all services at boot. No manual intervention is required.
@@ -394,10 +408,15 @@ bash scripts/run_test.sh --arch amd64 check-all
 
 **System Partition** (`start_system.S`):
 ```
-console=ttyS0,115200 quiet loglevel=0 nokaslr noapic nolapic prtos_role=system prtos_shmem_base=0x16000000 prtos_shmem_size=0x540000
+console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 loglevel=7 nokaslr no_timer_check nohpet tsc=reliable clocksource=tsc nr_cpus=2 prtos_role=system prtos_shmem_base=0x16000000 prtos_shmem_size=0x540000
 ```
 
 **Guest Partition** (`start_guest.S`):
 ```
-console=tty0 nokaslr noapic nolapic prtos_role=guest prtos_shmem_base=0x16000000 prtos_shmem_size=0x540000
+console=tty0 nokaslr no_timer_check nohpet tsc=reliable clocksource=tsc nr_cpus=2 prtos_role=guest prtos_shmem_base=0x16000000 prtos_shmem_size=0x540000
 ```
+
+Key parameters:
+- `nr_cpus=2`: Limits kernel to 2 virtual CPUs (matches PRTOS partition config)
+- `no_timer_check nohpet tsc=reliable clocksource=tsc`: Use TSC as clocksource (PRTOS virtualizes PIT via IOAPIC, HPET not available)
+- PMU is hidden via CPUID leaf 0x0A and MSR trapping (LBR 0x680–0x6CF, Uncore 0x700–0x7FF, 0xE00–0xE3F)

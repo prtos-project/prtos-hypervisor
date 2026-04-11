@@ -1,119 +1,187 @@
 #!/usr/bin/env python3
-"""Test COM2 telnet login for Guest partition."""
-import subprocess, time, socket, sys, os, signal
+"""
+Test COM2 telnet login for Guest partition (amd64).
+
+Architecture:
+  - QEMU -serial telnet::PORT exposes Guest COM2 (ttyS1) on HOST
+  - PRTOS passes through COM2 I/O (0x2F8-0x2FF) to Guest partition
+  - Guest runs getty on ttyS1 via S99virtio_guest init script
+  - set_serial_poll forces irq=0 for timer-based polling (no IRQ3 routing)
+
+Test verifies:
+  1. COM2 telnet connection from HOST
+  2. Login prompt (after newline trigger)
+  3. Full login (root/1234)
+  4. Command execution on Guest shell
+
+Exit: 0=PASS, 1=FAIL
+"""
+import subprocess, time, socket, sys, os, threading, grp, random
 
 DEMO_DIR = os.path.dirname(os.path.abspath(__file__))
-ISO = os.path.join(DEMO_DIR, "resident_sw.iso")
+COM2_PORT = random.randint(15000, 19999)
+BOOT_WAIT = 100  # seconds for full boot
 
-cmd = ("sg kvm -c 'qemu-system-x86_64 "
+os.chdir(DEMO_DIR)
+
+# Build
+subprocess.run(["make", "clean"], capture_output=True)
+ret = subprocess.run(["make"], capture_output=True)
+if ret.returncode != 0:
+    print("Build failed:")
+    print(ret.stderr.decode(errors='replace')[-500:])
+    sys.exit(1)
+
+# KVM access
+kvm_ok = 0
+if os.access("/dev/kvm", os.W_OK):
+    kvm_ok = 1
+else:
+    try:
+        kvm_gid = grp.getgrnam("kvm").gr_gid
+        if kvm_gid in os.getgroups():
+            kvm_ok = 2
+    except KeyError:
+        pass
+
+if kvm_ok == 0:
+    print("SKIP: KVM not accessible")
+    sys.exit(0)
+
+sg_pre = "sg kvm -c '" if kvm_ok == 2 else ""
+sg_post = "'" if kvm_ok == 2 else ""
+
+cmd = (f"{sg_pre}qemu-system-x86_64 "
        "-enable-kvm -cpu host,-waitpkg "
-       "-m 512 -smp 4 "
-       "-no-reboot "
-       "-cdrom {iso} "
+       "-m 1024 -smp 4 -no-reboot -nographic "
+       "-cdrom resident_sw.iso "
        "-serial mon:stdio "
-       "-serial telnet::4321,server,nowait "
-       "-vga std -display none -vnc :1 "
-       "-boot d'").format(iso=ISO)
+       f"-serial telnet::{COM2_PORT},server,nowait "
+       f"-boot d{sg_post}")
 
-print("[TEST] Starting QEMU...")
+print("[TEST] Starting QEMU with COM2 on port %d..." % COM2_PORT)
 proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE,
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-# Collect COM1 (System) output in background
-com1_data = []
+# Read COM1 in background
+com1_buf = bytearray()
 def read_com1():
-    import threading
-    def reader():
-        while True:
-            ch = proc.stdout.read(1)
-            if not ch:
-                break
-            com1_data.append(ch)
-    t = threading.Thread(target=reader, daemon=True)
-    t.start()
-read_com1()
-
-# Wait for QEMU to start and listen on port 4321
-time.sleep(2)
-
-# Try connecting to telnet port 4321 (COM2)
-print("[TEST] Connecting to COM2 (telnet localhost:4321)...")
-sock = None
-for attempt in range(5):
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5)
-        sock.connect(("localhost", 4321))
-        print(f"[TEST] Connected to port 4321 (attempt {attempt+1})")
-        break
-    except Exception as e:
-        print(f"[TEST] Connect attempt {attempt+1} failed: {e}")
-        if sock:
-            sock.close()
-            sock = None
-        time.sleep(2)
-
-if not sock:
-    print("[FAIL] Could not connect to port 4321")
-    proc.kill()
-    sys.exit(1)
-
-# Wait for Guest to boot and getty to start (up to 60s)
-print("[TEST] Waiting for Guest to boot and getty login prompt...")
-com2_buf = b""
-sock.settimeout(2)
-deadline = time.time() + 90
-got_login = False
-
-while time.time() < deadline:
-    try:
-        data = sock.recv(1024)
-        if data:
-            com2_buf += data
-            text = com2_buf.decode("latin-1")
-            sys.stdout.write(f"\r[COM2] received {len(com2_buf)} bytes: {repr(text[-80:])}")
-            sys.stdout.flush()
-            if "login:" in text.lower():
-                got_login = True
-                print(f"\n[TEST] Got login prompt!")
-                break
-    except socket.timeout:
-        # Check if QEMU is still running
-        if proc.poll() is not None:
-            print("\n[FAIL] QEMU exited")
+    while True:
+        ch = proc.stdout.read(1)
+        if not ch:
             break
-        # Print COM1 status
-        com1_text = b"".join(com1_data).decode("latin-1", errors="replace")
-        if "login:" in com1_text.lower():
-            print(f"\n[COM1] System login prompt seen ({len(com1_text)} bytes total)")
+        com1_buf.extend(ch)
+threading.Thread(target=read_com1, daemon=True).start()
 
-print()
-if got_login:
-    print("[PASS] Guest COM2 telnet login prompt received!")
-    # Try to login
-    print("[TEST] Sending 'root' username...")
-    sock.sendall(b"root\n")
-    time.sleep(3)
-    try:
-        data = sock.recv(4096)
-        com2_buf += data
-        text = com2_buf.decode("latin-1")
-        print(f"[COM2] After login: {repr(text[-200:])}")
-        if "password" in text.lower() or "#" in text or "$" in text:
-            print("[TEST] Password prompt or shell seen!")
-    except socket.timeout:
-        pass
-else:
-    print("[FAIL] No login prompt on COM2 within timeout")
-    print(f"[COM2] Total received: {len(com2_buf)} bytes")
-    if com2_buf:
-        print(f"[COM2] Data: {repr(com2_buf[:200])}")
-    com1_text = b"".join(com1_data).decode("latin-1", errors="replace")
-    # Show last 500 chars of COM1
-    print(f"[COM1] Last 500 chars: {repr(com1_text[-500:])}")
+print("[TEST] Waiting %ds for boot..." % BOOT_WAIT)
+time.sleep(BOOT_WAIT)
+com1_text = com1_buf.decode('latin-1', errors='replace')
+print("[TEST] COM1: %d bytes, system login: %s" % (
+    len(com1_buf), 'login' in com1_text.lower()))
 
-# Cleanup  
+# Connect to COM2
+print("[TEST] Connecting to COM2...")
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.settimeout(10)
+try:
+    sock.connect(("localhost", COM2_PORT))
+except Exception as e:
+    print("[FAIL] Cannot connect: %s" % e)
+    proc.kill(); proc.wait(); sys.exit(1)
+
+# Drain initial QEMU telnet negotiation
+time.sleep(1)
+try:
+    sock.recv(4096)
+except socket.timeout:
+    pass
+
+# Send newline to trigger getty re-display login prompt
+sock.sendall(b"\r\n")
+time.sleep(3)
+
+buf = b""
+sock.settimeout(3)
+try:
+    while True:
+        d = sock.recv(4096)
+        if not d: break
+        buf += d
+except socket.timeout:
+    pass
+
+text = buf.decode('latin-1', errors='replace')
+if 'login' not in text.lower():
+    print("[FAIL] No login prompt on COM2")
+    print("[COM2] Received: %s" % repr(text[:200]))
+    sock.close(); proc.kill(); proc.wait(); sys.exit(1)
+
+print("[TEST] Login prompt received")
+
+# Login
+sock.sendall(b"root\r\n")
+time.sleep(3)
+buf = b""
+try:
+    while True:
+        d = sock.recv(4096)
+        if not d: break
+        buf += d
+except socket.timeout:
+    pass
+text = buf.decode('latin-1', errors='replace')
+
+if 'assword' not in text.lower():
+    print("[FAIL] No password prompt")
+    print("[COM2] After username: %s" % repr(text[:200]))
+    sock.close(); proc.kill(); proc.wait(); sys.exit(1)
+
+print("[TEST] Password prompt received")
+sock.sendall(b"1234\r\n")
+time.sleep(5)
+
+buf = b""
+try:
+    while True:
+        d = sock.recv(4096)
+        if not d: break
+        buf += d
+except socket.timeout:
+    pass
+text = buf.decode('latin-1', errors='replace')
+
+if '#' not in text and '$' not in text:
+    print("[FAIL] No shell prompt after login")
+    print("[COM2] After password: %s" % repr(text[:200]))
+    sock.close(); proc.kill(); proc.wait(); sys.exit(1)
+
+print("[TEST] Shell prompt received")
+
+# Run command
+sock.sendall(b"echo COM2_TEST_OK\r\n")
+time.sleep(3)
+buf = b""
+try:
+    while True:
+        d = sock.recv(4096)
+        if not d: break
+        buf += d
+except socket.timeout:
+    pass
+text = buf.decode('latin-1', errors='replace')
+
+if 'COM2_TEST_OK' not in text:
+    print("[FAIL] Command output not received")
+    print("[COM2] After echo: %s" % repr(text[:200]))
+    sock.close(); proc.kill(); proc.wait(); sys.exit(1)
+
+print("[PASS] COM2 full login + command execution works!")
+print("  - Login prompt: OK")
+print("  - Password prompt: OK")
+print("  - Shell prompt: OK")
+print("  - Command execution: OK")
+
 sock.close()
 proc.kill()
 proc.wait()
-sys.exit(0 if got_login else 1)
+sys.exit(0)

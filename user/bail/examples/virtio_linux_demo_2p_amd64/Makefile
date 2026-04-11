@@ -20,10 +20,17 @@
 # Dual Console: System on UART, Guest on VGA
 #
 # Usage:
-#   make                     # Build container.bin and resident_sw.iso
-#   make run.amd64           # Basic QEMU launch (UART + VGA/VNC + telnet)
-#   make run.amd64.demo      # Full demo with dual console
-#   make clean               # Clean all build artifacts
+#   make                        # Build container.bin and resident_sw.iso
+#   make run.amd64              # Basic QEMU launch (UART + VGA/VNC + telnet)
+#   make run.amd64.nographic    # Nographic mode (automated testing)
+#   make run.amd64.demo         # Full demo with MSI-X PCI devices + TAP
+#   make run.amd64.demo.nat     # Full demo without TAP (no root required)
+#   make run.amd64.demo.legacy  # Legacy INTx PCI mode (fallback/debug)
+#   make clean                  # Clean all build artifacts
+#
+# All virtio services auto-start via init scripts:
+#   S99virtio_backend (System): starts prtos_manager + virtio_backend
+#   S99virtio_guest   (Guest):  starts virtio_frontend + getty on ttyS1
 
 BAIL_PATH=../../
 
@@ -258,6 +265,7 @@ run.amd64:
 	@echo "  Window 1 (System): this terminal (COM1/stdio) | root/1234"
 	@echo "  Window 2 (Guest):  telnet localhost 4321      | root/1234"
 	@echo "  VGA display:       vnc://localhost:5901"
+	@echo "  Virtio services auto-start via S99virtio_backend/S99virtio_guest"
 	@echo "================================================================"
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
 		-m 1024 -smp 4 \
@@ -291,9 +299,12 @@ run.amd64.kvm.nographic:
 # System Partition: COM1 -> stdio (interactive), owns all PCI devices
 # Guest Partition:  VGA -> VNC :1, COM2 -> telnet :4321 (interactive)
 #
-# PCI devices use legacy INTx (MSI/MSI-X disabled) because PRTOS does not
-# route MSI-X interrupts to L2 partitions. System Linux probes PCI and uses
-# these devices as the backend for virtio-over-shared-memory to the Guest.
+# PCI devices use legacy virtio (disable-modern=on, vectors=0) because
+# PRTOS EPT identity-maps only the first 1GB. Modern virtio PCI BARs
+# are placed at >=0x40000000 by QEMU, causing EPT violations.
+# Future: extend EPT to cover PCI MMIO range for MSI-X support.
+#
+# Requires root for TAP networking (tap0).
 run.amd64.demo: disk.img
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
@@ -304,9 +315,7 @@ run.amd64.demo: disk.img
 	@echo "  Window 2 (Guest):  telnet localhost 4321 | root/1234"
 	@echo "  VGA display:       vnc://localhost:5901"
 	@echo ""
-	@echo "  After System boots, run:"
-	@echo "    prtos_manager &"
-	@echo "    virtio_backend &"
+	@echo "  Virtio services auto-start via S99virtio_backend/S99virtio_guest"
 	@echo "================================================================"
 	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
 		-m 1024 -smp 4 \
@@ -324,12 +333,34 @@ run.amd64.demo: disk.img
 		-drive file=disk.img,if=none,id=drv0,format=raw \
 		-device virtio-blk-pci,drive=drv0,disable-modern=on,vectors=0
 
-# Demo without TAP (no root required, NAT only + p2p + block)
+# Demo without TAP (no root required, NAT only + block device)
 run.amd64.demo.nat: disk.img
 	@$(MAKE) clean
 	@$(MAKE) resident_sw.iso
 	@echo "================================================================"
 	@echo "  PRTOS Virtio Demo (NAT) - Dual Console"
+	@echo "================================================================"
+	@echo "  System: this terminal | Guest: telnet localhost 4321"
+	@echo "  VGA: vnc://localhost:5901"
+	@echo "================================================================"
+	@qemu-system-x86_64 -enable-kvm -cpu host,-waitpkg \
+		-m 1024 -smp 4 \
+		-cdrom resident_sw.iso \
+		-boot d \
+		-serial mon:stdio \
+		-serial telnet::4321,server,nowait \
+		-vga std -display none -vnc :1 \
+		-netdev user,id=net1 \
+		-device virtio-net-pci,netdev=net1,disable-modern=on,vectors=0 \
+		-drive file=disk.img,if=none,id=drv0,format=raw \
+		-device virtio-blk-pci,drive=drv0,disable-modern=on,vectors=0
+
+# Legacy demo alias: same as demo.nat (legacy INTx, no TAP required)
+run.amd64.demo.legacy: disk.img
+	@$(MAKE) clean
+	@$(MAKE) resident_sw.iso
+	@echo "================================================================"
+	@echo "  PRTOS Virtio Demo (Legacy INTx) - Dual Console"
 	@echo "================================================================"
 	@echo "  System: this terminal | Guest: telnet localhost 4321"
 	@echo "  VGA: vnc://localhost:5901"
@@ -358,4 +389,4 @@ clean:
 distclean: clean
 	@rm -f disk.img
 
-.PHONY: all clean distclean run
+.PHONY: all clean distclean run run.amd64 run.amd64.nographic run.amd64.kvm.nographic run.amd64.demo run.amd64.demo.nat run.amd64.demo.legacy

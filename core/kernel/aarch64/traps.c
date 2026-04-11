@@ -73,19 +73,30 @@ static int prtos_sysreg_dispatch(struct cpu_user_regs *regs,
             prtos_u32_t ipi_mask = 0;  /* bitmask of pCPUs to notify */
 
             if (irm) {
+                /* Broadcast: inject SGI to all vCPUs except sender */
                 for (i = 0; i < (int)vgic->num_vcpus; i++)
                     if (i != vcpu_id) {
                         prtos_vgic_inject_sgi(vgic, i, intid);
-                        if (i != (int)GET_CPU_ID() && i < 32)
-                            ipi_mask |= (1U << i);
+                        int pcpu = vgic->vcpu_to_pcpu[i];
+                        if (pcpu != (int)GET_CPU_ID() && pcpu < 32)
+                            ipi_mask |= (1U << pcpu);
                     }
             } else {
-                for (i = 0; i < 16 && i < (int)vgic->num_vcpus; i++)
+                /* Targeted: TargetList bits are Aff0 values (physical
+                 * CPU IDs since VMPIDR uses physical MPIDR).  Map each
+                 * target physical CPU back to its vCPU index. */
+                for (i = 0; i < 16; i++)
                     if (target_list & (1U << i)) {
-                        int tgt = (aff1 << 4) | i;
-                        prtos_vgic_inject_sgi(vgic, tgt, intid);
-                        if (tgt != (int)GET_CPU_ID() && tgt < 32)
-                            ipi_mask |= (1U << tgt);
+                        int target_pcpu = (aff1 << 4) | i;
+                        int v;
+                        for (v = 0; v < (int)vgic->num_vcpus; v++) {
+                            if (vgic->vcpu_to_pcpu[v] == (prtos_u8_t)target_pcpu) {
+                                prtos_vgic_inject_sgi(vgic, v, intid);
+                                if (target_pcpu != (int)GET_CPU_ID() && target_pcpu < 32)
+                                    ipi_mask |= (1U << target_pcpu);
+                                break;
+                            }
+                        }
                     }
             }
 
@@ -129,17 +140,23 @@ void aarch64_trap_handler(struct cpu_user_regs *regs, int from_guest) {
     if (from_guest) {
         local_processor_t *spi_info = GET_LOCAL_PROCESSOR();
         kthread_t *spi_k = spi_info->sched.current_kthread;
-        if (spi_k->ctrl.g && spi_k->ctrl.g->karch.spi_fwd_mask) {
-            prtos_u64_t mask = spi_k->ctrl.g->karch.spi_fwd_mask;
-            spi_k->ctrl.g->karch.spi_fwd_mask = 0;
-            int bit;
-            for (bit = 0; bit < 64 && mask; bit++) {
-                if (mask & (1ULL << bit)) {
-                    prtos_u32_t intid_re = bit + 32;
-                    volatile prtos_u32_t *gicd_isenabler =
-                        (volatile prtos_u32_t *)(GIC_DIST_BASE + 0x100 + 4 * (intid_re / 32));
-                    *gicd_isenabler = (1U << (intid_re % 32));
-                    mask &= ~(1ULL << bit);
+        if (spi_k->ctrl.g && (spi_k->ctrl.g->karch.spi_fwd_mask[0] |
+                               spi_k->ctrl.g->karch.spi_fwd_mask[1] |
+                               spi_k->ctrl.g->karch.spi_fwd_mask[2] |
+                               spi_k->ctrl.g->karch.spi_fwd_mask[3])) {
+            int wi;
+            for (wi = 0; wi < 4; wi++) {
+                prtos_u64_t mask = spi_k->ctrl.g->karch.spi_fwd_mask[wi];
+                spi_k->ctrl.g->karch.spi_fwd_mask[wi] = 0;
+                int bit;
+                for (bit = 0; bit < 64 && mask; bit++) {
+                    if (mask & (1ULL << bit)) {
+                        prtos_u32_t intid_re = (wi * 64 + bit) + 32;
+                        volatile prtos_u32_t *gicd_isenabler =
+                            (volatile prtos_u32_t *)(GIC_DIST_BASE + 0x100 + 4 * (intid_re / 32));
+                        *gicd_isenabler = (1U << (intid_re % 32));
+                        mask &= ~(1ULL << bit);
+                    }
                 }
             }
         }
@@ -173,7 +190,7 @@ void aarch64_trap_handler(struct cpu_user_regs *regs, int from_guest) {
                         (volatile prtos_u32_t *)(GIC_DIST_BASE + 0x180 + 4 * ((intid) / 32));
                     *gicd_icenabler = (1U << (intid % 32));
                     /* Mark SPI as needing re-enable after guest processes it */
-                    k->ctrl.g->karch.spi_fwd_mask |= (1ULL << (intid - 32));
+                    k->ctrl.g->karch.spi_fwd_mask[(intid - 32) / 64] |= (1ULL << ((intid - 32) % 64));
                 }
             }
 
@@ -253,7 +270,7 @@ void aarch64_trap_handler(struct cpu_user_regs *regs, int from_guest) {
                     volatile prtos_u32_t *gicd_icenabler =
                         (volatile prtos_u32_t *)(GIC_DIST_BASE + 0x180 + 4 * ((intid) / 32));
                     *gicd_icenabler = (1U << (intid % 32));
-                    k->ctrl.g->karch.spi_fwd_mask |= (1ULL << (intid - 32));
+                    k->ctrl.g->karch.spi_fwd_mask[(intid - 32) / 64] |= (1ULL << ((intid - 32) % 64));
                 }
             }
 

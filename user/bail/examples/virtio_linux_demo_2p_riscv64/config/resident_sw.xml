@@ -1,0 +1,122 @@
+<!--
+  PRTOS Configuration: Virtio Linux Demo (RISC-V 64) - 2 SMP Linux Partitions
+  System Partition: Virtio Backend (UART console)
+  Guest Partition: Virtio Frontend (no direct console)
+
+  Memory Layout (IPA space):
+    PRTOS Hypervisor:      64MB
+    Partition 0 (System):  128MB at IPA 0x88000000, 2 vCPU on pCPU 0-1
+    Partition 1 (Guest):   128MB at IPA 0x90000000, 2 vCPU on pCPU 2-3
+    Shared Memory (Virtio rings + data buffers):
+      Virtio_Net0:  1MB   @ 0x98000000
+      Virtio_Net1:  1MB   @ 0x98100000
+      Virtio_Net2:  1MB   @ 0x98200000
+      Virtio_Blk:   2MB   @ 0x98300000
+      Virtio_Con:   256KB @ 0x98500000
+-->
+<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="virtio_linux_demo_2p_riscv64">
+    <HwDescription>
+        <MemoryLayout>
+            <Region type="ram" start="0x0" size="512MB" />
+            <Region type="ram" start="0x80000000" size="1024MB" />
+        </MemoryLayout>
+        <ProcessorTable>
+            <Processor id="0">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="10ms">
+                        <Slot id="0" start="0ms" duration="10ms" partitionId="0" vCpuId="0"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="1">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="10ms">
+                        <Slot id="0" start="0ms" duration="10ms" partitionId="0" vCpuId="1"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="2">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="10ms">
+                        <Slot id="0" start="0ms" duration="10ms" partitionId="1" vCpuId="0"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+            <Processor id="3">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="10ms">
+                        <Slot id="0" start="0ms" duration="10ms" partitionId="1" vCpuId="1"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+        </ProcessorTable>
+        <Devices>
+            <Uart id="0" baudRate="115200" name="Uart" />
+            <MemoryBlock name="Virtio_Net0" start="0x98000000" size="1MB" />
+            <MemoryBlock name="Virtio_Net1" start="0x98100000" size="1MB" />
+            <MemoryBlock name="Virtio_Net2" start="0x98200000" size="1MB" />
+            <MemoryBlock name="Virtio_Blk"  start="0x98300000" size="2MB" />
+            <MemoryBlock name="Virtio_Con"  start="0x98500000" size="256KB" />
+        </Devices>
+    </HwDescription>
+
+    <PRTOSHypervisor console="Uart">
+        <PhysicalMemoryArea size="64MB" />
+    </PRTOSHypervisor>
+
+    <PartitionTable>
+        <!-- System Partition: Virtio Backend, UART console -->
+        <Partition id="0" name="System" flags="system" hw_virt="true" console="Uart" noVCpus="2">
+            <PhysicalMemoryAreas>
+                <Area start="0x88000000" size="128MB" />
+                <!-- UART device pass-through -->
+                <Area start="0x10000000" size="4KB" />
+                <!-- Shared memory regions -->
+                <Area start="0x98000000" size="1MB"   flags="shared" />
+                <Area start="0x98100000" size="1MB"   flags="shared" />
+                <Area start="0x98200000" size="1MB"   flags="shared" />
+                <Area start="0x98300000" size="2MB"   flags="shared" />
+                <Area start="0x98500000" size="256KB"  flags="shared" />
+            </PhysicalMemoryAreas>
+            <PortTable>
+                <Port type="sampling" direction="destination" name="GuestToSystem" />
+                <Port type="sampling" direction="source" name="SystemToGuest" />
+            </PortTable>
+        </Partition>
+
+        <!-- Guest Partition: Virtio Frontend, no direct hardware -->
+        <Partition id="1" name="Guest" hw_virt="true" noVCpus="2">
+            <PhysicalMemoryAreas>
+                <Area start="0x90000000" size="128MB" />
+                <Area start="0x98000000" size="1MB"   flags="shared flag3" />
+                <Area start="0x98100000" size="1MB"   flags="shared flag3" />
+                <Area start="0x98200000" size="1MB"   flags="shared flag3" />
+                <Area start="0x98300000" size="2MB"   flags="shared flag3" />
+                <Area start="0x98500000" size="256KB"  flags="shared flag3" />
+            </PhysicalMemoryAreas>
+            <PortTable>
+                <Port type="sampling" direction="source" name="GuestToSystem" />
+                <Port type="sampling" direction="destination" name="SystemToGuest" />
+            </PortTable>
+        </Partition>
+    </PartitionTable>
+
+    <Channels>
+        <Ipvi id="0" sourceId="1" destinationId="0" />
+        <Ipvi id="1" sourceId="1" destinationId="0" />
+        <Ipvi id="2" sourceId="1" destinationId="0" />
+        <Ipvi id="3" sourceId="1" destinationId="0" />
+        <Ipvi id="4" sourceId="1" destinationId="0" />
+        <Ipvi id="5" sourceId="0" destinationId="1" />
+
+        <SamplingChannel maxMessageLength="8B">
+            <Source partitionId="1" portName="GuestToSystem" />
+            <Destination partitionId="0" portName="GuestToSystem" />
+        </SamplingChannel>
+        <SamplingChannel maxMessageLength="8B">
+            <Source partitionId="0" portName="SystemToGuest" />
+            <Destination partitionId="1" portName="SystemToGuest" />
+        </SamplingChannel>
+    </Channels>
+
+</SystemDescription>

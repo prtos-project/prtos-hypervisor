@@ -393,13 +393,19 @@ static int gicr_mmio_read(struct prtos_vgic_state *vgic, int vcpu_id,
             *val = 0x0200043B;
             return 0;
         case GICR_TYPER:
-            *val = ((prtos_u64_t)vcpu_id << 8) |
+        {
+            prtos_u8_t pcpu = vgic->vcpu_to_pcpu[vcpu_id];
+            *val = ((prtos_u64_t)pcpu << 8) |
                    ((vcpu_id == (int)vgic->num_vcpus - 1) ? (1ULL << 4) : 0) |
-                   ((prtos_u64_t)vcpu_id << 32);
+                   ((prtos_u64_t)pcpu << 32);
             return 0;
+        }
         case GICR_TYPER + 4:
-            *val = (prtos_u64_t)vcpu_id;
+        {
+            prtos_u8_t pcpu = vgic->vcpu_to_pcpu[vcpu_id];
+            *val = (prtos_u64_t)pcpu;
             return 0;
+        }
         case GICR_STATUSR:
             *val = 0;
             return 0;

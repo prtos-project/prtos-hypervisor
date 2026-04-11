@@ -28,11 +28,13 @@
     System Partition -> UART (COM1/serial stdio, SSH terminal)
     Guest Partition  -> VGA  (VNC :1) + COM2 (telnet :4321)
 
-  PCI Devices (assigned to System Partition via QEMU, legacy INTx mode):
-    virtio-net-pci (bridge):   BDF auto, MSI-X disabled
-    virtio-net-pci (NAT):      BDF auto, MSI-X disabled
-    virtio-net-pci (p2p):      BDF auto, MSI-X disabled
-    virtio-blk-pci:            BDF auto, MSI-X disabled
+  PCI Devices (assigned to System Partition via QEMU):
+    Default mode: modern virtio with MSI-X enabled
+    Legacy mode:  disable-modern=on,vectors=0 (use run.amd64.demo.legacy)
+    virtio-net-pci (bridge):   BDF auto, MSI-X enabled
+    virtio-net-pci (NAT):      BDF auto, MSI-X enabled
+    virtio-net-pci (p2p):      BDF auto, MSI-X enabled
+    virtio-blk-pci:            BDF auto, MSI-X enabled
 
   Hardware I/O Resources (all assigned to System Partition):
     COM1 (0x3F8-0x3FF):  System UART console
@@ -147,6 +149,13 @@
                     <Range base="0x3FD" noPorts="3" />
                     <!-- PCI config space (0xCF8-0xCFF) -->
                     <Range base="0xCF8" noPorts="8" />
+                    <!-- PCI device BAR I/O ports (legacy virtio-pci, ata_piix)
+                         QEMU i440fx assigns PCI BARs starting from 0xC000:
+                           virtio-blk: 0xC000-0xC07F (128 ports)
+                           virtio-net: 0xC080-0xC09F (32 ports each)
+                           ata_piix:   0xC0A0-0xC0AF (16 ports)
+                         512 ports covers up to 4 PCI devices -->
+                    <Range base="0xC000" noPorts="512" />
                 </IoPorts>
             </HwResources>
             <PortTable>
@@ -172,6 +181,15 @@
                 <Area start="0x16300000" size="2MB"   flags="shared flag3" />
                 <Area start="0x16500000" size="256KB"  flags="shared flag3" />
             </PhysicalMemoryAreas>
+            <HwResources>
+                <IoPorts>
+                    <!-- COM2 UART (ttyS1): Host telnet access via QEMU
+                         -serial telnet::4321,server,nowait.
+                         Uses polling mode (irq=0) since IRQ3 is not routed
+                         to the Guest partition. -->
+                    <Range base="0x2F8" noPorts="8" />
+                </IoPorts>
+            </HwResources>
             <PortTable>
                 <Port type="sampling" direction="source" name="GuestToSystem" />
                 <Port type="sampling" direction="destination" name="SystemToGuest" />

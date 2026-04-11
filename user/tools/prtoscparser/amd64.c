@@ -175,6 +175,9 @@ void arch_vmx_rsv_mem(FILE *out_file) {
             /* EPT PD high: 1 page (3-4GB range for LAPIC/IOAPIC) */
             rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX EPT PD high");
 
+            /* IOAPIC PT: 1 page (4KB page table for IOAPIC MMIO trap) */
+            rsv_block(PAGE_SIZE, PAGE_SIZE, "VMX IOAPIC PT");
+
             /* Multi-vCPU partitions: APIC-access page + LAPIC PT
              * for INIT/SIPI emulation */
             if (nvcpus > 1) {
