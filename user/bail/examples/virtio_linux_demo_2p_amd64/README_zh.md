@@ -1,3 +1,5 @@
+[English](README.md) | **中文**
+
 # Virtio Linux 演示 - 2 个 SMP 分区（amd64）
 
 ## 概述

@@ -1,3 +1,5 @@
+**English** | [中文](README_zh.md)
+
 # Virtio Linux Demo - 2 SMP Partitions (amd64)
 
 ## Overview
