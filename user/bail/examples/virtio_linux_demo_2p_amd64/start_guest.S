@@ -36,6 +36,18 @@
 #define BP_HEAP_END_PTR     0x224
 #define BP_RAMDISK_IMAGE    0x218
 #define BP_RAMDISK_SIZE     0x21c
+#define BP_ACPI_RSDP_ADDR   0x070   /* __u64 acpi_rsdp_addr (since boot protocol 2.14) */
+
+/* ACPI table region placed by QEMU at top of first 1GB RAM */
+#define ACPI_RSDP_ADDR      0x000F5290  /* RSDP in BIOS ROM area */
+#define ACPI_TABLES_START   0x3FFE0000  /* RSDT/FACP/DSDT/MADT/HPET/WAET */
+#define ACPI_TABLES_SIZE    0x00020000  /* 128KB covers all ACPI tables */
+
+/* e820 memory types */
+#define E820_TYPE_RAM       1
+#define E820_TYPE_RESERVED  2
+#define E820_TYPE_ACPI      3   /* ACPI reclaimable */
+#define E820_TYPE_NVS       4   /* ACPI Non-Volatile Storage */
 
 /* screen_info offsets (struct screen_info at boot_params offset 0) */
 #define SI_ORIG_VIDEO_MODE    0x06
@@ -100,15 +112,25 @@ _boot:
 	jnz	2b
 	movl	$CMDLINE_ADDR, (BP_CMDLINE_PTR)(%ebx)
 
-	/* --- Step 5: Set up e820 memory map --- */
-	/* 3 entries (shared memory accessed via /dev/mem, not in e820):
-	 *   0) 0x0000_0000  .. 0x0009_FFFF   (640KB)   usable (conventional)
-	 *   1) 0x000A_0000  .. 0x000F_FFFF   (384KB)   reserved (VGA/ROM)
-	 *   2) 0x0E00_0000 .. 0x15FF_FFFF   (128MB)   usable (partition RAM)
-	 * Note: Shared memory at 0x16000000+ is NOT in e820.
-	 *       Access shared memory via /dev/mem mmap instead.
+	/* --- Step 5: Set up ACPI RSDP address in boot_params ---
+	 * Linux 5.2+ (boot protocol 2.14+) uses this to find ACPI tables.
+	 * QEMU places RSDP at 0xF5290 in the BIOS ROM area (0xE0000-0xFFFFF).
+	 * EPT identity-maps the first 1GB, making both RSDP and ACPI tables
+	 * (at 0x3FFE0000+) accessible to the partition.
 	 */
-	movl	$3, (BP_E820_ENTRIES)(%ebx)
+	movl	$ACPI_RSDP_ADDR, (BP_ACPI_RSDP_ADDR)(%ebx)
+	movl	$0x00000000, (BP_ACPI_RSDP_ADDR + 4)(%ebx)
+
+	/* --- Step 6: Set up e820 memory map --- */
+	/* 4 entries:
+	 *   0) 0x0000_0000  .. 0x0009_FFFF   (640KB)   usable  (conventional)
+	 *   1) 0x000A_0000  .. 0x000F_FFFF   (384KB)   reserved (VGA/ROM/BIOS)
+	 *   2) 0x0E00_0000 .. 0x15FF_FFFF   (128MB)   usable  (partition RAM)
+	 *   3) 0x3FFE_0000 .. 0x3FFF_FFFF   (128KB)   ACPI    (RSDT/FACP/DSDT/MADT/HPET/WAET)
+	 * Note: RSDP at 0xF5290 is within entry 1 (reserved BIOS area).
+	 *       Shared memory at 0x16000000+ accessed via /dev/mem, not in e820.
+	 */
+	movl	$4, (BP_E820_ENTRIES)(%ebx)
 	movl	$(BP_E820_TABLE), %edi
 	addl	%ebx, %edi
 
@@ -117,29 +139,36 @@ _boot:
 	movl	$0x00000000, 4(%edi)
 	movl	$0x000A0000, 8(%edi)
 	movl	$0x00000000, 12(%edi)
-	movl	$1, 16(%edi)
+	movl	$E820_TYPE_RAM, 16(%edi)
 
-	/* Entry 1: Reserved VGA/ROM */
+	/* Entry 1: Reserved VGA/ROM/BIOS (includes RSDP at 0xF5290) */
 	movl	$0x000A0000, 20(%edi)
 	movl	$0x00000000, 24(%edi)
 	movl	$0x00060000, 28(%edi)
 	movl	$0x00000000, 32(%edi)
-	movl	$2, 36(%edi)
+	movl	$E820_TYPE_RESERVED, 36(%edi)
 
 	/* Entry 2: Partition RAM (128MB at 0xE000000) */
 	movl	$0x0E000000, 40(%edi)
 	movl	$0x00000000, 44(%edi)
 	movl	$0x08000000, 48(%edi)
 	movl	$0x00000000, 52(%edi)
-	movl	$1, 56(%edi)
+	movl	$E820_TYPE_RAM, 56(%edi)
 
-	/* --- Step 5b: Set up initrd (guest rootfs overlay CPIO) --- */
+	/* Entry 3: ACPI tables (QEMU places RSDT/FACP/DSDT/MADT/HPET/WAET here) */
+	movl	$ACPI_TABLES_START, 60(%edi)
+	movl	$0x00000000, 64(%edi)
+	movl	$ACPI_TABLES_SIZE, 68(%edi)
+	movl	$0x00000000, 72(%edi)
+	movl	$E820_TYPE_ACPI, 76(%edi)
+
+	/* --- Step 7: Set up initrd (guest rootfs overlay CPIO) --- */
 	movl	$_initrd_guest_start, (BP_RAMDISK_IMAGE)(%ebx)
 	movl	$_initrd_guest_end, %eax
 	subl	$_initrd_guest_start, %eax
 	movl	%eax, (BP_RAMDISK_SIZE)(%ebx)
 
-	/* --- Step 6: Calculate compressed kernel entry --- */
+	/* --- Step 8: Calculate compressed kernel entry --- */
 	movl	$_bzimage_guest_start, %eax
 	movzbl	HDR_SETUP_SECTS(%eax), %ecx
 	testl	%ecx, %ecx
@@ -149,7 +178,7 @@ _boot:
 	shll	$9, %ecx
 	addl	$_bzimage_guest_start, %ecx
 
-	/* --- Step 7: Jump to Linux startup_32 --- */
+	/* --- Step 9: Jump to Linux startup_32 --- */
 	movl	$BOOT_PARAMS_ADDR, %esi
 	jmp	*%ecx
 
