@@ -1,7 +1,7 @@
 /*
  * virtio_console.c - Virtio Console backend for PRTOS System Partition.
  *
- * Uses the Virtio_Con shared memory region (256KB).
+ * Uses the Virtio_Con shared memory region at GPA 0x16500000 (256KB).
  *
  * Data flow (bidirectional):
  *   Guest writes to /dev/hvc0 -> tx_buf in shared memory -> Backend reads
@@ -39,6 +39,19 @@
 
 static int listen_fd = -1;
 static int client_fd = -1;
+
+/*
+ * Telnet IAC state machine - persists across read() calls to handle
+ * IAC sequences split across TCP segment boundaries.
+ *
+ * States:
+ *   0 = normal data
+ *   1 = received IAC (0xFF), waiting for command byte
+ *   2 = received IAC + WILL/WONT/DO/DONT, waiting for option byte
+ *   3 = inside IAC SB subnegotiation, scanning for IAC
+ *   4 = inside IAC SB subnegotiation, received IAC, waiting for SE
+ */
+static int iac_state = 0;
 
 void virtio_console_init(struct virtio_console_shm *con)
 {
@@ -130,6 +143,24 @@ void virtio_console_process(struct virtio_console_shm *con)
             (void)write(fd, telnet_init, sizeof(telnet_init));
 
             client_fd = fd;
+            iac_state = 0;  /* Reset IAC parser for new client */
+            printf("[Backend] Console TCP client connected\n");
+
+            /* Inject newline to make getty re-display login prompt.
+             * Getty has already printed the initial prompt before the
+             * TCP client connected, so it was consumed (sent to stdout
+             * only).  A newline causes getty to see an empty username
+             * and re-display "login:", which goes to the TCP client. */
+            __sync_synchronize();
+            {
+                uint32_t rx_h = con->rx_head;
+                uint32_t rx_next = (rx_h + 1) % con->buf_size;
+                if (rx_next != con->rx_tail) {
+                    con->rx_buf[rx_h] = '\n';
+                    con->rx_head = rx_next;
+                    __sync_synchronize();
+                }
+            }
         }
     }
 
@@ -166,11 +197,70 @@ void virtio_console_process(struct virtio_console_shm *con)
             head = con->rx_head;
             for (ssize_t i = 0; i < n; i++) {
                 unsigned char ch = (unsigned char)buf[i];
-                /* Filter telnet IAC sequences (IAC + cmd + option = 3 bytes) */
-                if (ch == TELNET_IAC) {
-                    i += 2;  /* skip command and option bytes */
+
+                /* Telnet IAC state machine — handles sequences split
+                 * across read() boundaries.  States:
+                 *   0: normal data
+                 *   1: after IAC, waiting for command byte
+                 *   2: after IAC WILL/WONT/DO/DONT, waiting for option
+                 *   3: inside SB subnegotiation, scanning for IAC
+                 *   4: inside SB subneg, got IAC, waiting for SE
+                 *
+                 * Without this, partial IAC sequences or SB subneg
+                 * data (e.g. NAWS window-size bytes) leak into the
+                 * guest PTY, potentially killing getty via SIGINT. */
+                if (iac_state == 3) {
+                    /* Inside SB subnegotiation: discard data until IAC */
+                    if (ch == TELNET_IAC)
+                        iac_state = 4;
                     continue;
                 }
+                if (iac_state == 4) {
+                    /* SB subneg saw IAC: expect SE(240) to end */
+                    if (ch == 240) {
+                        iac_state = 0;  /* SE: subneg complete */
+                    } else if (ch == TELNET_IAC) {
+                        iac_state = 4;  /* IAC IAC inside SB: escaped 0xFF, stay */
+                    } else {
+                        iac_state = 3;  /* Not SE: back to scanning */
+                    }
+                    continue;
+                }
+                if (iac_state == 1) {
+                    /* After IAC: expect command byte */
+                    if (ch == TELNET_IAC) {
+                        /* IAC IAC = escaped literal 0xFF */
+                        iac_state = 0;
+                        uint32_t next_head = (head + 1) % con->buf_size;
+                        if (next_head == con->rx_tail)
+                            break;
+                        con->rx_buf[head] = (char)0xFF;
+                        head = next_head;
+                    } else if (ch >= TELNET_WILL && ch <= TELNET_DONT) {
+                        /* WILL(251)/WONT(252)/DO(253)/DONT(254):
+                         * 3-byte sequence, need option byte next */
+                        iac_state = 2;
+                    } else if (ch == 250) {
+                        /* SB(250): subnegotiation start, discard until IAC SE */
+                        iac_state = 3;
+                    } else {
+                        /* Other IAC commands (NOP, BRK, IP, etc.):
+                         * 2-byte sequence, done */
+                        iac_state = 0;
+                    }
+                    continue;
+                }
+                if (iac_state == 2) {
+                    /* After IAC + cmd: this is the option byte, skip it */
+                    iac_state = 0;
+                    continue;
+                }
+                if (ch == TELNET_IAC) {
+                    iac_state = 1;
+                    continue;
+                }
+
+                /* Normal data byte */
                 uint32_t next_head = (head + 1) % con->buf_size;
                 if (next_head == con->rx_tail)
                     break;  /* Ring full */
@@ -180,11 +270,14 @@ void virtio_console_process(struct virtio_console_shm *con)
             con->rx_head = head;
             __sync_synchronize();
         } else if (n == 0) {
+            printf("[Backend] Console TCP client disconnected\n");
             close(client_fd);
             client_fd = -1;
+            iac_state = 0;  /* Reset IAC state for next client */
         } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
             close(client_fd);
             client_fd = -1;
+            iac_state = 0;
         }
     }
 }

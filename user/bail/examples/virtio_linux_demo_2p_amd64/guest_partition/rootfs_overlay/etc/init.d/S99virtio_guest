@@ -4,6 +4,21 @@
 # Spawns getty on ttyS1 (COM2) for host telnet at port 4321.
 # Spawns getty on /dev/hvc0 (virtio console) for System telnet at port 4321.
 #
+# Getty processes are respawned automatically when they exit (e.g., after
+# a user logs out), so subsequent telnet connections always find a live
+# login prompt.
+#
+
+# Respawn getty in an infinite loop.  When getty exits (user logout, ^D,
+# or error), sleep briefly to avoid busy-loop on persistent failures,
+# then restart.  This ensures every new telnet connection sees a fresh
+# login prompt.
+respawn_getty() {
+    while true; do
+        /sbin/getty "$@"
+        sleep 1
+    done
+}
 
 case "$1" in
     start)
@@ -18,7 +33,7 @@ case "$1" in
             /opt/set_serial_poll /dev/ttyS1 2>/dev/null
             # Send a marker to verify COM2 output works
             echo "COM2_READY" > /dev/ttyS1 2>/dev/null
-            /sbin/getty -L ttyS1 115200 vt100 &
+            respawn_getty -L ttyS1 115200 vt100 &
             echo "getty on ttyS1 started (host telnet localhost 4321)"
         fi
 
@@ -45,7 +60,7 @@ case "$1" in
             (
                 for _w in $(seq 1 30); do
                     if [ -e /dev/hvc0 ]; then
-                        /sbin/getty -L hvc0 115200 vt100 &
+                        respawn_getty -L hvc0 115200 vt100 &
                         echo "getty on /dev/hvc0 started (System telnet 127.0.0.1 4321)"
                         break
                     fi
