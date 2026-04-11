@@ -240,6 +240,7 @@ struct virtio_net_instance {
 /* virtio_console.c */
 void virtio_console_init(struct virtio_console_shm *con);
 void virtio_console_process(struct virtio_console_shm *con);
+void virtio_console_cleanup(void);
 
 /* virtio_net.c */
 int  virtio_net_init(struct virtio_net_instance *inst);

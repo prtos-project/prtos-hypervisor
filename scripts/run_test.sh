@@ -1184,7 +1184,7 @@ function run_test_virtio_linux_demo_2p_amd64() {
     export KVM_OK=${kvm_ok}
 
     python3 -u << 'PYTEST' 2>&1
-import pexpect, sys, time, os
+import pexpect, sys, time, os, re
 kvm_ok = int(os.environ.get('KVM_OK', '1'))
 sg_pre = "sg kvm -c '" if kvm_ok == 2 else ""
 sg_post = "'" if kvm_ok == 2 else ""
@@ -1199,13 +1199,43 @@ child = pexpect.spawn('/bin/bash', ['-c', cmd],
                       timeout=460, encoding='utf-8', codec_errors='replace')
 try:
     # Wait for login prompt to confirm full boot completion
-    # (kernel uses 'quiet' cmdline so banner/cmdline messages are suppressed)
     idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=240)
     if idx != 0:
         print('VIRTIO_TEST_FAIL: login prompt not reached')
         child.close(force=True); sys.exit(1)
     print('Login prompt reached - boot complete')
     print('Verification Passed')
+
+    # Login to verify SMP vCPU count
+    time.sleep(1)
+    child.sendline('root')
+    idx = child.expect(['assword', 'buildroot login:', pexpect.TIMEOUT], timeout=30)
+    if idx == 0:
+        time.sleep(0.5)
+        child.sendline('1234')
+        child.expect([r'[#\$] ', pexpect.TIMEOUT], timeout=30)
+    elif idx == 1:
+        child.sendline('root')
+        child.expect(['assword', pexpect.TIMEOUT], timeout=30)
+        time.sleep(0.5)
+        child.sendline('1234')
+        child.expect([r'[#\$] ', pexpect.TIMEOUT], timeout=30)
+
+    # Check vCPU count via nproc
+    time.sleep(0.5)
+    child.sendline('nproc')
+    child.expect([r'[#\$] ', pexpect.TIMEOUT], timeout=10)
+    nproc_out = child.before.strip()
+    nums = re.findall(r'\b(\d+)\b', nproc_out)
+    nproc_val = int(nums[-1]) if nums else 0
+    expected = 2
+    if nproc_val != expected:
+        print(f'VIRTIO_TEST_FAIL: System partition has {nproc_val} vCPUs, expected {expected}')
+        child.close(force=True); sys.exit(1)
+    print(f'SMP Verification Passed: {nproc_val} vCPUs online in System Partition')
+
+    child.sendline('poweroff')
+    time.sleep(3)
     child.close(force=True)
 except Exception as e:
     print(f'VIRTIO_TEST_FAIL: {e}')
@@ -1216,11 +1246,11 @@ PYTEST
 
     local rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (login test)"
+        echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (login/smp test)"
         return 1
     fi
 
-    # Run console tests (clean console, telnet, backspace, tab)
+    # Run console tests (clean console, backspace, tab)
     if [[ -f "${test_dir}/test_console.py" ]]; then
         echo "+++ Running console tests for virtio_linux_demo_2p_amd64"
         cd "${test_dir}"
@@ -1228,6 +1258,30 @@ PYTEST
         local console_rc=$?
         if [[ ${console_rc} -ne 0 ]]; then
             echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (console test)"
+            return 1
+        fi
+    fi
+
+    # Run TCP bridge test (System -> Guest via virtio-console)
+    if [[ -f "${test_dir}/test_tcp_bridge.py" ]]; then
+        echo "+++ Running TCP bridge test for virtio_linux_demo_2p_amd64"
+        cd "${test_dir}"
+        python3 -u "${test_dir}/test_tcp_bridge.py" 2>&1
+        local bridge_rc=$?
+        if [[ ${bridge_rc} -ne 0 ]]; then
+            echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (TCP bridge test)"
+            return 1
+        fi
+    fi
+
+    # Run COM2 test (Host -> Guest via QEMU serial passthrough)
+    if [[ -f "${test_dir}/test_com2.py" ]]; then
+        echo "+++ Running COM2 test for virtio_linux_demo_2p_amd64"
+        cd "${test_dir}"
+        python3 -u "${test_dir}/test_com2.py" 2>&1
+        local com2_rc=$?
+        if [[ ${com2_rc} -ne 0 ]]; then
+            echo -e "${RED}Check virtio_linux_demo_2p_amd64 FAILED${NC} (COM2 test)"
             return 1
         fi
     fi

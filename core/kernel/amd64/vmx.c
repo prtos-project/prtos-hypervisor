@@ -44,6 +44,7 @@ static void vmx_handle_hlt_exit(kthread_t *k, struct vmx_state *vmx);
 static void vmx_check_pending_irq(struct vmx_state *vmx);
 static void vpit_tick(struct vmx_state *vmx, prtos_u64_t now_us);
 static void vpic_raise_irq(struct vpic_state *vpic, int irq);
+static inline void vioapic_raise_irq(struct vmx_partition_shared *shared, int pin);
 
 /* Queue an IPI vector for delivery to a target vCPU.
  * Uses a 32-bit bitmap covering vectors 0xE0-0xFF (bit N = vector 0xE0+N).
@@ -57,6 +58,7 @@ static void vmx_queue_ipi(struct vmx_state *target_vmx, prtos_u8_t vector) {
 
 /* Global PIC injection counters for heartbeat debug */
 prtos_u32_t g_pic_inj_cnt = 0, g_pic_defer_cnt = 0, g_pic_busy_cnt = 0;
+prtos_u32_t g_vioapic_deliver_cnt = 0, g_vioapic_masked_cnt = 0;
 static prtos_u32_t g_lapic_inj_cnt = 0;
 static prtos_u32_t g_vuart_tx_cnt = 0;
 static prtos_u32_t g_vuart_irq4_cnt = 0;
@@ -353,6 +355,30 @@ static void vmx_setup_ept(struct vmx_partition_shared *shared,
             pd_high[i] = gpa | EPT_RWX | EPT_MEM_TYPE_UC | EPT_IGNORE_PAT | EPT_LARGE_PAGE;
         }
 
+        /* Trap IOAPIC MMIO accesses (0xFEC00000) via EPT by splitting the
+         * 2MB page and unmapping the IOAPIC 4KB page. Guest IOAPIC register
+         * reads/writes will cause EPT violations handled by vioapic emulation. */
+        {
+            prtos_u64_t *ioapic_pt;
+            int ioapic_pd_idx = (0xFEC00000 >> 21) & 0x1FF;
+            prtos_u64_t ioapic_2mb_base = 0xFEC00000ULL & ~(LPAGE_SIZE - 1);
+
+            GET_MEMAZ(ioapic_pt, PAGE_SIZE, PAGE_SIZE);
+            memset(ioapic_pt, 0, PAGE_SIZE);
+
+            /* Fill PT: identity-map all 512 4KB pages as UC */
+            for (i = 0; i < 512; i++) {
+                ioapic_pt[i] = (ioapic_2mb_base + ((prtos_u64_t)i << 12)) |
+                               EPT_RWX | EPT_MEM_TYPE_UC | EPT_IGNORE_PAT;
+            }
+
+            /* Clear the IOAPIC 4KB page entry (index 0, since 0xFEC00000 is 2MB-aligned) */
+            ioapic_pt[0] = 0;
+
+            /* Replace the 2MB large page with the 4KB page table */
+            pd_high[ioapic_pd_idx] = _VIRT2PHYS((prtos_u64_t)(unsigned long)ioapic_pt) | EPT_RWX;
+        }
+
         /* Multi-vCPU partitions: redirect LAPIC page to APIC-access page
          * via a 4KB page table for INIT/SIPI emulation support. */
         if (needs_full_map) {
@@ -453,6 +479,58 @@ static void vmx_init_vmcs_controls(struct vmx_state *vmx, kthread_t *k) {
                 int tsc_dl_bit = 0x6E0 % 8;
                 vmx_msr_bitmap[tsc_dl_byte] |= (1 << tsc_dl_bit);        /* RDMSR low */
                 vmx_msr_bitmap[2048 + tsc_dl_byte] |= (1 << tsc_dl_bit); /* WRMSR low */
+            }
+
+            /* Trap RDMSR/WRMSR for IA32_APIC_BASE (0x1B) —
+             * Virtualize BSP flag (bit 8) so each partition's BSP vCPU
+             * sees itself as the bootstrap processor.  Without this,
+             * the Guest partition's BSP (running on a non-BSP pCPU) reads
+             * BSP=0 and the kernel rejects SMP as a crash kernel. */
+            {
+                int apicbase_byte = 0x1B / 8;
+                int apicbase_bit = 0x1B % 8;
+                vmx_msr_bitmap[apicbase_byte] |= (1 << apicbase_bit);        /* RDMSR */
+                vmx_msr_bitmap[2048 + apicbase_byte] |= (1 << apicbase_bit); /* WRMSR */
+            }
+
+            /* Trap x2APIC MSR range (0x800-0x83F) for LAPIC virtualization.
+             * In x2APIC mode, LAPIC registers are accessed via MSRs instead
+             * of MMIO.  We trap all 64 MSRs in this range to emulate them. */
+            {
+                int i;
+                for (i = 0x800; i <= 0x83F; i++) {
+                    int byte_off = i / 8;
+                    int bit = i % 8;
+                    vmx_msr_bitmap[byte_off] |= (1 << bit);        /* RDMSR */
+                    vmx_msr_bitmap[2048 + byte_off] |= (1 << bit); /* WRMSR */
+                }
+            }
+
+            /* Trap Intel PMU / LBR / Uncore MSR ranges to prevent
+             * unchecked MSR access errors when the kernel probes PMU.
+             *   0x680-0x6CF : LBR FROM/TO/INFO registers
+             *   0x700-0x7FF : Uncore CBox MSRs (per-core)
+             *   0xE00-0xE3F : Uncore global control / ARB MSRs */
+            {
+                int i;
+                for (i = 0x680; i <= 0x6CF; i++) {
+                    int byte_off = i / 8;
+                    int bit = i % 8;
+                    vmx_msr_bitmap[byte_off] |= (1 << bit);        /* RDMSR */
+                    vmx_msr_bitmap[2048 + byte_off] |= (1 << bit); /* WRMSR */
+                }
+                for (i = 0x700; i <= 0x7FF; i++) {
+                    int byte_off = i / 8;
+                    int bit = i % 8;
+                    vmx_msr_bitmap[byte_off] |= (1 << bit);
+                    vmx_msr_bitmap[2048 + byte_off] |= (1 << bit);
+                }
+                for (i = 0xE00; i <= 0xE3F; i++) {
+                    int byte_off = i / 8;
+                    int bit = i % 8;
+                    vmx_msr_bitmap[byte_off] |= (1 << bit);
+                    vmx_msr_bitmap[2048 + byte_off] |= (1 << bit);
+                }
             }
         }
         vmx_msr_bitmap_initialized = 1;
@@ -788,6 +866,19 @@ int vmx_setup_partition(void *kthread_ptr) {
     shared->vpic.base_vector[1] = 0x28;
     shared->vpic.imr[0] = 0xFF;
     shared->vpic.imr[1] = 0xFF;
+
+    /* Initialize virtual IOAPIC: all entries masked, edge-triggered */
+    shared->vioapic.id = 0;
+    shared->vioapic.ioregsel = 0;
+    shared->vioapic.pending = 0;
+    {
+        prtos_s32_t pin;
+        for (pin = 0; pin < VIOAPIC_NUM_PINS; pin++) {
+            /* Default: masked, fixed delivery, physical dest, edge-triggered,
+             * vector = 0x10 + pin (FIRST_EXTERNAL_VECTOR + pin) */
+            shared->vioapic.rte[pin] = (1ULL << 16); /* mask bit set */
+        }
+    }
     vmx->launched = 0;
     vmx->ipi_pending_bitmap = 0;
 
@@ -1205,6 +1296,105 @@ static void vmx_lapic_write_reg(struct vmx_state *vmx, prtos_u32_t offset, prtos
 }
 
 /* ================================================================
+ * Virtual I/O APIC Emulation
+ * ================================================================ */
+
+/* IOAPIC version: 0x11 (82093AA), 24 entries */
+#define VIOAPIC_VERSION  0x170011  /* bits 23:16 = max redir entry (23), bits 7:0 = version (0x11) */
+
+static prtos_u32_t vioapic_read_reg(struct vioapic_state *vioapic, prtos_u32_t reg) {
+    if (reg == 0x00) {
+        /* IOAPIC ID */
+        return vioapic->id << 24;
+    } else if (reg == 0x01) {
+        /* IOAPIC Version: version 0x11, 24 entries (max redir = 23) */
+        return VIOAPIC_VERSION;
+    } else if (reg == 0x02) {
+        /* IOAPIC Arbitration ID */
+        return vioapic->id << 24;
+    } else if (reg >= 0x10 && reg <= 0x3F) {
+        /* Redirection table: even = low 32 bits, odd = high 32 bits */
+        prtos_s32_t pin = (reg - 0x10) / 2;
+        if (pin < VIOAPIC_NUM_PINS) {
+            if (reg & 1)
+                return (prtos_u32_t)(vioapic->rte[pin] >> 32);
+            else
+                return (prtos_u32_t)(vioapic->rte[pin] & 0xFFFFFFFF);
+        }
+    }
+    return 0;
+}
+
+static void vioapic_write_reg(struct vioapic_state *vioapic, prtos_u32_t reg, prtos_u32_t val) {
+    if (reg == 0x00) {
+        vioapic->id = (val >> 24) & 0x0F;
+    } else if (reg >= 0x10 && reg <= 0x3F) {
+        prtos_s32_t pin = (reg - 0x10) / 2;
+        if (pin < VIOAPIC_NUM_PINS) {
+            if (reg & 1) {
+                vioapic->rte[pin] = (vioapic->rte[pin] & 0x00000000FFFFFFFFULL) |
+                                    ((prtos_u64_t)val << 32);
+            } else {
+                vioapic->rte[pin] = (vioapic->rte[pin] & 0xFFFFFFFF00000000ULL) |
+                                    (prtos_u64_t)val;
+            }
+        }
+    }
+    /* Writes to version/arb registers are ignored (read-only) */
+}
+
+/* Handle an EPT violation at the IOAPIC MMIO page (0xFEC00000).
+ * Decodes the instruction and emulates IOREGSEL/IOWIN register access. */
+static int vmx_handle_ioapic_access(struct vmx_state *vmx, prtos_u64_t gpa) {
+    prtos_u32_t offset = (prtos_u32_t)(gpa & 0xFFF);
+    struct vioapic_state *vioapic = &vmx->shared->vioapic;
+
+    prtos_u64_t guest_rip = vmx_vmread(VMCS_GUEST_RIP);
+    prtos_u64_t rip_phys = guest_virt_to_phys(guest_rip);
+
+    if (rip_phys == (prtos_u64_t)-1 || rip_phys >= 0x40000000ULL)
+        return 0;
+
+    const prtos_u8_t *insn = (const prtos_u8_t *)(unsigned long)rip_phys;
+    prtos_u64_t cs_access = vmx_vmread(VMCS_GUEST_CS_ACCESS);
+    int is_64bit = (cs_access & VMX_AR_L) ? 1 : 0;
+
+    int is_write, reg_idx, insn_len;
+    prtos_u32_t imm_val = 0;
+
+    if (!lapic_decode_insn(insn, is_64bit, &is_write, &reg_idx, &imm_val, &insn_len))
+        return 0;
+
+    if (is_write) {
+        prtos_u32_t write_val;
+        if (reg_idx >= 0)
+            write_val = (prtos_u32_t)vmx_get_guest_reg(vmx, reg_idx);
+        else
+            write_val = imm_val;
+
+        if (offset == 0x00) {
+            /* IOREGSEL: select register */
+            vioapic->ioregsel = write_val;
+        } else if (offset == 0x10) {
+            /* IOWIN: write to selected register */
+            vioapic_write_reg(vioapic, vioapic->ioregsel, write_val);
+        }
+        /* Writes to other offsets (e.g., EOI at 0x40) are silently accepted */
+    } else {
+        prtos_u32_t read_val = 0;
+        if (offset == 0x00) {
+            read_val = vioapic->ioregsel;
+        } else if (offset == 0x10) {
+            read_val = vioapic_read_reg(vioapic, vioapic->ioregsel);
+        }
+        vmx_set_guest_reg(vmx, reg_idx, (prtos_u64_t)read_val);
+    }
+
+    vmx_vmwrite(VMCS_GUEST_RIP, guest_rip + insn_len);
+    return 1;
+}
+
+/* ================================================================
  * VM Run Loop
  * ================================================================ */
 
@@ -1580,6 +1770,37 @@ void __attribute__((noreturn)) vmx_run_guest(void *kthread_ptr) {
                     prtos_u64_t efer = vmx_vmread(VMCS_GUEST_IA32_EFER);
                     vmx->guest_regs[VMX_REG_RAX] = efer & 0xFFFFFFFF;
                     vmx->guest_regs[VMX_REG_RDX] = efer >> 32;
+                } else if (msr == 0x1B) {
+                    /* IA32_APIC_BASE: virtualize BSP flag (bit 8).
+                     * vCPU 0 is always BSP, others are APs.
+                     * Allow x2APIC enable (bit 10) to pass through. */
+                    prtos_u32_t lo = 0, hi = 0;
+                    __asm__ __volatile__("rdmsr" : "=a"(lo), "=d"(hi) : "c"(msr));
+                    lo &= ~(1 << 8);   /* clear BSP flag */
+                    if (vmx->vcpu_id == 0)
+                        lo |= (1 << 8);  /* set BSP for vCPU 0 */
+                    vmx->guest_regs[VMX_REG_RAX] = lo;
+                    vmx->guest_regs[VMX_REG_RDX] = hi;
+                } else if (msr >= 0x800 && msr <= 0x83F) {
+                    /* x2APIC MSR range — convert to MMIO offset and read
+                     * from virtual LAPIC. MSR 0x800+n maps to offset n*0x10. */
+                    prtos_u32_t offset = (msr - 0x800) << 4;
+                    prtos_u32_t val = vmx_lapic_read_reg(vmx, offset);
+                    if (msr == 0x830) {
+                        /* x2APIC ICR: 64-bit read (low + high). */
+                        prtos_u32_t hi_val = vmx_lapic_read_reg(vmx, 0x310);
+                        vmx->guest_regs[VMX_REG_RAX] = val;
+                        vmx->guest_regs[VMX_REG_RDX] = hi_val;
+                    } else {
+                        vmx->guest_regs[VMX_REG_RAX] = val;
+                        vmx->guest_regs[VMX_REG_RDX] = 0;
+                    }
+                } else if ((msr >= 0x680 && msr <= 0x6CF) ||
+                           (msr >= 0x700 && msr <= 0x7FF) ||
+                           (msr >= 0xE00 && msr <= 0xE3F)) {
+                    /* PMU/LBR/Uncore MSRs — silently return 0 (PMU hidden via CPUID) */
+                    vmx->guest_regs[VMX_REG_RAX] = 0;
+                    vmx->guest_regs[VMX_REG_RDX] = 0;
                 } else if (msr == 0x6E0) {
                     /* IA32_TSC_DEADLINE — we hide this feature, return 0 */
                     vmx->guest_regs[VMX_REG_RAX] = 0;
@@ -1606,6 +1827,41 @@ void __attribute__((noreturn)) vmx_run_guest(void *kthread_ptr) {
                                      (vmx->guest_regs[VMX_REG_RAX] & 0xFFFFFFFF);
                 if (msr == 0xC0000080) {
                     vmx_vmwrite(VMCS_GUEST_IA32_EFER, value);
+                } else if (msr == 0x1B) {
+                    /* IA32_APIC_BASE: allow APIC enable/base changes.
+                     * Allow x2APIC enable (bit 10) to pass through. */
+                    __asm__ __volatile__(
+                        "1: wrmsr; jmp 2f\n"
+                        "3: jmp 2f\n"
+                        ASM_EXPTABLE(1b, 3b)
+                        "2:\n"
+                        :: "a"((prtos_u32_t)value), "d"((prtos_u32_t)(value >> 32)), "c"(msr)
+                    );
+                } else if (msr >= 0x800 && msr <= 0x83F) {
+                    /* x2APIC MSR range — convert to MMIO offset and write
+                     * to virtual LAPIC. MSR 0x800+n maps to offset n*0x10. */
+                    prtos_u32_t offset = (msr - 0x800) << 4;
+                    if (msr == 0x830) {
+                        /* x2APIC ICR: 64-bit write. Low 32 bits = ICR Low,
+                         * high 32 bits contain destination APIC ID (no shift
+                         * needed — x2APIC uses flat 32-bit dest). Store dest
+                         * in ICR High field for the write handler, then
+                         * trigger ICR Low write which dispatches IPI/INIT/SIPI. */
+                        volatile prtos_u32_t *page = (volatile prtos_u32_t *)vmx->shared->apic_access_page;
+                        if (page)
+                            page[0x310 / 4] = (prtos_u32_t)(value >> 32) << 24;
+                        vmx_lapic_write_reg(vmx, 0x300, (prtos_u32_t)(value & 0xFFFFFFFF));
+                    } else if (msr == 0x83F) {
+                        /* x2APIC Self-IPI: write vector to self */
+                        prtos_u8_t vector = (prtos_u8_t)(value & 0xFF);
+                        vmx_queue_ipi(vmx, vector);
+                    } else {
+                        vmx_lapic_write_reg(vmx, offset, (prtos_u32_t)(value & 0xFFFFFFFF));
+                    }
+                } else if ((msr >= 0x680 && msr <= 0x6CF) ||
+                           (msr >= 0x700 && msr <= 0x7FF) ||
+                           (msr >= 0xE00 && msr <= 0xE3F)) {
+                    /* PMU/LBR/Uncore MSRs — silently absorb (PMU hidden via CPUID) */
                 } else if (msr == 0x6E0) {
                     /* IA32_TSC_DEADLINE — silently ignore (feature hidden) */
                 } else {
@@ -1723,6 +1979,13 @@ void __attribute__((noreturn)) vmx_run_guest(void *kthread_ptr) {
             case EXIT_REASON_EPT_VIOLATION: {
                 prtos_u64_t ept_qual = vmx_vmread(VMCS_EXIT_QUALIFICATION);
                 prtos_u64_t ept_gpa = vmx_vmread(0x2400);
+
+                /* Check if this is an IOAPIC MMIO access (0xFEC00000-0xFEC00FFF) */
+                if ((ept_gpa & ~0xFFFULL) == 0xFEC00000ULL) {
+                    if (vmx_handle_ioapic_access(vmx, ept_gpa))
+                        break;
+                    /* Fallthrough to error if decode failed */
+                }
 
                 kprintf("[VMX] vCPU %d: EPT violation: qual=0x%llx, GPA=0x%llx, GLA=0x%llx\n",
                         vmx->vcpu_id,
@@ -2016,8 +2279,11 @@ static void vpit_tick(struct vmx_state *vmx, prtos_u64_t now_us) {
     if (!pit->active) return;
 
     while (now_us >= pit->next_tick_us) {
-        /* PIT fired - raise IRQ 0 */
+        /* PIT fired - raise IRQ 0 via PIC and IOAPIC pin 0+2
+         * (ACPI INT_SRC_OVR maps ISA IRQ 0 to GSI 2 on i440fx) */
         vpic_raise_irq(&vmx->shared->vpic, 0);
+        vioapic_raise_irq(vmx->shared, 0);
+        vioapic_raise_irq(vmx->shared, 2);
         pit->next_tick_us += pit->period_us;
     }
 }
@@ -2154,6 +2420,7 @@ static void vuart_update_irq(struct vmx_state *vmx) {
 
     if (raise) {
         vpic_raise_irq(&vmx->shared->vpic, 4);
+        vioapic_raise_irq(vmx->shared, 4);
         g_vuart_irq4_cnt++;
     }
 }
@@ -2436,12 +2703,12 @@ static void vmx_handle_cpuid_exit(struct vmx_state *vmx) {
                                      : "0"(eax), "2"(ecx));
     }
 
-    /* Hide VMX capability, x2APIC, and TSC-deadline timer from guest */
+    /* Hide VMX capability and TSC-deadline timer; expose x2APIC */
     if (leaf == 1) {
         ecx &= ~(1 << 5);   /* VMX */
-        ecx &= ~(1 << 21);  /* x2APIC — force xAPIC (MMIO) mode for LAPIC trap */
         ecx &= ~(1 << 24);  /* TSC-deadline timer — force LAPIC timer via MMIO */
         ecx &= ~(1 << 31);  /* hypervisor present bit - hide from guest */
+        ecx |= (1 << 21);   /* x2APIC — enable MSR-based LAPIC access */
 
         /* Report correct APIC ID for this vCPU */
         ebx = (ebx & 0x0000FFFF) | ((prtos_u32_t)vmx->vcpu_id << 24);
@@ -2483,6 +2750,45 @@ static void vmx_handle_cpuid_exit(struct vmx_state *vmx) {
     /* Hide XSAVES/XRSTORS (leaf 0xD, subleaf 1, EAX bit 3) - not enabled in VMCS */
     if (leaf == 0xD && subleaf == 1) eax &= ~(1 << 3);
 
+    /* Leaf 0x0A: Architectural Performance Monitoring — hide PMU.
+     * Return version=0 (no PMU support) to prevent the kernel from
+     * probing LBR MSRs (0x680-0x6CF) which cause unchecked MSR errors. */
+    if (leaf == 0x0A) {
+        eax = 0; ebx = 0; ecx = 0; edx = 0;
+    }
+
+    /* Leaf 0x04: Deterministic Cache Parameters — fix max cores per package.
+     * The host CPU reports its real core count (e.g., 8 for i7-9700).
+     * Override EAX[31:26] = num_vcpus - 1 to match virtual topology,
+     * and EAX[25:14] = 0 (max threads sharing this cache = num_vcpus). */
+    if (leaf == 4 && (eax & 0x1F) != 0) {
+        /* EAX[31:26] = max cores per physical package - 1 */
+        eax = (eax & 0x03FFFFFF) | (((prtos_u32_t)(shared->num_vcpus - 1)) << 26);
+        /* EAX[25:14] = max threads sharing this cache - 1.
+         * For a simple topology, all vCPUs share all caches. */
+        eax = (eax & ~0x03FFC000U) | (((prtos_u32_t)(shared->num_vcpus - 1)) << 14);
+    }
+
+    /* Leaf 0x1F: V2 Extended Topology Enumeration — return same as leaf 0xB
+     * to prevent the kernel from using stale host topology data. */
+    if (leaf == 0x1F) {
+        if (subleaf == 0) {
+            eax = 0;  ebx = 1;
+            ecx = (1 << 8) | (subleaf & 0xFF);
+            edx = vmx->vcpu_id;
+        } else if (subleaf == 1) {
+            prtos_u32_t shift = 0, n = shared->num_vcpus;
+            while ((1U << shift) < n) shift++;
+            eax = shift; ebx = shared->num_vcpus;
+            ecx = (2 << 8) | (subleaf & 0xFF);
+            edx = vmx->vcpu_id;
+        } else {
+            eax = 0; ebx = 0;
+            ecx = subleaf & 0xFF;
+            edx = vmx->vcpu_id;
+        }
+    }
+
     vmx->guest_regs[VMX_REG_RAX] = eax;
     vmx->guest_regs[VMX_REG_RBX] = ebx;
     vmx->guest_regs[VMX_REG_RCX] = ecx;
@@ -2515,7 +2821,8 @@ static void vmx_handle_hlt_exit(kthread_t *k, struct vmx_state *vmx) {
          * to allow fast catch-up of missed timer ticks. */
         if ((vmx->shared->vpic.irr[0] & ~vmx->shared->vpic.imr[0] & ~vmx->shared->vpic.isr[0]) ||
             vmx->vlapic_timer.pending ||
-            *(volatile prtos_u32_t *)&vmx->ipi_pending_bitmap != 0)
+            *(volatile prtos_u32_t *)&vmx->ipi_pending_bitmap != 0 ||
+            *(volatile prtos_u32_t *)&vmx->shared->vioapic.pending != 0)
             return;
 
         /* No pending interrupt — wait briefly for a real host interrupt */
@@ -2527,7 +2834,8 @@ static void vmx_handle_hlt_exit(kthread_t *k, struct vmx_state *vmx) {
                 vlapic_timer_tick(vmx, now);
                 if ((vmx->shared->vpic.irr[0] & ~vmx->shared->vpic.imr[0] & ~vmx->shared->vpic.isr[0]) ||
                     vmx->vlapic_timer.pending ||
-                    *(volatile prtos_u32_t *)&vmx->ipi_pending_bitmap != 0)
+                    *(volatile prtos_u32_t *)&vmx->ipi_pending_bitmap != 0 ||
+                    *(volatile prtos_u32_t *)&vmx->shared->vioapic.pending != 0)
                     break;
                 hw_sti();
                 __asm__ __volatile__("pause");
@@ -2541,13 +2849,46 @@ static void vmx_handle_hlt_exit(kthread_t *k, struct vmx_state *vmx) {
  * Interrupt Injection
  * ================================================================ */
 
+/* Raise an interrupt on a virtual IOAPIC pin. */
+static inline void vioapic_raise_irq(struct vmx_partition_shared *shared, int pin) {
+    if (pin >= 0 && pin < VIOAPIC_NUM_PINS)
+        shared->vioapic.pending |= (1U << pin);
+}
+
+/* Get pending interrupt vector using IOAPIC redirection table when PIC is masked.
+ * Checks the vioapic pending bitmap and delivers using the corresponding RTE vector. */
+static int vioapic_get_pending_vector(struct vmx_state *vmx) {
+    struct vioapic_state *vioapic = &vmx->shared->vioapic;
+    prtos_u32_t pending = vioapic->pending;
+    int pin;
+
+    if (!pending)
+        return -1;
+
+    for (pin = 0; pin < VIOAPIC_NUM_PINS; pin++) {
+        if (!(pending & (1U << pin)))
+            continue;
+        prtos_u64_t rte = vioapic->rte[pin];
+        if (!(rte & (1ULL << 16))) {
+            /* RTE is unmasked - deliver using this vector */
+            prtos_u32_t vector = (prtos_u32_t)(rte & 0xFF);
+            if (vector >= 0x10) {
+                vioapic->pending &= ~(1U << pin);
+                return (int)vector;
+            }
+        }
+    }
+
+    return -1;
+}
+
 static void vmx_check_pending_irq(struct vmx_state *vmx) {
     int vector;
 
     /* Check if there's already a pending interrupt injection */
     prtos_u64_t entry_info = vmx_vmread(VMCS_ENTRY_INTR_INFO);
     if (entry_info & VMCS_INTR_INFO_VALID) {
-        /* Something already being injected — check if PIC has pending, enable int-window */
+        /* Something already being injected — check if PIC or IOAPIC has pending, enable int-window */
         struct vpic_state *vpic = &vmx->shared->vpic;
         int i;
         int has_pending = 0;
@@ -2556,6 +2897,10 @@ static void vmx_check_pending_irq(struct vmx_state *vmx) {
                 has_pending = 1;
                 break;
             }
+        }
+        /* Also check IOAPIC path: vioapic has pending pins */
+        if (!has_pending && vmx->shared->vioapic.pending) {
+            has_pending = 1;
         }
         if (has_pending) {
             g_pic_busy_cnt++;
@@ -2571,6 +2916,10 @@ static void vmx_check_pending_irq(struct vmx_state *vmx) {
     /* Get pending vector from virtual PIC */
     vector = vpic_get_pending_vector(vmx);
     if (vector < 0) {
+        /* PIC returned nothing — try IOAPIC path (PIC may be masked by guest) */
+        vector = vioapic_get_pending_vector(vmx);
+    }
+    if (vector < 0) {
         /* No pending interrupt — make sure interrupt-window exiting is off */
         prtos_u64_t proc = vmx_vmread(VMCS_PROC_BASED_EXEC_CTRL);
         if (proc & CPU_BASED_VIRTUAL_INTR_PENDING) {
@@ -2585,12 +2934,36 @@ static void vmx_check_pending_irq(struct vmx_state *vmx) {
     prtos_u32_t guest_interruptibility = (prtos_u32_t)vmx_vmread(VMCS_GUEST_INTERRUPTIBILITY);
 
     if (!(guest_rflags & _CPU_FLAG_IF) || (guest_interruptibility & 0x3)) {
-        /* Guest not ready for interrupts - put the request back */
-        int chip = (vector >= vmx->shared->vpic.base_vector[1]) ? 1 : 0;
-        int irq = vector - vmx->shared->vpic.base_vector[chip];
-        vpic_raise_irq(&vmx->shared->vpic, chip * 8 + irq);
-        /* Clear ISR bit since we couldn't deliver */
-        vmx->shared->vpic.isr[chip] &= ~(1 << irq);
+        /* Guest not ready for interrupts - put the request back.
+         * Check if this is a PIC vector or IOAPIC vector. */
+        int is_pic_vector = 0;
+        int chip = 0, irq = 0;
+        if (vector >= vmx->shared->vpic.base_vector[0] &&
+            vector < vmx->shared->vpic.base_vector[0] + 8) {
+            is_pic_vector = 1;
+            chip = 0;
+            irq = vector - vmx->shared->vpic.base_vector[0];
+        } else if (vector >= vmx->shared->vpic.base_vector[1] &&
+                   vector < vmx->shared->vpic.base_vector[1] + 8) {
+            is_pic_vector = 1;
+            chip = 1;
+            irq = vector - vmx->shared->vpic.base_vector[1];
+        }
+
+        if (is_pic_vector) {
+            vpic_raise_irq(&vmx->shared->vpic, chip * 8 + irq);
+            vmx->shared->vpic.isr[chip] &= ~(1 << irq);
+        } else {
+            /* IOAPIC vector: find the pin and re-raise in vioapic pending */
+            int pin;
+            for (pin = 0; pin < VIOAPIC_NUM_PINS; pin++) {
+                if ((vmx->shared->vioapic.rte[pin] & 0xFF) == (prtos_u32_t)vector &&
+                    !(vmx->shared->vioapic.rte[pin] & (1ULL << 16))) {
+                    vioapic_raise_irq(vmx->shared, pin);
+                    break;
+                }
+            }
+        }
         g_pic_defer_cnt++;
         /* Enable interrupt-window exiting so we get a VM exit
          * as soon as the guest re-enables interrupts (STI / IRET). */
