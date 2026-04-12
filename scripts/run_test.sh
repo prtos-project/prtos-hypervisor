@@ -633,6 +633,7 @@ child = pexpect.spawn(
     '-machine virt -cpu rv64 -smp 4 -m 1G '
     '-nographic -no-reboot '
     '-bios default -kernel resident_sw.bin '
+    '-nic none '
     '-monitor none -serial stdio',
     timeout=340, encoding='utf-8', codec_errors='replace'
 )
@@ -710,6 +711,7 @@ child = pexpect.spawn(
     '-machine virt -cpu rv64 -smp 4 -m 1G '
     '-nographic -no-reboot '
     '-bios default -kernel resident_sw.bin '
+    '-nic none '
     '-monitor none -serial stdio',
     timeout=400, encoding='utf-8', codec_errors='replace'
 )

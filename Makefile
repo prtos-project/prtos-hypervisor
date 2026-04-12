@@ -38,6 +38,126 @@ endif
 include version
 include config.mk
 
+EXTRA_CLEAN_FILES = \
+	core/include/amd64/asm_offsets.h \
+	core/include/amd64/ginfo.h \
+	core/include/config/amd64.h \
+	core/include/config/vmx.h \
+	core/kernel/amd64/dep.mk \
+	core/kernel/amd64/prtos.lds \
+	core/klibc/amd64/dep.mk \
+	user/bail/examples/freertos_hw_virt_aarch64/freertos_hw_virt_aarch64.output \
+	user/bail/examples/freertos_hw_virt_aarch64/partition \
+	user/bail/examples/freertos_hw_virt_aarch64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/freertos_hw_virt_amd64/freertos_hw_virt_amd64.output \
+	user/bail/examples/freertos_hw_virt_amd64/partition \
+	user/bail/examples/freertos_hw_virt_amd64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/freertos_hw_virt_amd64/resident_sw.iso \
+	user/bail/examples/freertos_hw_virt_riscv/freertos_hw_virt_riscv.output \
+	user/bail/examples/freertos_hw_virt_riscv/partition \
+	user/bail/examples/freertos_hw_virt_riscv/prtos_cf.bin.prtos_conf \
+	user/bail/examples/freertos_para_virt_aarch64/freertos_para_virt_aarch64.output \
+	user/bail/examples/freertos_para_virt_aarch64/partition \
+	user/bail/examples/freertos_para_virt_aarch64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/freertos_para_virt_amd64/freertos_para_virt_amd64.output \
+	user/bail/examples/freertos_para_virt_amd64/partition \
+	user/bail/examples/freertos_para_virt_amd64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/freertos_para_virt_amd64/resident_sw.iso \
+	user/bail/examples/freertos_para_virt_riscv/freertos_para_virt_riscv.output \
+	user/bail/examples/freertos_para_virt_riscv/partition \
+	user/bail/examples/freertos_para_virt_riscv/prtos_cf.bin.prtos_conf \
+	user/bail/examples/linux_4vcpu_1partion_aarch64/linux_guest.dtb \
+	user/bail/examples/linux_4vcpu_1partion_aarch64/partition \
+	user/bail/examples/linux_4vcpu_1partion_aarch64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/linux_4vcpu_1partion_amd64/bzImage \
+	user/bail/examples/linux_4vcpu_1partion_amd64/partition \
+	user/bail/examples/linux_4vcpu_1partion_amd64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/linux_4vcpu_1partion_amd64/resident_sw.iso \
+	user/bail/examples/linux_4vcpu_1partion_riscv64/partition \
+	user/bail/examples/linux_4vcpu_1partion_riscv64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/linux_aarch64/Image \
+	user/bail/examples/linux_aarch64/linux_guest.dtb \
+	user/bail/examples/linux_aarch64/partition \
+	user/bail/examples/linux_aarch64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/mix_os_demo_aarch64/Image \
+	user/bail/examples/mix_os_demo_aarch64/linux_guest.dtb \
+	user/bail/examples/mix_os_demo_aarch64/partition_freertos \
+	user/bail/examples/mix_os_demo_aarch64/partition_linux \
+	user/bail/examples/mix_os_demo_aarch64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/mix_os_demo_amd64/bzImage \
+	user/bail/examples/mix_os_demo_amd64/partition_freertos \
+	user/bail/examples/mix_os_demo_amd64/partition_linux \
+	user/bail/examples/mix_os_demo_amd64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/mix_os_demo_amd64/resident_sw.iso \
+	user/bail/examples/mix_os_demo_riscv64/partition_freertos \
+	user/bail/examples/mix_os_demo_riscv64/partition_linux \
+	user/bail/examples/mix_os_demo_riscv64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/Image \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/guest_rootfs_overlay.cpio \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/linux_guest.dtb \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/linux_system.dtb \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/partition_guest \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/partition_system \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/prtos_manager \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/rootfs_overlay.cpio \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/set_serial_poll \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/virtio_backend \
+	user/bail/examples/virtio_linux_demo_2p_aarch64/virtio_frontend \
+	user/bail/examples/virtio_linux_demo_2p_amd64/bzImage \
+	user/bail/examples/virtio_linux_demo_2p_amd64/disk.img \
+	user/bail/examples/virtio_linux_demo_2p_amd64/guest_rootfs_overlay.cpio \
+	user/bail/examples/virtio_linux_demo_2p_amd64/obj_exc_elf \
+	user/bail/examples/virtio_linux_demo_2p_amd64/partition_guest \
+	user/bail/examples/virtio_linux_demo_2p_amd64/partition_guest.pef \
+	user/bail/examples/virtio_linux_demo_2p_amd64/partition_system \
+	user/bail/examples/virtio_linux_demo_2p_amd64/partition_system.pef \
+	user/bail/examples/virtio_linux_demo_2p_amd64/prtos_cf.amd64.xml \
+	user/bail/examples/virtio_linux_demo_2p_amd64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/virtio_linux_demo_2p_amd64/prtos_cf.pef.prtos_conf \
+	user/bail/examples/virtio_linux_demo_2p_amd64/prtos_manager \
+	user/bail/examples/virtio_linux_demo_2p_amd64/resident_sw \
+	user/bail/examples/virtio_linux_demo_2p_amd64/resident_sw.iso \
+	user/bail/examples/virtio_linux_demo_2p_amd64/rootfs_overlay.cpio \
+	user/bail/examples/virtio_linux_demo_2p_amd64/set_serial_poll \
+	user/bail/examples/virtio_linux_demo_2p_amd64/virtio_backend \
+	user/bail/examples/virtio_linux_demo_2p_amd64/virtio_frontend \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/Image \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/guest_rootfs_overlay.cpio \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/linux_guest.dtb \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/linux_system.dtb \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/partition_guest \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/partition_system \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/prtos_manager \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/rootfs_overlay.cpio \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/set_serial_poll \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/virtio_backend \
+	user/bail/examples/virtio_linux_demo_2p_riscv64/virtio_frontend \
+	user/bootloaders/rsw/amd64/rsw.lds \
+	core/include/aarch64/asm_offsets.h \
+	core/include/aarch64/ginfo.h \
+	core/include/config/aarch64.h \
+	core/kernel/aarch64/prtos.lds \
+	core/klibc/aarch64/dep.mk \
+	user/bail/examples/example.001/obj_exc_elf \
+	user/bail/examples/example.001/resident_sw_image \
+	user/bail/examples/example.002/obj_exc_elf \
+	user/bail/examples/example.002/resident_sw_image \
+	user/bail/examples/example.003/obj_exc_elf \
+	user/bail/examples/example.003/resident_sw_image \
+	user/bail/examples/example.004/obj_exc_elf \
+	user/bail/examples/example.004/resident_sw_image \
+	user/bail/examples/example.005/obj_exc_elf \
+	user/bail/examples/example.005/resident_sw_image \
+	user/bail/examples/example.006/obj_exc_elf \
+	user/bail/examples/example.006/resident_sw_image \
+	user/bail/examples/example.007/obj_exc_elf \
+	user/bail/examples/example.007/resident_sw_image \
+	user/bail/examples/example.008/obj_exc_elf \
+	user/bail/examples/example.008/resident_sw_image \
+	user/bootloaders/rsw/aarch64/rsw.lds
+
 scripts: 
 	@exec echo -e "\n> Building Kconfig:";
 	@$(MAKE) -s -C scripts/kconfig conf mconf || exit 1
@@ -109,6 +229,7 @@ clean:
 	@find \( -name "*~" -o -name "*.o" -o -name "*.a" -o -name "*.xo" \) -exec rm '{}' \;
 	@find -name "*.gcno" -exec rm '{}' \;
 	@find . -name "*.bin" -not -path "*/user/bail/bin/u-boot.bin" -not -path "*/native_linux_run_on_qemu_*/*" -exec rm '{}' \;
+	@$(RM) -f $(addprefix $(PRTOS_PATH)/,$(EXTRA_CLEAN_FILES))
 	@$(RM) -f $(PRTOS_PATH)/core/build.info $(PRTOS_PATH)/user/tools/prtoscparser/prtos_conf.xsd $(PRTOS_PATH)/$(DISTRO).run
 	@exec echo -e "> Done";
 
