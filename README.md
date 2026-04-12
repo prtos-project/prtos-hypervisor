@@ -222,10 +222,14 @@ make
 cd user/bail/examples/virtio_linux_demo_2p_amd64
 make run.amd64
 ```
-This launches QEMU with dual consoles:
-- **System Partition** (COM1/stdio): login `root`/`1234`, then run `prtos_manager &` and `virtio_backend &`
-- **Guest Partition** (COM2/telnet): `telnet localhost 4321`, login `root`/`1234`
-- **Guest VGA** (VNC): `vnc://localhost:5901`
+This launches QEMU with three access points:
+- **Terminal** (this window): System Partition COM1 login (`root`/`1234`)
+- **VNC** `vnc://localhost:5901`: Guest Partition VGA display
+- **Telnet** `telnet localhost 4321`: Guest Partition COM2 login (`root`/`1234`)
+
+All virtio services auto-start via init scripts (`S99virtio_backend` on System, `S99virtio_guest` on Guest). No manual steps are required.
+
+The backend detects Guest partition halt and automatically disconnects TCP clients with a notification message.
 
 See `user/bail/examples/virtio_linux_demo_2p_amd64/README.md` for full documentation.
 

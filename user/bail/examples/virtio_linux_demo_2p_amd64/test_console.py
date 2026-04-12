@@ -60,9 +60,8 @@ cmd = (f"{sg_pre}qemu-system-x86_64 "
        "-nographic -no-reboot "
        "-cdrom resident_sw.iso "
        "-serial mon:stdio "
+       "-nic none "
        f"-boot d{sg_post}")
-
-print("=== Starting QEMU for Console Test ===")
 child = pexpect.spawn("/bin/bash", ["-c", cmd], encoding='utf-8',
                       timeout=TIMEOUT, codec_errors='replace')
 child.logfile = sys.stdout

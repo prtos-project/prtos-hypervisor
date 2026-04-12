@@ -57,6 +57,7 @@ cmd = (f"{sg_pre}qemu-system-x86_64 "
        "-cdrom resident_sw.iso "
        "-serial mon:stdio "
        f"-serial telnet::{COM2_PORT},server,nowait "
+       "-nic none "
        f"-boot d{sg_post}")
 
 print("[TEST] Starting QEMU with COM2 on port %d..." % COM2_PORT)

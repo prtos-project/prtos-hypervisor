@@ -249,6 +249,41 @@ int main(int argc, char *argv[])
     /* Main event loop */
     while (running) {
         int processed = 0;
+        static int guest_halt_detected = 0;
+        static int con_was_ready = 0;    /* tracks frontend_ready 1→0 transition */
+        /* Check guest partition status every ~1000 iterations (1 second).
+         * When halt is detected, disconnect TCP clients and stop IPVIs. */
+        static int halt_check_counter = 0;
+
+        /* Track frontend_ready state for transition detection */
+        if (!guest_halt_detected && con_shm->frontend_ready == 1)
+            con_was_ready = 1;
+
+        if (!guest_halt_detected && ++halt_check_counter >= 1000) {
+            halt_check_counter = 0;
+            /* Method 1: Check PRTOS hypervisor partition status */
+            if (hv_available) {
+                prtos_part_status_t guest_status;
+                if (prtos_hv_get_partition_status(GUEST_PARTITION_ID, &guest_status) >= 0) {
+                    if (guest_status.state == PRTOS_STATUS_HALTED) {
+                        printf("\n[Backend] Guest Partition %d has HALTED (resets: %u)\n",
+                               GUEST_PARTITION_ID, guest_status.reset_counter);
+                        guest_halt_detected = 1;
+                        virtio_console_notify_guest_halt();
+                    }
+                }
+            }
+            /* Method 2: Detect frontend death via frontend_ready flag.
+             * When the guest shuts down, init sends SIGTERM to the frontend.
+             * The frontend's signal handler clears frontend_ready = 0.
+             * This fires when the flag transitions from 1 to 0, indicating
+             * the frontend process exited. */
+            if (!guest_halt_detected && con_was_ready && con_shm->frontend_ready == 0) {
+                printf("\n[Backend] Guest frontend disconnected (frontend_ready: 1->0)\n");
+                guest_halt_detected = 1;
+                virtio_console_notify_guest_halt();
+            }
+        }
 
         /* Process each device's queues */
         for (i = 0; i < VIRTIO_NUM_NET; i++)
@@ -279,8 +314,8 @@ int main(int argc, char *argv[])
             }
         }
 
-        /* Signal Guest via IPVI completion doorbell */
-        if (processed && hv_available) {
+        /* Signal Guest via IPVI completion doorbell (skip if guest halted) */
+        if (processed && hv_available && !guest_halt_detected) {
             prtos_hv_raise_partition_ipvi(GUEST_PARTITION_ID, IPVI_SYS_TO_GUEST);
         }
 

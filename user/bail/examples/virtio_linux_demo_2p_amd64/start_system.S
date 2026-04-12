@@ -41,10 +41,11 @@
 #define BP_RAMDISK_SIZE     0x21c
 #define BP_ACPI_RSDP_ADDR   0x070   /* __u64 acpi_rsdp_addr (since boot protocol 2.14) */
 
-/* ACPI table region placed by QEMU at top of first 1GB RAM */
-#define ACPI_RSDP_ADDR      0x000F5290  /* RSDP in BIOS ROM area */
-#define ACPI_TABLES_START   0x3FFE0000  /* RSDT/FACP/DSDT/MADT/HPET/WAET */
-#define ACPI_TABLES_SIZE    0x00020000  /* 128KB covers all ACPI tables */
+/* ACPI table region placed by QEMU at top of first 1GB RAM.
+ * Size must accommodate larger tables when PCI devices are present
+ * (DSDT grows with PCI bus/device definitions, SSDT added, etc.). */
+#define ACPI_TABLES_START   0x3FF80000  /* Conservative start for ACPI region */
+#define ACPI_TABLES_SIZE    0x00080000  /* 512KB covers ACPI tables with PCI */
 
 /* e820 memory types */
 #define E820_TYPE_RAM       1
@@ -96,22 +97,34 @@ _boot:
 	jnz	2b
 	movl	$CMDLINE_ADDR, (BP_CMDLINE_PTR)(%ebx)
 
-	/* --- Step 5: Set up ACPI RSDP address in boot_params ---
-	 * Linux 5.2+ (boot protocol 2.14+) uses this to find ACPI tables.
-	 * QEMU places RSDP at 0xF5290 in the BIOS ROM area (0xE0000-0xFFFFF).
-	 * EPT identity-maps the first 1GB, making both RSDP and ACPI tables
-	 * (at 0x3FFE0000+) accessible to the partition.
-	 */
-	movl	$ACPI_RSDP_ADDR, (BP_ACPI_RSDP_ADDR)(%ebx)
-	movl	$0x00000000, (BP_ACPI_RSDP_ADDR + 4)(%ebx)
+	/* --- Step 5: Scan for ACPI RSDP in BIOS ROM area (0xE0000-0xFFFFF) ---
+	 * QEMU places the RSDP at a dynamic offset that shifts depending on
+	 * the machine configuration (PCI devices change ACPI table sizes,
+	 * causing SeaBIOS to allocate the RSDP at a different address).
+	 * Scan for the "RSD PTR " signature (always 16-byte aligned). */
+	movl	$0xe0000, %esi
+.Lscan_rsdp_sys:
+	cmpl	$0x100000, %esi
+	jge	.Lno_rsdp_sys
+	cmpl	$0x20445352, (%esi)     /* "RSD " (little-endian) */
+	jne	.Lnext_rsdp_sys
+	cmpl	$0x20525450, 4(%esi)    /* "PTR " (little-endian) */
+	je	.Lfound_rsdp_sys
+.Lnext_rsdp_sys:
+	addl	$16, %esi
+	jmp	.Lscan_rsdp_sys
+.Lfound_rsdp_sys:
+	movl	%esi, (BP_ACPI_RSDP_ADDR)(%ebx)
+	movl	$0, (BP_ACPI_RSDP_ADDR + 4)(%ebx)
+.Lno_rsdp_sys:
 
 	/* --- Step 6: Set up e820 memory map --- */
 	/* 4 entries:
 	 *   0) 0x0000_0000 .. 0x0009_FFFF  (640KB)   usable  (conventional)
 	 *   1) 0x000A_0000 .. 0x000F_FFFF  (384KB)   reserved (VGA/ROM/BIOS)
 	 *   2) 0x0600_0000 .. 0x0DFF_FFFF  (128MB)   usable  (partition RAM)
-	 *   3) 0x3FFE_0000 .. 0x3FFF_FFFF  (128KB)   ACPI    (RSDT/FACP/DSDT/MADT/HPET/WAET)
-	 * Note: RSDP at 0xF5290 is within entry 1 (reserved BIOS area).
+	 *   3) 0x3FF8_0000 .. 0x3FFF_FFFF  (512KB)   ACPI    (ACPI tables, sized for PCI configs)
+	 * Note: RSDP is found dynamically in BIOS ROM area by Step 5.
 	 *       Shared memory at 0x16000000+ accessed via /dev/mem, not in e820.
 	 */
 	movl	$4, (BP_E820_ENTRIES)(%ebx)
@@ -140,7 +153,7 @@ _boot:
 	movl	$E820_TYPE_RAM, 56(%edi)
 
 	/* Entry 3: ACPI tables (QEMU places RSDT/FACP/DSDT/MADT/HPET/WAET here) */
-	movl	$ACPI_TABLES_START, 60(%edi)
+	movl	$ACPI_TABLES_START, 60(%edi)    /* 0x3FF80000 */
 	movl	$0x00000000, 64(%edi)
 	movl	$ACPI_TABLES_SIZE, 68(%edi)
 	movl	$0x00000000, 72(%edi)
