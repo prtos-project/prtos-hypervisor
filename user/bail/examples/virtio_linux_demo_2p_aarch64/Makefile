@@ -39,7 +39,7 @@ PARTITIONS=partition_system.pef partition_guest.pef
 # ============================================================================
 # Linux Workspace Paths
 # ============================================================================
-LINUX_WORKSPACE=/home/chenweis/aarch64_linux_workspace
+LINUX_WORKSPACE=../native_linux_run_on_qemu_a57_virt/
 LINUX_IMAGE=$(LINUX_WORKSPACE)/linux-6.19.9/arch/arm64/boot/Image
 
 # ============================================================================
@@ -261,14 +261,15 @@ UBOOT_SRC = /home/chenweis/aarch64_linux_workspace/u-boot
 UBOOT_BIN = u-boot/u-boot.bin
 
 $(UBOOT_BIN): | u-boot
-	@echo "=== Building U-Boot (CONFIG_SYS_BOOTM_LEN=0x10000000) ==="
-	$(MAKE) -C $(UBOOT_SRC) qemu_arm64_defconfig > /dev/null 2>&1
-	$(UBOOT_SRC)/scripts/config --file $(UBOOT_SRC)/.config \
-		--set-val CONFIG_SYS_BOOTM_LEN 0x10000000
-	$(UBOOT_SRC)/scripts/config --file $(UBOOT_SRC)/.config \
-		--set-str CONFIG_PREBOOT 'bootm 0x40200000 - $${fdtcontroladdr}'
-	$(MAKE) -C $(UBOOT_SRC) -j$$(nproc) CROSS_COMPILE=aarch64-linux-gnu- > /dev/null 2>&1
-	cp $(UBOOT_SRC)/u-boot.bin $@
+# 	@echo "=== Building U-Boot (CONFIG_SYS_BOOTM_LEN=0x10000000) ==="
+# 	$(MAKE) -C $(UBOOT_SRC) qemu_arm64_defconfig > /dev/null 2>&1
+# 	$(UBOOT_SRC)/scripts/config --file $(UBOOT_SRC)/.config \
+# 		--set-val CONFIG_SYS_BOOTM_LEN 0x10000000
+# 	$(UBOOT_SRC)/scripts/config --file $(UBOOT_SRC)/.config \
+# 		--set-str CONFIG_PREBOOT 'bootm 0x40200000 - $${fdtcontroladdr}'
+# 	$(MAKE) -C $(UBOOT_SRC) -j$$(nproc) CROSS_COMPILE=aarch64-linux-gnu- > /dev/null 2>&1
+#	cp $(UBOOT_SRC)/u-boot.bin $@
+	cp $(BAIL_PATH)/bin/u-boot.bin $@
 	@echo "[Build] U-Boot binary: $@ ($$(stat -c%s $@) bytes)"
 
 u-boot:
