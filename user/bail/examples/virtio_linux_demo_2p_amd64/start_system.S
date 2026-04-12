@@ -39,6 +39,19 @@
 #define BP_HEAP_END_PTR     0x224
 #define BP_RAMDISK_IMAGE    0x218
 #define BP_RAMDISK_SIZE     0x21c
+#define BP_ACPI_RSDP_ADDR   0x070   /* __u64 acpi_rsdp_addr (since boot protocol 2.14) */
+
+/* ACPI table region placed by QEMU at top of first 1GB RAM.
+ * Size must accommodate larger tables when PCI devices are present
+ * (DSDT grows with PCI bus/device definitions, SSDT added, etc.). */
+#define ACPI_TABLES_START   0x3FF80000  /* Conservative start for ACPI region */
+#define ACPI_TABLES_SIZE    0x00080000  /* 512KB covers ACPI tables with PCI */
+
+/* e820 memory types */
+#define E820_TYPE_RAM       1
+#define E820_TYPE_RESERVED  2
+#define E820_TYPE_ACPI      3   /* ACPI reclaimable */
+#define E820_TYPE_NVS       4   /* ACPI Non-Volatile Storage */
 
 	.code32
 	.section .text
@@ -84,15 +97,37 @@ _boot:
 	jnz	2b
 	movl	$CMDLINE_ADDR, (BP_CMDLINE_PTR)(%ebx)
 
-	/* --- Step 5: Set up e820 memory map --- */
-	/* 3 entries (shared memory accessed via /dev/mem, not in e820):
-	 *   0) 0x0000_0000 .. 0x0009_FFFF  (640KB)   usable (conventional)
-	 *   1) 0x000A_0000 .. 0x000F_FFFF  (384KB)   reserved (VGA/ROM)
-	 *   2) 0x0600_0000 .. 0x0DFF_FFFF  (128MB)   usable (partition RAM)
-	 * Note: Shared memory at 0x16000000+ is NOT in e820.
-	 *       Access shared memory via /dev/mem mmap instead.
+	/* --- Step 5: Scan for ACPI RSDP in BIOS ROM area (0xE0000-0xFFFFF) ---
+	 * QEMU places the RSDP at a dynamic offset that shifts depending on
+	 * the machine configuration (PCI devices change ACPI table sizes,
+	 * causing SeaBIOS to allocate the RSDP at a different address).
+	 * Scan for the "RSD PTR " signature (always 16-byte aligned). */
+	movl	$0xe0000, %esi
+.Lscan_rsdp_sys:
+	cmpl	$0x100000, %esi
+	jge	.Lno_rsdp_sys
+	cmpl	$0x20445352, (%esi)     /* "RSD " (little-endian) */
+	jne	.Lnext_rsdp_sys
+	cmpl	$0x20525450, 4(%esi)    /* "PTR " (little-endian) */
+	je	.Lfound_rsdp_sys
+.Lnext_rsdp_sys:
+	addl	$16, %esi
+	jmp	.Lscan_rsdp_sys
+.Lfound_rsdp_sys:
+	movl	%esi, (BP_ACPI_RSDP_ADDR)(%ebx)
+	movl	$0, (BP_ACPI_RSDP_ADDR + 4)(%ebx)
+.Lno_rsdp_sys:
+
+	/* --- Step 6: Set up e820 memory map --- */
+	/* 4 entries:
+	 *   0) 0x0000_0000 .. 0x0009_FFFF  (640KB)   usable  (conventional)
+	 *   1) 0x000A_0000 .. 0x000F_FFFF  (384KB)   reserved (VGA/ROM/BIOS)
+	 *   2) 0x0600_0000 .. 0x0DFF_FFFF  (128MB)   usable  (partition RAM)
+	 *   3) 0x3FF8_0000 .. 0x3FFF_FFFF  (512KB)   ACPI    (ACPI tables, sized for PCI configs)
+	 * Note: RSDP is found dynamically in BIOS ROM area by Step 5.
+	 *       Shared memory at 0x16000000+ accessed via /dev/mem, not in e820.
 	 */
-	movl	$3, (BP_E820_ENTRIES)(%ebx)
+	movl	$4, (BP_E820_ENTRIES)(%ebx)
 	movl	$(BP_E820_TABLE), %edi
 	addl	%ebx, %edi
 
@@ -101,23 +136,30 @@ _boot:
 	movl	$0x00000000, 4(%edi)
 	movl	$0x000A0000, 8(%edi)
 	movl	$0x00000000, 12(%edi)
-	movl	$1, 16(%edi)
+	movl	$E820_TYPE_RAM, 16(%edi)
 
-	/* Entry 1: Reserved VGA/ROM */
+	/* Entry 1: Reserved VGA/ROM/BIOS (includes RSDP at 0xF5290) */
 	movl	$0x000A0000, 20(%edi)
 	movl	$0x00000000, 24(%edi)
 	movl	$0x00060000, 28(%edi)
 	movl	$0x00000000, 32(%edi)
-	movl	$2, 36(%edi)
+	movl	$E820_TYPE_RESERVED, 36(%edi)
 
 	/* Entry 2: Partition RAM (128MB at 0x6000000) */
 	movl	$0x06000000, 40(%edi)
 	movl	$0x00000000, 44(%edi)
 	movl	$0x08000000, 48(%edi)
 	movl	$0x00000000, 52(%edi)
-	movl	$1, 56(%edi)
+	movl	$E820_TYPE_RAM, 56(%edi)
 
-	/* --- Step 5b: Set up initrd (rootfs overlay CPIO) --- */
+	/* Entry 3: ACPI tables (QEMU places RSDT/FACP/DSDT/MADT/HPET/WAET here) */
+	movl	$ACPI_TABLES_START, 60(%edi)    /* 0x3FF80000 */
+	movl	$0x00000000, 64(%edi)
+	movl	$ACPI_TABLES_SIZE, 68(%edi)
+	movl	$0x00000000, 72(%edi)
+	movl	$E820_TYPE_ACPI, 76(%edi)
+
+	/* --- Step 7: Set up initrd (rootfs overlay CPIO) --- */
 	/* Linux boot protocol: ramdisk_image = physical address of initrd,
 	 * ramdisk_size = byte length. Linux will unpack this CPIO on top of
 	 * the built-in initramfs, overlaying /usr/bin/prtos_manager etc.
@@ -127,7 +169,7 @@ _boot:
 	subl	$_initrd_sys_start, %eax
 	movl	%eax, (BP_RAMDISK_SIZE)(%ebx)
 
-	/* --- Step 6: Calculate compressed kernel entry --- */
+	/* --- Step 8: Calculate compressed kernel entry --- */
 	movl	$_bzimage_sys_start, %eax
 	movzbl	HDR_SETUP_SECTS(%eax), %ecx
 	testl	%ecx, %ecx
@@ -137,7 +179,7 @@ _boot:
 	shll	$9, %ecx
 	addl	$_bzimage_sys_start, %ecx
 
-	/* --- Step 7: Jump to Linux startup_32 --- */
+	/* --- Step 9: Jump to Linux startup_32 --- */
 	movl	$BOOT_PARAMS_ADDR, %esi
 	jmp	*%ecx
 

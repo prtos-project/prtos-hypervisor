@@ -53,6 +53,32 @@ static int client_fd = -1;
  */
 static int iac_state = 0;
 
+/*
+ * Deferred newline injection state.
+ *
+ * When a TCP client connects, getty has likely already printed its
+ * initial login prompt (consumed by stdout only).  We inject '\n'
+ * into the Guest RX buffer so getty re-displays "login:" for the
+ * newly connected client.
+ *
+ * Injection is deferred because the frontend's PTY bridge may not
+ * be actively draining RX yet (or getty's tcsetattr may flush it).
+ * We retry multiple times until getty responds (tx_tail advances).
+ *
+ * Each poll iteration ≈ 1ms (usleep(1000) in main loop).
+ */
+#define INJECT_INITIAL_DELAY_MS  300    /* Wait before first injection */
+#define INJECT_RETRY_INTERVAL_MS 500    /* Interval between retries */
+#define INJECT_MAX_RETRIES       5      /* Max injection attempts */
+
+static int inject_counter = -1;        /* Countdown to next injection (ms) */
+static int inject_retries = 0;         /* Remaining retry attempts */
+static uint32_t inject_tx_baseline = 0; /* tx_tail snapshot for response check */
+static int inject_baseline_set = 0;    /* Whether baseline has been captured */
+
+/* Guest halt state — set by virtio_console_notify_guest_halt() */
+static volatile int guest_halted = 0;
+
 void virtio_console_init(struct virtio_console_shm *con)
 {
     struct sockaddr_in addr;
@@ -68,6 +94,7 @@ void virtio_console_init(struct virtio_console_shm *con)
     con->buf_size = VIRTIO_CONSOLE_BUF_SIZE;
     con->device_status = VIRTIO_STATUS_ACK;
     con->backend_ready = 1;
+    guest_halted = 0;
     __sync_synchronize();
 
     /* Create TCP listening socket for Guest console access */
@@ -112,12 +139,65 @@ void virtio_console_init(struct virtio_console_shm *con)
            con->buf_size, CONSOLE_TCP_PORT);
 }
 
+/*
+ * Notify the console backend that the Guest partition has halted.
+ * Called from the main loop when guest halt is detected.
+ * Disconnects the TCP client so the telnet user gets back to shell.
+ */
+void virtio_console_notify_guest_halt(void)
+{
+    guest_halted = 1;
+    if (client_fd >= 0) {
+        /* Send a notification message to the telnet client */
+        static const char msg[] =
+            "\r\n\r\n[PRTOS] Guest partition has halted.\r\n"
+            "[PRTOS] Connection closed.\r\n";
+        (void)write(client_fd, msg, sizeof(msg) - 1);
+        close(client_fd);
+        client_fd = -1;
+        iac_state = 0;
+        inject_retries = 0;
+        inject_counter = -1;
+        printf("[Backend] Console TCP client disconnected (guest halted)\n");
+    }
+}
+
+static void close_client(void)
+{
+    if (client_fd >= 0) {
+        close(client_fd);
+        client_fd = -1;
+    }
+    iac_state = 0;
+    inject_retries = 0;
+    inject_counter = -1;
+    inject_baseline_set = 0;
+}
+
 void virtio_console_process(struct virtio_console_shm *con)
 {
     uint32_t head, tail;
 
     if (!con)
         return;
+
+    /* Don't accept new connections if guest is halted */
+    if (guest_halted) {
+        /* Still drain TX buffer to stdout (show final shutdown messages) */
+        __sync_synchronize();
+        head = con->tx_head;
+        tail = con->tx_tail;
+        while (tail != head) {
+            putchar(con->tx_buf[tail % con->buf_size]);
+            tail = (tail + 1) % con->buf_size;
+        }
+        if (con->tx_tail != tail) {
+            con->tx_tail = tail;
+            __sync_synchronize();
+            fflush(stdout);
+        }
+        return;
+    }
 
     /* Accept new TCP connection (non-blocking) */
     if (listen_fd >= 0 && client_fd < 0) {
@@ -129,6 +209,20 @@ void virtio_console_process(struct virtio_console_shm *con)
             /* Disable Nagle for interactive terminal */
             int opt = 1;
             setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+
+            /* Enable TCP keepalive so dead connections are detected.
+             * - Idle time before first probe: 10s
+             * - Interval between probes: 5s
+             * - Max failed probes before disconnect: 3
+             * Total dead-connection detection: ~25s */
+            opt = 1;
+            setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt));
+            opt = 10;
+            setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &opt, sizeof(opt));
+            opt = 5;
+            setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &opt, sizeof(opt));
+            opt = 3;
+            setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &opt, sizeof(opt));
 
             /* Send telnet negotiation: character-at-a-time mode.
              * WILL ECHO: server handles echo (prevents double-echo)
@@ -143,24 +237,19 @@ void virtio_console_process(struct virtio_console_shm *con)
             (void)write(fd, telnet_init, sizeof(telnet_init));
 
             client_fd = fd;
-            iac_state = 0;  /* Reset IAC parser for new client */
+            iac_state = 0;
             printf("[Backend] Console TCP client connected\n");
 
-            /* Inject newline to make getty re-display login prompt.
+            /* Schedule deferred newline injection.
              * Getty has already printed the initial prompt before the
-             * TCP client connected, so it was consumed (sent to stdout
-             * only).  A newline causes getty to see an empty username
-             * and re-display "login:", which goes to the TCP client. */
-            __sync_synchronize();
-            {
-                uint32_t rx_h = con->rx_head;
-                uint32_t rx_next = (rx_h + 1) % con->buf_size;
-                if (rx_next != con->rx_tail) {
-                    con->rx_buf[rx_h] = '\n';
-                    con->rx_head = rx_next;
-                    __sync_synchronize();
-                }
-            }
+             * TCP client connected (consumed by stdout only).  A '\n'
+             * causes getty to re-display "login:" for the TCP client.
+             *
+             * We defer injection to allow the frontend PTY bridge to
+             * settle after potential getty respawn (tcsetattr may flush). */
+            inject_counter = INJECT_INITIAL_DELAY_MS;
+            inject_retries = INJECT_MAX_RETRIES;
+            inject_baseline_set = 0;
         }
     }
 
@@ -175,8 +264,8 @@ void virtio_console_process(struct virtio_console_shm *con)
         if (client_fd >= 0) {
             ssize_t w = write(client_fd, &c, 1);
             if (w < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                close(client_fd);
-                client_fd = -1;
+                printf("[Backend] Console TCP client write error\n");
+                close_client();
             }
         }
         tail = (tail + 1) % con->buf_size;
@@ -186,6 +275,40 @@ void virtio_console_process(struct virtio_console_shm *con)
         con->tx_tail = tail;
         __sync_synchronize();
         fflush(stdout);
+    }
+
+    /* Deferred newline injection with retry.
+     * Placed AFTER the TX read section so that the baseline tx_tail
+     * reflects the state after draining any stale data. */
+    if (inject_retries > 0 && client_fd >= 0) {
+        if (!inject_baseline_set) {
+            /* Capture tx_tail baseline AFTER stale TX data is drained */
+            inject_tx_baseline = con->tx_tail;
+            inject_baseline_set = 1;
+        }
+        /* Check if getty already responded (tx_tail advanced) */
+        __sync_synchronize();
+        if (con->tx_tail != inject_tx_baseline) {
+            /* Getty produced output — login prompt sent, stop injecting */
+            inject_retries = 0;
+            inject_counter = -1;
+        } else if (inject_counter > 0) {
+            inject_counter--;
+        } else {
+            /* Time to inject '\n' */
+            uint32_t rx_h = con->rx_head;
+            uint32_t rx_next = (rx_h + 1) % con->buf_size;
+            if (rx_next != con->rx_tail) {
+                con->rx_buf[rx_h] = '\n';
+                con->rx_head = rx_next;
+                __sync_synchronize();
+            }
+            inject_retries--;
+            if (inject_retries > 0)
+                inject_counter = INJECT_RETRY_INTERVAL_MS;
+            else
+                inject_counter = -1;
+        }
     }
 
     /* Read from TCP client and write to Guest's RX buffer */
@@ -210,24 +333,21 @@ void virtio_console_process(struct virtio_console_shm *con)
                  * data (e.g. NAWS window-size bytes) leak into the
                  * guest PTY, potentially killing getty via SIGINT. */
                 if (iac_state == 3) {
-                    /* Inside SB subnegotiation: discard data until IAC */
                     if (ch == TELNET_IAC)
                         iac_state = 4;
                     continue;
                 }
                 if (iac_state == 4) {
-                    /* SB subneg saw IAC: expect SE(240) to end */
                     if (ch == 240) {
                         iac_state = 0;  /* SE: subneg complete */
                     } else if (ch == TELNET_IAC) {
-                        iac_state = 4;  /* IAC IAC inside SB: escaped 0xFF, stay */
+                        iac_state = 4;  /* escaped 0xFF inside SB */
                     } else {
-                        iac_state = 3;  /* Not SE: back to scanning */
+                        iac_state = 3;  /* back to scanning */
                     }
                     continue;
                 }
                 if (iac_state == 1) {
-                    /* After IAC: expect command byte */
                     if (ch == TELNET_IAC) {
                         /* IAC IAC = escaped literal 0xFF */
                         iac_state = 0;
@@ -237,22 +357,16 @@ void virtio_console_process(struct virtio_console_shm *con)
                         con->rx_buf[head] = (char)0xFF;
                         head = next_head;
                     } else if (ch >= TELNET_WILL && ch <= TELNET_DONT) {
-                        /* WILL(251)/WONT(252)/DO(253)/DONT(254):
-                         * 3-byte sequence, need option byte next */
                         iac_state = 2;
                     } else if (ch == 250) {
-                        /* SB(250): subnegotiation start, discard until IAC SE */
-                        iac_state = 3;
+                        iac_state = 3;  /* SB subnegotiation */
                     } else {
-                        /* Other IAC commands (NOP, BRK, IP, etc.):
-                         * 2-byte sequence, done */
-                        iac_state = 0;
+                        iac_state = 0;  /* 2-byte command done */
                     }
                     continue;
                 }
                 if (iac_state == 2) {
-                    /* After IAC + cmd: this is the option byte, skip it */
-                    iac_state = 0;
+                    iac_state = 0;      /* option byte consumed */
                     continue;
                 }
                 if (ch == TELNET_IAC) {
@@ -271,23 +385,17 @@ void virtio_console_process(struct virtio_console_shm *con)
             __sync_synchronize();
         } else if (n == 0) {
             printf("[Backend] Console TCP client disconnected\n");
-            close(client_fd);
-            client_fd = -1;
-            iac_state = 0;  /* Reset IAC state for next client */
+            close_client();
         } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            close(client_fd);
-            client_fd = -1;
-            iac_state = 0;
+            printf("[Backend] Console TCP client error: %s\n", strerror(errno));
+            close_client();
         }
     }
 }
 
 void virtio_console_cleanup(void)
 {
-    if (client_fd >= 0) {
-        close(client_fd);
-        client_fd = -1;
-    }
+    close_client();
     if (listen_fd >= 0) {
         close(listen_fd);
         listen_fd = -1;

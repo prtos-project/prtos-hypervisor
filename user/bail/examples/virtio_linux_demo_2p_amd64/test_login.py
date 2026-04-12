@@ -43,6 +43,7 @@ cmd = ("sg kvm -c 'qemu-system-x86_64 "
        "-cdrom resident_sw.iso "
        "-serial mon:stdio "
        "-serial null "
+       "-nic none "
        "-boot d'")
 
 print("=== Starting QEMU ===")

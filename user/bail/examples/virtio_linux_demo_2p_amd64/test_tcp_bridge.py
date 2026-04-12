@@ -59,6 +59,7 @@ cmd = (f"{sg_pre}qemu-system-x86_64 "
        "-m 1024 -smp 4 -nographic -no-reboot "
        "-cdrom resident_sw.iso "
        "-serial mon:stdio "
+       "-nic none "
        f"-boot d{sg_post}")
 
 print("=== Starting QEMU for TCP Bridge Test ===")

@@ -1194,6 +1194,7 @@ cmd = (f"{sg_pre}qemu-system-x86_64 "
        "-nographic -no-reboot "
        "-cdrom resident_sw.iso "
        "-serial mon:stdio "
+       "-nic none "
        f"-boot d{sg_post}")
 child = pexpect.spawn('/bin/bash', ['-c', cmd],
                       timeout=460, encoding='utf-8', codec_errors='replace')

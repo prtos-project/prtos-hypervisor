@@ -175,6 +175,16 @@ static inline void write_all(int fd, const void *buf, size_t count)
 static void signal_handler(int sig)
 {
     (void)sig;
+    /* Clear frontend_ready flags IMMEDIATELY so the backend detects
+     * that the frontend has died.  This must happen before running = 0
+     * because SIGKILL might arrive before cleanup code executes. */
+    if (con_shm) { con_shm->frontend_ready = 0; __sync_synchronize(); }
+    if (blk_shm) { blk_shm->frontend_ready = 0; __sync_synchronize(); }
+    {
+        int i;
+        for (i = 0; i < VIRTIO_NUM_NET; i++)
+            if (net_shm[i]) { net_shm[i]->frontend_ready = 0; __sync_synchronize(); }
+    }
     running = 0;
 }
 

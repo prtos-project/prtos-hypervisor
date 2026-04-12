@@ -18,6 +18,17 @@
       Virtio_Blk:   2MB   @ 0x16300000  (virtio-blk file-backed)
       Virtio_Con:   256KB @ 0x16500000  (virtio-console)
 
+  ACPI Hardware Description (provided by QEMU, accessible via EPT identity map):
+    RSDP:  Dynamic (scanned in BIOS ROM area 0xE0000-0xFFFFF by boot stub)
+    ACPI Tables: 0x3FF80000-0x3FFFFFFF (512KB, sized for PCI device configs)
+      - MADT: SMP CPU topology (4 LAPIC entries), IOAPIC at 0xFEC00000
+      - HPET: Timer at 0xFED00000 (MMIO via 3-4GB EPT UC identity map)
+      - DSDT: PCI root bridge, ISA devices, power management
+    ACPI PM Timer: I/O port 0x608 (PIIX4 ACPI controller, PM_TMR_BLK)
+    Both partitions access ACPI tables via EPT first-1GB identity map.
+    Boot stub scans for "RSD PTR " signature; address varies with PCI config.
+    e820 entry type 3 (ACPI reclaimable) at 0x3FF80000 protects table memory.
+
   CPU Assignment (SMP, dedicated pCPU mapping):
     pCPU 0 -> System Partition vCPU 0
     pCPU 1 -> System Partition vCPU 1
@@ -41,6 +52,7 @@
     COM2 (0x2F8-0x2FF):  Guest VGA/telnet (passthrough by hypervisor)
     PCI  (0xCF8-0xCFF):  PCI config space
     VGA  (0x3B0-0x3DF):  Guest VGA display (passthrough by hypervisor)
+    ACPI PM (0x600-0x63F): ACPI power management (PM Timer at 0x608)
 
   Doorbell IPVI (Guest <-> System):
     IPVI 0: net0  (Guest src=1 -> System dst=0, vector 32)
@@ -145,6 +157,11 @@
                     <!-- DMA page registers (0x80-0x8F) -->
                     <Range base="0x80" noPorts="16" />
                     <!-- PIC 8259 slave (0xA0-0xA1): Reserved by PRTOS -->
+                    <!-- ACPI PM registers (PIIX4 ACPI controller, base 0x600):
+                         PM1a_EVT_BLK (0x600-0x603), PM1a_CNT_BLK (0x604-0x605),
+                         PM_TMR_BLK (0x608-0x60B), GPE0_BLK (0x60C-0x60F).
+                         PM Timer at 0x608 used as clocksource by Linux. -->
+                    <Range base="0x600" noPorts="64" />
                     <!-- COM1 UART: 0x3F8-0x3FC reserved by PRTOS, keep 0x3FD-0x3FF -->
                     <Range base="0x3FD" noPorts="3" />
                     <!-- PCI config space (0xCF8-0xCFF) -->

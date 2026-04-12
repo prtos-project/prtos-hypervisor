@@ -140,13 +140,16 @@ prtos_manager: $(MGR_OBJS)
 # ============================================================================
 
 rootfs_overlay.cpio: prtos_manager virtio_backend \
-                     system_partition/rootfs_overlay/etc/init.d/S99virtio_backend
+                     system_partition/rootfs_overlay/etc/init.d/S99virtio_backend \
+                     system_partition/rootfs_overlay/etc/network/interfaces
 	@rm -rf _overlay_root
 	@mkdir -p _overlay_root/usr/bin
 	@mkdir -p _overlay_root/etc/init.d
+	@mkdir -p _overlay_root/etc/network
 	@cp prtos_manager  _overlay_root/usr/bin/
 	@cp virtio_backend _overlay_root/usr/bin/
 	@cp system_partition/rootfs_overlay/etc/init.d/S99virtio_backend _overlay_root/etc/init.d/
+	@cp system_partition/rootfs_overlay/etc/network/interfaces _overlay_root/etc/network/
 	@chmod 755 _overlay_root/usr/bin/prtos_manager
 	@chmod 755 _overlay_root/usr/bin/virtio_backend
 	@chmod 755 _overlay_root/etc/init.d/S99virtio_backend
@@ -171,14 +174,17 @@ virtio_frontend: guest_partition/src/virtio_frontend.c
 
 guest_rootfs_overlay.cpio: guest_partition/rootfs_overlay/opt/virtio_test.sh \
                            guest_partition/rootfs_overlay/etc/init.d/S99virtio_guest \
+                           guest_partition/rootfs_overlay/etc/network/interfaces \
                            set_serial_poll \
                            virtio_frontend
 	@rm -rf _guest_overlay_root
 	@mkdir -p _guest_overlay_root/opt
 	@mkdir -p _guest_overlay_root/etc/init.d
+	@mkdir -p _guest_overlay_root/etc/network
 	@mkdir -p _guest_overlay_root/usr/bin
 	@cp guest_partition/rootfs_overlay/opt/virtio_test.sh _guest_overlay_root/opt/
 	@cp guest_partition/rootfs_overlay/etc/init.d/S99virtio_guest _guest_overlay_root/etc/init.d/
+	@cp guest_partition/rootfs_overlay/etc/network/interfaces _guest_overlay_root/etc/network/
 	@cp set_serial_poll _guest_overlay_root/opt/
 	@cp virtio_frontend _guest_overlay_root/usr/bin/
 	@chmod 755 _guest_overlay_root/opt/virtio_test.sh
@@ -273,6 +279,7 @@ run.amd64:
 		-serial mon:stdio \
 		-serial telnet::4321,server,nowait \
 		-vga std -display none -vnc :1 \
+		-nic none \
 		-boot d
 
 # Nographic mode for automated testing (System UART only)
@@ -283,6 +290,7 @@ run.amd64.nographic:
 		-nographic -m 1024 -smp 4 \
 		-cdrom resident_sw.iso \
 		-serial mon:stdio \
+		-nic none \
 		-boot d
 
 # Alias for test framework
@@ -293,6 +301,7 @@ run.amd64.kvm.nographic:
 		-nographic -m 1024 -smp 4 \
 		-cdrom resident_sw.iso \
 		-serial mon:stdio \
+		-nic none \
 		-boot d
 
 # Full demo: Dual Console (UART + VGA + telnet) + PCI devices
