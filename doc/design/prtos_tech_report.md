@@ -4,7 +4,7 @@
 
 **PRTOS Hypervisor** is an open-source, lightweight embedded Type-1 (bare-metal) Hypervisor built on a **Separation Kernel** architecture, specifically designed for real-time and safety-critical systems. Through strict spatial and temporal partitioning, PRTOS enables multiple applications to coexist securely and collaborate efficiently on a single hardware platform, completely eliminating mutual interference between applications.
 
-The core design principle of PRTOS is **determinism and static configuration**: critical resources such as CPU, memory, and I/O devices are statically allocated at system instantiation time, and scheduling follows a predefined Cyclic Scheduling Table, making system behavior fully predictable, analyzable, and verifiable. For the theoretical foundations and engineering implementation of this design principle, refer to Chapter 11.2 of *[Embedded Hypervisor: Architecture, Principles, and Implementation](http://www.prtos.org/embedded_hypervisor_book/)*.
+The core design principle of PRTOS is **determinism and static configuration**: critical resources such as CPU, memory, and I/O devices are statically allocated at system instantiation time, and scheduling follows a predefined Cyclic Scheduling Table, making system behavior fully predictable, analyzable, and verifiable. For the theoretical foundations and engineering implementation of this design principle, refer to Chapter 11 of *[Embedded Hypervisor: Architecture, Principles, and Implementation](http://www.prtos.org/embedded_hypervisor_book/)*.
 
 PRTOS follows the open-source spirit, drawing technical inspiration from [XtratuM](https://en.wikipedia.org/wiki/XtratuM), [Xen Hypervisor](https://xenproject.org/), [Lguest Hypervisor](http://lguest.ozlabs.org), and [Linux Kernel](https://www.linux.org/), released under the GPL license.
 
@@ -126,7 +126,7 @@ PRTOS supports Symmetric Multi-Processing (SMP), allowing a single partition to 
 
 - Physical-to-virtual core relationships are clear and fixed.
 - Scheduling switches and inter-core wake-up paths are explicitly controllable.
-- Supports up to 4-vCPU Linux SMP operation (verified on all platforms).
+- Supports SMP operation for Linux partitions: theoretical limit of 256 vCPUs, with 4 vCPUs verified in current test cases.
 
 ### 4.4 Inter-Partition Communication (IPC)
 
