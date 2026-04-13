@@ -3,13 +3,13 @@
 
 **PRTOS Hypervisor** 是一款开源、轻量级的嵌入式 Type-1（裸金属）Hypervisor，采用 **分离内核（Separation Kernel）** 架构，专为实时与安全关键系统设计。通过严格的空间隔离与时间隔离，PRTOS 在单一硬件平台上实现多应用的安全共存与高效协作，完全消除应用间的相互干扰。
 
-PRTOS 的核心设计原则是 **确定性与静态配置**：CPU、内存、I/O 设备等关键资源在系统实例化时静态分配，调度采用预定义的循环调度表（Cyclic Scheduling Table），这使得系统行为完全可预测、可分析、可验证。关于这一设计原则的理论基础和工程实现，可参阅《[嵌入式 Hypervisor：架构、原理与应用](http://www.prtos.org/embedded_hypervisor_book/)》第 11 章的详细论述。
+PRTOS 的核心设计原则是 **确定性与静态配置**：CPU、内存、I/O 设备等关键资源在系统实例化时静态分配，调度采用预定义的循环调度表（Cyclic Scheduling Table），这使得系统行为完全可预测、可分析、可验证。关于这一设计原则的理论基础和工程实现，可参阅《[嵌入式 Hypervisor：架构、原理与应用](http://www.prtos.org/embedded_hypervisor_book/)》的详细论述。
 
 PRTOS 项目遵循开源精神，在技术上吸收了 [XtratuM](https://en.wikipedia.org/wiki/XtratuM)、[Xen Hypervisor](https://xenproject.org/)、[Lguest Hypervisor](http://lguest.ozlabs.org) 及 [Linux Kernel](https://www.linux.org/) 的设计理念，以 GPL 许可证发布。
 
 ## 2. PRTOS Hypervisor 架构
 
-PRTOS Hypervisor架构如下：
+PRTOS Hypervisor 架构如下：
 
 ![architecturezh](./doc/figures/prtos_architecture_zh.jpg)
 
@@ -32,7 +32,7 @@ PRTOS Hypervisor源代码目录结构如下图所示：
 | user/bail     | 用户裸机应用程序接口库。                                  |
 | doc           | 相关文档。                                               |
 
-**NOTE**:BAIL（Bare-metal Application Interface Library）是一个用于在PRTOS Hypervisor之上直接开发C程序的最小分区开发环境。BAIL提供了建立基本的"C"执行环境所需的基本服务。BAIL适用于那些不需要操作系统的分区、以及测试PROTS提供的超级调用服务接口。
+> **说明**：BAIL（Bare-metal Application Interface Library）是一个用于在 PRTOS Hypervisor 之上直接开发 C 程序的最小分区开发环境。BAIL 提供了建立基础 C 执行环境所需的基本服务，适用于不需要操作系统、仅需测试 PRTOS 超级调用接口的分区。
 
 ## 5. 硬件支持
 
@@ -165,7 +165,7 @@ processor       : 3
 sudo apt-get install -y qemu-system-x86 grub-pc-bin
 
 ```
-NOTE：
+> **说明**：
 在 AMD64 硬件虚拟化测试中，QEMU 需要通过 `-enable-kvm` 选项利用宿主机的 `KVM` 模块进行加速。为确保测试顺利运行，请务必将当前用户加入 `kvm` 权限组：
 
 ```
