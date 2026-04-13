@@ -1,19 +1,15 @@
 [English](README.md) | **中文**
-
 ## 1. 简介
 
-PRTOS 是一款开源、轻量级的嵌入式 Type-1 Hypervisor，致力于通过虚拟化技术构建安全、高效的实时系统。系统采用**分离内核（Separation Kernel）**架构，通过严格的空间与时间分区隔离，实现多个应用在同一硬件平台上的安全共存与协同。PRTOS 对 CPU、内存及 I/O 设备等关键资源进行深度虚拟化，在确保系统安全性的同时，彻底消除应用间的相互干扰。
+**PRTOS Hypervisor** 是一款开源、轻量级的嵌入式 Type-1（裸金属）Hypervisor，采用 **分离内核（Separation Kernel）** 架构，专为实时与安全关键系统设计。通过严格的空间隔离与时间隔离，PRTOS 在单一硬件平台上实现多应用的安全共存与高效协作，完全消除应用间的相互干扰。
 
-在平台适配方面，PRTOS 充分利用了 ARMv8 (AArch64)、AMD64 (x86_64) 及 RISC-V (RV64) 的硬件辅助虚拟化扩展；同时，针对 32位 x86 及上述三大 64 位主流平台，PRTOS 均实现了完善的**半虚拟化（Para-virtualization）**支持，提供了极高的灵活性。
+PRTOS 的核心设计原则是 **确定性与静态配置**：CPU、内存、I/O 设备等关键资源在系统实例化时静态分配，调度采用预定义的循环调度表（Cyclic Scheduling Table），这使得系统行为完全可预测、可分析、可验证。关于这一设计原则的理论基础和工程实现，可参阅《[嵌入式 Hypervisor：架构、原理与应用](http://www.prtos.org/embedded_hypervisor_book/)》的详细论述。
 
-PRTOS 将分区定义为独立的执行环境，各分区依据预定义的循环调度表进行时分复用，并通过高效的消息传递机制进行通信。系统支持系统分区与标准分区两种类型，其中系统分区具备管理全局状态及其他分区的特权能力。此外，PRTOS 集成了细粒度的错误检测、故障管理、高级故障分析及高度可配置的健康监测系统，并提供实时跟踪服务以支持深度调试与行为监控。
-
-PRTOS 秉持“站在巨人肩膀上”的开源精神，深度借鉴了[XtratuM](https://en.wikipedia.org/wiki/XtratuM), [Xen Hypervisor](https://xenproject.org/),  [Lguest Hypervisor](http://lguest.ozlabs.org), 以及[Linux Kernel](https://www.linux.org/ ) 等优秀项目的技术精华，并以 GPL 许可证正式发布。为了帮助开发者深入探索其内核奥秘，配套著作[《嵌入式Hypervisor：架构、原理与应用》](https://item.jd.com/10106992272683.html)详细阐述了 PRTOS 的设计与实现。我们诚邀广大技术爱好者加入 PRTOS 开源社区，共同推动系统在 ARMv8、RISC-V 架构支持及多样化分区应用适配上的演进与成长。
-
+PRTOS 项目遵循开源精神，在技术上吸收了 [XtratuM](https://en.wikipedia.org/wiki/XtratuM)、[Xen Hypervisor](https://xenproject.org/)、[Lguest Hypervisor](http://lguest.ozlabs.org) 及 [Linux Kernel](https://www.linux.org/) 的设计理念，以 GPL 许可证发布。
 
 ## 2. PRTOS Hypervisor 架构
 
-PRTOS Hypervisor架构如下：
+PRTOS Hypervisor 架构如下：
 
 ![architecturezh](./doc/figures/prtos_architecture_zh.jpg)
 
@@ -32,11 +28,11 @@ PRTOS Hypervisor源代码目录结构如下图所示：
 | ------------  | -------------------------------------------------------|
 | core          | PRTOS Hypervisor核心源码。                              |
 | scripts       | 配置PRTOS Hypervisor的辅助工具。                         |
-| user          | 用户级别工具。                                           |
+| user/tools    | 用户级别工具。                                           |
 | user/bail     | 用户裸机应用程序接口库。                                  |
 | doc           | 相关文档。                                               |
 
-**NOTE**:BAIL（Bare-metal Application Interface Library）是一个用于在PRTOS Hypervisor之上直接开发C程序的最小分区开发环境。BAIL提供了建立基本的"C"执行环境所需的基本服务。BAIL适用于那些不需要操作系统的分区、以及测试PROTS提供的超级调用服务接口。
+> **说明**：BAIL（Bare-metal Application Interface Library）是一个用于在 PRTOS Hypervisor 之上直接开发 C 程序的最小分区开发环境。BAIL 提供了建立基础 C 执行环境所需的基本服务，适用于不需要操作系统、仅需测试 PRTOS 超级调用接口的分区。
 
 ## 5. 硬件支持
 
@@ -169,7 +165,7 @@ processor       : 3
 sudo apt-get install -y qemu-system-x86 grub-pc-bin
 
 ```
-NOTE：
+> **说明**：
 在 AMD64 硬件虚拟化测试中，QEMU 需要通过 `-enable-kvm` 选项利用宿主机的 `KVM` 模块进行加速。为确保测试顺利运行，请务必将当前用户加入 `kvm` 权限组：
 
 ```

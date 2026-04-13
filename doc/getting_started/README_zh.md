@@ -48,7 +48,7 @@ make run.<arch>                        # arch: x86, aarch64, riscv64, amd64
 
 ## 延伸阅读
 
-- [PRTOS Technical Report (中文)](../design/prtos_tech_report.md) / [English](../design/prtos_tech_report_en.md)
+- [PRTOS Technical Report (中文)](../design/prtos_tech_report_zh.md) / [English](../design/prtos_tech_report.md)
 - [调试指南](../debug/how_to_debug_prtos_hypervisor_and_assistant_tools.md)
 - [贡献指南](../contribution_guide/contribution_guide.md)
 - 配套书籍：[*Embedded Hypervisor: Architecture, Principles, and Implementation*](http://www.prtos.org/embedded_hypervisor_book/)
