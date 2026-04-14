@@ -1,5 +1,7 @@
 # Virtio Linux 演示 - 双 SMP 分区（RISC-V 64）
+
 [English](README.md) | **中文**
+
 ## 概述
 
 本演示展示了在 PRTOS Type-1 管理程序上基于 RISC-V 64 位平台（支持硬件辅助虚拟化 H 扩展）的 **Virtio 设备虚拟化**，两个 SMP Linux 分区通过共享内存进行通信。
@@ -43,45 +45,45 @@
 
 ## 内存布局
 
-| 区域                | 物理地址起始  | 大小   | 物理地址结束  |
-|---------------------|-------------|--------|--------------|
-| OpenSBI 固件        | 0x80000000  | 352KB  | 0x80057FFF   |
-| RSW 引导程序        | 0x80200000  | 512KB  | 0x8027FFFF   |
-| PRTOS 管理程序      | 0x84000000  | 64MB   | 0x87FFFFFF   |
-| 系统分区            | 0x88000000  | 128MB  | 0x8FFFFFFF   |
-| 客户分区            | 0x90000000  | 128MB  | 0x97FFFFFF   |
-| 共享内存            | 0x98000000  | ~5.25MB| 0x9853FFFF   |
-| **QEMU 内存总量**   |             | 1GB    |              |
+| 区域              | 物理地址起始 | 大小    | 物理地址结束  |
+|-------------------|-------------|---------|--------------|
+| OpenSBI 固件      | 0x80000000  | 352KB   | 0x80057FFF   |
+| RSW 引导程序      | 0x80200000  | 512KB   | 0x8027FFFF   |
+| PRTOS 管理程序    | 0x84000000  | 64MB    | 0x87FFFFFF   |
+| 系统分区          | 0x88000000  | 128MB   | 0x8FFFFFFF   |
+| 客户分区          | 0x90000000  | 128MB   | 0x97FFFFFF   |
+| 共享内存          | 0x98000000  | ~5.25MB | 0x9853FFFF   |
+| **QEMU 内存总量** |             | 1GB     |              |
 
 **注意**：容器（PRTOS + 分区 PEF）嵌入在 RSW 二进制文件的 0x80280000 处。两个完整 Linux 分区（各约 38MB）会使容器超过 PRTOS 起始地址 0x84000000 之前的 61.5MB 间隙。PEF 压缩（`-c` 标志）将每个 PEF 缩减至约 25MB，使容器保持在限制范围内。根文件系统 CPIO 覆盖层同样经过 gzip 压缩。
 
 ## 共享内存布局（5 个区域）
 
-| 区域        | 物理地址起始  | 大小   | 描述                          |
-|------------|-------------|--------|-------------------------------|
-| Virtio_Net0 | 0x98000000  | 1MB    | virtio-net 桥接 (TAP 后端)    |
-| Virtio_Net1 | 0x98100000  | 1MB    | virtio-net NAT (环回)         |
-| Virtio_Net2 | 0x98200000  | 1MB    | virtio-net 点对点 (环回)      |
-| Virtio_Blk  | 0x98300000  | 2MB    | virtio-blk (文件或内存盘)     |
-| Virtio_Con  | 0x98500000  | 256KB  | virtio-console (字符环形缓冲) |
+| 区域        | 物理地址起始 | 大小  | 描述                           |
+|------------|-------------|-------|--------------------------------|
+| Virtio_Net0 | 0x98000000 | 1MB   | virtio-net 桥接 (TAP 后端)     |
+| Virtio_Net1 | 0x98100000 | 1MB   | virtio-net NAT (环回)          |
+| Virtio_Net2 | 0x98200000 | 1MB   | virtio-net 点对点 (环回)       |
+| Virtio_Blk  | 0x98300000 | 2MB   | virtio-blk (文件或内存盘)      |
+| Virtio_Con  | 0x98500000 | 256KB | virtio-console (字符环形缓冲)  |
 
 ## CPU 分配（SMP）
 
-| 物理CPU  | 分区            | 虚拟CPU  |
-|---------|-----------------|---------|
-| pCPU 0  | 系统 (P0)       | vCPU 0  |
-| pCPU 1  | 系统 (P0)       | vCPU 1  |
-| pCPU 2  | 客户 (P1)       | vCPU 0  |
-| pCPU 3  | 客户 (P1)       | vCPU 1  |
+| 物理CPU | 分区          | 虚拟CPU |
+|---------|---------------|---------|
+| pCPU 0  | 系统 (P0)     | vCPU 0  |
+| pCPU 1  | 系统 (P0)     | vCPU 1  |
+| pCPU 2  | 客户 (P1)     | vCPU 0  |
+| pCPU 3  | 客户 (P1)     | vCPU 1  |
 
 调度器：10ms 主帧，专用 pCPU 映射。
 
 ## 控制台分配
 
-| 分区   | 控制台          | 访问方式                     |
-|--------|----------------|------------------------------|
-| 系统   | NS16550 UART   | 终端 (stdio)                 |
-| 客户   | 无             | 通过 `/dev/hvc0` 的 virtio-console |
+| 分区 | 控制台        | 访问方式                              |
+|------|---------------|---------------------------------------|
+| 系统 | NS16550 UART  | 终端 (stdio)                          |
+| 客户 | 无            | 通过 `/dev/hvc0` 的 virtio-console    |
 
 ## Virtio 设备
 
@@ -103,14 +105,14 @@
 
 ## 分区间通信（IPVI）
 
-| IPVI ID | 方向              | 用途                       |
-|---------|-------------------|---------------------------|
-| 0       | 客户 → 系统       | virtio-net0 门铃          |
-| 1       | 客户 → 系统       | virtio-net1 门铃          |
-| 2       | 客户 → 系统       | virtio-net2 门铃          |
-| 3       | 客户 → 系统       | virtio-blk 门铃           |
-| 4       | 客户 → 系统       | virtio-console 门铃       |
-| 5       | 系统 → 客户       | 完成通知                   |
+| IPVI ID | 方向            | 用途                     |
+|---------|-----------------|--------------------------|
+| 0       | 客户 → 系统     | virtio-net0 门铃         |
+| 1       | 客户 → 系统     | virtio-net1 门铃         |
+| 2       | 客户 → 系统     | virtio-net2 门铃         |
+| 3       | 客户 → 系统     | virtio-blk 门铃          |
+| 4       | 客户 → 系统     | virtio-console 门铃      |
+| 5       | 系统 → 客户     | 完成通知                 |
 
 两个**采样通道**提供控制面消息传递（各 8 字节）。
 
@@ -118,12 +120,12 @@
 
 ### 工作区布局
 
-| 组件 | 路径 |
-|------|------|
-| Linux 内核源码 | `/home/chenweis/hdd/Repo/linux_workspace/linux-6.19.9/` |
-| RISC-V Linux 工作区 | `/home/chenweis/hdd/Repo/riscv64_linux_workspace/` |
+| 组件                  | 路径                                                              |
+|-----------------------|-------------------------------------------------------------------|
+| Linux 内核源码        | `/home/chenweis/hdd/Repo/linux_workspace/linux-6.19.9/`           |
+| RISC-V Linux 工作区   | `/home/chenweis/hdd/Repo/riscv64_linux_workspace/`                |
 | RISC-V Buildroot 输出 | `/home/chenweis/hdd/Repo/riscv64_linux_workspace/buildroot_output/` |
-| Buildroot 源码 | `/home/chenweis/hdd/Repo/aarch64_linux_workspace/buildroot/` |
+| Buildroot 源码        | `/home/chenweis/hdd/Repo/aarch64_linux_workspace/buildroot/`      |
 
 ### 步骤 1：构建 Buildroot 根文件系统（RISC-V 64）
 
@@ -135,12 +137,12 @@ cd /home/chenweis/hdd/Repo/riscv64_linux_workspace/buildroot_output
 
 应用配置（`make menuconfig`）：
 
-| 配置选项 | 值 | 用途 |
-|---------|-----|------|
-| `BR2_TARGET_GENERIC_ROOT_PASSWD` | `1234` | Root 登录密码 |
-| `BR2_TARGET_ROOTFS_CPIO` | `y` | 生成 rootfs.cpio |
-| `BR2_PACKAGE_NBD` | `y` | NBD 客户端 |
-| `BR2_PACKAGE_NBD_CLIENT` | `y` | NBD 客户端二进制 |
+| 配置选项                          | 值         | 用途              |
+|-----------------------------------|------------|-------------------|
+| `BR2_TARGET_GENERIC_ROOT_PASSWD`  | `1234`     | Root 登录密码     |
+| `BR2_TARGET_ROOTFS_CPIO`          | `y`        | 生成 rootfs.cpio  |
+| `BR2_PACKAGE_NBD`                 | `y`        | NBD 客户端        |
+| `BR2_PACKAGE_NBD_CLIENT`          | `y`        | NBD 客户端二进制  |
 
 ```bash
 make -j$(nproc)
@@ -157,11 +159,11 @@ make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- defconfig
 
 应用额外配置（`make menuconfig`）：
 
-| 配置选项 | 值 | 用途 |
-|---------|-----|------|
-| `CONFIG_BLK_DEV_NBD` | `y` | NBD 块设备 |
-| `CONFIG_TUN` | `y` | TUN/TAP 设备 |
-| `CONFIG_INITRAMFS_SOURCE` | `/home/chenweis/hdd/Repo/riscv64_linux_workspace/buildroot_output/images/rootfs.cpio` | 嵌入根文件系统 |
+| 配置选项                | 值                                                                                                   | 用途           |
+|-------------------------|------------------------------------------------------------------------------------------------------|----------------|
+| `CONFIG_BLK_DEV_NBD`    | `y`                                                                                                  | NBD 块设备     |
+| `CONFIG_TUN`            | `y`                                                                                                  | TUN/TAP 设备   |
+| `CONFIG_INITRAMFS_SOURCE` | `/home/chenweis/hdd/Repo/riscv64_linux_workspace/buildroot_output/images/rootfs.cpio`               | 嵌入根文件系统 |
 
 ```bash
 make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- -j$(nproc) Image
@@ -198,6 +200,7 @@ make run.riscv64
 通过 OpenSBI（`-bios default`）+ QEMU `-kernel` 直接加载启动。系统分区的 NS16550 UART 输出到标准输入输出。
 
 ### 手动 QEMU 命令
+
 ```bash
 qemu-system-riscv64 \
     -machine virt \
@@ -221,6 +224,7 @@ make run.riscv64
 ```
 
 ### 步骤 2：启动系统分区（UART/标准输入输出）
+
 系统通过 `S99virtio_backend` 自动启动 `prtos_manager` 和 `virtio_backend`（输出重定向至 `/var/log/`）：
 ```
 === PRTOS System Partition ===
@@ -241,6 +245,7 @@ telnet 127.0.0.1 4321
 > **注意**：RISC-V QEMU virt 仅有一个 NS16550 UART。客户控制台需通过系统分区的 shell 使用 virtio-console TCP 桥接访问。
 
 ### 步骤 4：测试 Virtio 设备（客户分区）
+
 ```bash
 /opt/virtio_test.sh   # 自动测试所有 virtio 设备
 ```
@@ -280,31 +285,31 @@ bash scripts/run_test.sh --arch riscv64 check-all
 
 ## 文件结构
 
-| 文件/目录 | 描述 |
-|-----------|------|
-| `config/resident_sw.xml` | PRTOS 系统配置 |
-| `Makefile` | 构建系统 |
-| `start_system.S` | 系统分区启动桩（RISC-V 启动协议） |
-| `start_guest.S` | 客户分区启动桩 |
-| `hdr_system.c` / `hdr_guest.c` | PRTOS 镜像头 |
-| `linker_system.ld` | 链接脚本（基址 `0x88000000`，initrd 在 +64MB） |
-| `linker_guest.ld` | 链接脚本（基址 `0x90000000`，initrd 在 +64MB） |
-| `linux_system.dts` | 设备树（128MB, 2 CPU, NS16550 UART） |
-| `linux_guest.dts` | 设备树（128MB, 2 CPU, 无 UART） |
-| `set_serial_poll.c` | 串口轮询模式工具 |
-| `test_login.py` | 自动测试：QEMU 启动、UART 登录、`uname` 检查 |
-| `test_com2.py` | 自动测试：通过系统分区 TCP 桥接访问客户控制台 |
-| `test_console.py` | 控制台测试：干净输出（无后端噪声）、telnet 退格 + Tab 补全 |
-| **`system_partition/`** | |
-| `  include/virtio_be.h` | 共享数据结构（地址在 0x98xxxxxx） |
-| `  src/` | 后端守护进程源码 |
-| `  rootfs_overlay/` | 系统 init 脚本 |
-| **`lib_prtos_manager/`** | |
-| `  include/prtos_hv.h` | 超级调用 API（ecall 桩，邮箱在 0x98500000） |
-| `  common/` | 管理器和超级调用实现 |
-| **`guest_partition/`** | |
-| `  src/virtio_frontend.c` | 用户空间前端守护进程 |
-| `  rootfs_overlay/` | 客户 init 脚本和测试脚本 |
+| 文件/目录                   | 描述                                                    |
+|-----------------------------|---------------------------------------------------------|
+| `config/resident_sw.xml`    | PRTOS 系统配置                                          |
+| `Makefile`                  | 构建系统                                                |
+| `start_system.S`            | 系统分区启动桩（RISC-V 启动协议）                       |
+| `start_guest.S`             | 客户分区启动桩                                          |
+| `hdr_system.c` / `hdr_guest.c` | PRTOS 镜像头                                         |
+| `linker_system.ld`          | 链接脚本（基址 `0x88000000`，initrd 在 +64MB）          |
+| `linker_guest.ld`           | 链接脚本（基址 `0x90000000`，initrd 在 +64MB）          |
+| `linux_system.dts`          | 设备树（128MB, 2 CPU, NS16550 UART）                    |
+| `linux_guest.dts`           | 设备树（128MB, 2 CPU, 无 UART）                         |
+| `set_serial_poll.c`         | 串口轮询模式工具                                        |
+| `test_login.py`             | 自动测试：QEMU 启动、UART 登录、`uname` 检查            |
+| `test_com2.py`              | 自动测试：通过系统分区 TCP 桥接访问客户控制台            |
+| `test_console.py`           | 控制台测试：干净输出（无后端噪声）、telnet 退格 + Tab 补全 |
+| **`system_partition/`**     |                                                         |
+| `  include/virtio_be.h`     | 共享数据结构（地址在 0x98xxxxxx）                       |
+| `  src/`                    | 后端守护进程源码                                        |
+| `  rootfs_overlay/`         | 系统 init 脚本                                          |
+| **`lib_prtos_manager/`**    |                                                         |
+| `  include/prtos_hv.h`      | 超级调用 API（ecall 桩，邮箱在 0x98500000）             |
+| `  common/`                 | 管理器和超级调用实现                                    |
+| **`guest_partition/`**      |                                                         |
+| `  src/virtio_frontend.c`   | 用户空间前端守护进程                                    |
+| `  rootfs_overlay/`         | 客户 init 脚本和测试脚本                                |
 
 ## 依赖
 
