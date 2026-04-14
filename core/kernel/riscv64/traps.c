@@ -82,16 +82,6 @@ void riscv64_trap_handler(struct cpu_user_regs *regs) {
             /* Clear timer interrupt pending */
             __asm__ __volatile__("csrc sip, %0" : : "r"(1UL << 5));
 
-            /* Debug: periodic guest PC dump */
-            {
-                static unsigned long tmr_cnt = 0;
-                tmr_cnt++;
-                if (tmr_cnt == 1 || tmr_cnt == 100 || tmr_cnt == 1000 ||
-                    tmr_cnt == 10000 || tmr_cnt == 100000 || (tmr_cnt % 500000 == 0)) {
-                    kprintf("[TMR] cpu%d #%lu sepc=0x%llx\n", GET_CPU_ID(), tmr_cnt, regs->sepc);
-                }
-            }
-
             /* If a guest partition uses SBI timer (hw-virt), inject VSTIP
              * (Virtual Supervisor Timer Interrupt Pending) via hvip so the
              * guest's vstvec handler is invoked on sret. The guest will

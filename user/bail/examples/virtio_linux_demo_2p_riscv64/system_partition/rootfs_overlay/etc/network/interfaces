@@ -1,0 +1,6 @@
+# PRTOS System Partition network config
+# eth0 DHCP disabled — no physical NIC inside partition.
+# TAP interfaces (tap0-tap2) are configured by S99virtio_backend.
+
+auto lo
+iface lo inet loopback

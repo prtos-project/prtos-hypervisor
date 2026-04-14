@@ -111,7 +111,7 @@ echo ""
 echo "--- Shared Memory Check ---"
 echo "[Guest] Checking shared memory regions:"
 if [ -c /dev/mem ]; then
-    for addr in 0x16000000 0x16100000 0x16200000 0x16300000 0x16500000; do
+    for addr in 0x98000000 0x98100000 0x98200000 0x98300000 0x98500000; do
         MAGIC=$(devmem $addr 32 2>/dev/null)
         if [ $? -eq 0 ] && [ -n "$MAGIC" ]; then
             echo "  $addr: magic=$MAGIC"
