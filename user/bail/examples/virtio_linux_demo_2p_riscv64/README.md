@@ -1,5 +1,5 @@
 # Virtio Linux Demo - 2 SMP Partitions (RISC-V 64)
-
+**English** | [中文](README_zh.md)
 ## Overview
 
 This demo demonstrates **Virtio device virtualization** on the PRTOS Type-1 Hypervisor using two SMP Linux partitions communicating through shared memory on the RISC-V 64-bit platform with hardware-assisted virtualization (H-extension).
