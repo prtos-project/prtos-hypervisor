@@ -150,13 +150,16 @@ prtos_manager: $(MGR_OBJS)
 # ============================================================================
 
 rootfs_overlay.cpio: prtos_manager virtio_backend \
-                     system_partition/rootfs_overlay/etc/init.d/S99virtio_backend
+                     system_partition/rootfs_overlay/etc/init.d/S99virtio_backend \
+                     system_partition/rootfs_overlay/etc/network/interfaces
 	@rm -rf _overlay_root
 	@mkdir -p _overlay_root/usr/bin
 	@mkdir -p _overlay_root/etc/init.d
+	@mkdir -p _overlay_root/etc/network
 	@cp prtos_manager  _overlay_root/usr/bin/
 	@cp virtio_backend _overlay_root/usr/bin/
 	@cp system_partition/rootfs_overlay/etc/init.d/S99virtio_backend _overlay_root/etc/init.d/
+	@cp system_partition/rootfs_overlay/etc/network/interfaces _overlay_root/etc/network/
 	@chmod 755 _overlay_root/usr/bin/prtos_manager
 	@chmod 755 _overlay_root/usr/bin/virtio_backend
 	@chmod 755 _overlay_root/etc/init.d/S99virtio_backend
