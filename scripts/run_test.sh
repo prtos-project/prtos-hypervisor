@@ -5,6 +5,33 @@ unset LANG
 unset LC_ALL
 unset LC_COLLATE
 
+# Colors for output (defined early for cleanup function)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# ── Setup cleanup handler ──────────────────────────────────────────────────────
+# Ensure all QEMU processes are terminated on script exit (normal or error)
+function cleanup_qemu_processes() {
+    local qemu_procs=("qemu-system-i386" "qemu-system-x86_64" "qemu-system-aarch64" "qemu-system-riscv64")
+    local killed_count=0
+    
+    for qemu_bin in "${qemu_procs[@]}"; do
+        local count=$(pgrep -f "^${qemu_bin}" 2>/dev/null | wc -l | tr -d ' ')
+        if [[ ${count} -gt 0 ]]; then
+            pkill -9 -f "^${qemu_bin}" 2>/dev/null || true
+            ((killed_count += count))
+        fi
+    done
+    
+    if [[ ${killed_count} -gt 0 ]]; then
+        echo -e "${YELLOW}[CLEANUP]${NC} Terminated ${killed_count} QEMU process(es)" >&2
+    fi
+}
+
+trap cleanup_qemu_processes EXIT INT TERM
+
 PROGNAME="$(basename "${0}")"
 ARCH=""
 BUILDER=""
@@ -41,12 +68,6 @@ ALL_CASES=(
     "virtio_linux_demo_2p_riscv64:0:480:riscv64"
     "virtio_linux_demo_2p_amd64:0:480:amd64"
 )
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
 
 function usage() {
 cat <<EOF
@@ -1489,6 +1510,14 @@ check-*)
     if [[ -z "${case_name}" ]]; then
         echo "Error: '${BUILDER}' is not a known test command"
         usage
+        exit 1
+    fi
+
+    # Lookup test case config to check architecture compatibility
+    lookup_case "${case_name}"
+    if [[ -n "${CASE_ARCH}" ]] && ! echo ",${CASE_ARCH}," | grep -q ",${ARCH},"; then
+        echo "Error: Test case '${case_name}' only supports: ${CASE_ARCH} (current: ${ARCH})"
+        echo "Please use: ${PROGNAME} --arch <$(echo ${CASE_ARCH} | sed 's/,/|/g')> ${BUILDER}"
         exit 1
     fi
 
