@@ -156,7 +156,9 @@ EXTRA_CLEAN_FILES = \
 	user/bail/examples/example.007/resident_sw_image \
 	user/bail/examples/example.008/obj_exc_elf \
 	user/bail/examples/example.008/resident_sw_image \
-	user/bootloaders/rsw/aarch64/rsw.lds
+	user/bootloaders/rsw/aarch64/rsw.lds \
+	user/bail/examples/linux_4vcpu_1partition_riscv64/Image \
+	user/bail/examples/mix_os_demo_riscv64/Image
 
 scripts: 
 	@exec echo -e "\n> Building Kconfig:";
