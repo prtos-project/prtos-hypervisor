@@ -155,6 +155,7 @@ out:
     arm_ktimer(&cyclic->ktimer, cyclic->next_act, 0);
     slot_table_entry = plan->slots_offset + cyclic->slot;
 
+
     if (new_kthread && new_kthread->ctrl.g) {
         new_kthread->ctrl.g->op_mode = PRTOS_OPMODE_NORMAL;
         new_kthread->ctrl.g->part_ctrl_table->cyclic_sched_info.num_of_slots = cyclic->slot;
@@ -257,5 +258,10 @@ void schedule(void) {
 
         switch_kthread_arch_post(info->sched.current_kthread);
     }
+#ifdef CONFIG_loongarch64
+    /* LoongArch: clear IE before restoring flags to prevent reentrant
+     * scheduling during the register-restore window before ret. */
+    hw_flags &= ~(1UL << 2);
+#endif
     hw_restore_flags(hw_flags);
 }

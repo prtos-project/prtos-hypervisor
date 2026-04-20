@@ -119,12 +119,12 @@ void reset_system(prtos_u32_t reset_mode) {
     raise_audit_event(TRACE_SCHED_MODULE, AUDIT_SCHED_HYP_RESET, 1, (prtos_word_t *)&reset_mode);
 #endif
     if ((reset_mode & PRTOS_RESET_MODE) == PRTOS_WARM_RESET) {
-#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64) && !defined(CONFIG_loongarch64)
         _reset((prtos_address_t)start);
 #endif
     } else {  // Cold reset
         sys_reset_counter[0] = 0;
-#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64) && !defined(CONFIG_loongarch64)
         _reset((prtos_address_t)start);
 #endif
     }
@@ -265,6 +265,13 @@ void __VBOOT init_secondary_cpu(prtos_s32_t cpu_id, kthread_t *idle) {
     local_setup(cpu_id, idle);
     barrier_wait(&smp_start_barrier);
     GET_LOCAL_PROCESSOR()->sched.flags |= LOCAL_SCHED_ENABLED;
+#ifdef CONFIG_loongarch64
+    {
+        prtos_address_t new_sp = (prtos_address_t)&idle->kstack[CONFIG_KSTACK_SIZE];
+        extern void _enter_idle_on_own_stack(prtos_address_t sp) __attribute__((noreturn));
+        _enter_idle_on_own_stack(new_sp);
+    }
+#endif
     schedule();
     idle_task();
 }

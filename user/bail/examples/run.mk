@@ -94,4 +94,22 @@ run.amd64.kvm.nographic:
 
 run: run.$(ARCH)
 	
-.PHONY: run run.aarch64 run.aarch64.debug run.riscv64 run.x86 run.x86.nographic run.amd64 run.amd64.nographic run.amd64.kvm run.amd64.kvm.nographic run.amd64.demo run.amd64.demo.nat run.amd64.demo.legacy
+.PHONY: run run.aarch64 run.aarch64.debug run.riscv64 run.loongarch64 run.x86 run.x86.nographic run.amd64 run.amd64.nographic run.amd64.kvm run.amd64.kvm.nographic run.amd64.demo run.amd64.demo.nat run.amd64.demo.legacy
+
+# QEMU_LOONGARCH64: path to the QEMU executable for LoongArch64 architecture
+# Pls refer to https://github.com/prtos-project/prtos-hypervisor/wiki/Ubuntu-(24.04)-x86_64-host-to-install-loongarch64-cross-compielr to install qemu for LoongArch64 architecture.
+QEMU_LOONGARCH64=/home/chenweis/loongarch64_workspace/qemu-install/bin/qemu-system-loongarch64
+
+run.loongarch64:
+	@$(MAKE) clean
+	@$(MAKE) resident_sw
+	@echo "=== Starting QEMU (Use Ctrl+C to exit) ==="
+	@$(QEMU_LOONGARCH64) \
+		-machine virt \
+		-cpu max \
+		-smp 4 \
+		-m 2G \
+		-nographic -no-reboot \
+		-kernel resident_sw \
+		-monitor none \
+		-serial stdio

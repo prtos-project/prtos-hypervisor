@@ -1,0 +1,30 @@
+<SystemDescription xmlns="http://www.prtos.org/prtos-1.x" version="1.0.0" name="linux_debug_loongarch64">
+    <HwDescription>
+        <MemoryLayout>
+            <Region type="ram" start="0x0" size="512MB" />
+        </MemoryLayout>
+        <ProcessorTable>
+            <Processor id="0">
+                <CyclicPlanTable>
+                    <Plan id="0" majorFrame="100ms">
+                        <Slot id="0" start="0ms" duration="50ms" partitionId="0" vCpuId="0"/>
+                    </Plan>
+                </CyclicPlanTable>
+            </Processor>
+        </ProcessorTable>
+        <Devices>
+            <Uart id="0" baudRate="115200" name="Uart" />
+        </Devices>
+    </HwDescription>
+    <PRTOSHypervisor console="Uart">
+        <PhysicalMemoryArea size="32MB" />
+    </PRTOSHypervisor>
+    <PartitionTable>
+        <Partition id="0" name="Linux" flags="system" hw_virt="true" console="Uart">
+            <PhysicalMemoryAreas>
+                <Area start="0x06000000" size="128MB" />
+                <Area start="0x1FE00000" size="4KB" flags="uncacheable" />
+            </PhysicalMemoryAreas>
+        </Partition>
+    </PartitionTable>
+</SystemDescription>

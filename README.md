@@ -29,6 +29,7 @@ PRTOS is a lightweight real-time hypervisor. Its architecture is as follows:
 - [x] QEMU ARMv8 virt platform
 - [x] QEMU RISC-V virt platform
 - [x] QEMU 64bit X86 platform (AMD64)
+- [x] QEMU LoongArch64 virt platform
 
 **Plan to support platforms**
 - [x] Raspberry Pi 4b/5b Single-board Computer
@@ -251,6 +252,106 @@ System Partition NS16550 UART console on stdio. Login `root`/`1234`.
 
 See `user/bail/examples/virtio_linux_demo_2p_riscv64/README.md` for full documentation.
 
+#### 4.1.6 LoongArch64 Platform
+##### 4.1.6.1 Dependency Installation for LoongArch64
+
+```
+sudo apt-get install -y gcc-loongarch64-linux-gnu qemu-system-loongarch64
+```
+
+> **Note**: LoongArch64 uses trap-and-emulate para-virtualization. The guest Linux kernel runs at PLV3, with all privileged CSR/TLB/timer operations trapped and emulated by the PRTOS hypervisor.
+
+##### 4.1.6.2 Building Buildroot (rootfs)
+
+```bash
+cd /path/to/buildroot
+
+# Use QEMU LoongArch64 virt defconfig as a starting point
+make qemu_loongarch64_virt_efi_defconfig
+
+# Customize configuration
+make menuconfig
+# Set the following options:
+#   Target options -> Architecture: LoongArch (64-bit)
+#   Toolchain -> C library: musl
+#   Filesystem images -> cpio the root filesystem: [*]
+#   Target packages -> System tools -> htop: [*]  (optional)
+
+make -j$(nproc)
+```
+
+The rootfs CPIO image will be at `output/images/rootfs.cpio`.
+
+##### 4.1.6.3 Building Linux Kernel
+
+```bash
+cd /path/to/linux-6.19.9
+
+# Use loongson64 defconfig as base
+make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- loongson64_defconfig
+
+# Customize configuration
+make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- menuconfig
+# Set the following options:
+#   General setup -> Initial RAM filesystem and RAM disk support -> Initramfs source file(s):
+#     /path/to/buildroot/output/images/rootfs.cpio
+#   Device Drivers -> Input device support -> Hardware I/O ports -> i8042 PC Keyboard controller: [ ]
+#   Device Drivers -> Input device support -> Keyboards -> AT keyboard: [ ]
+#   Device Drivers -> Input device support -> Mice -> PS/2 mouse: [ ]
+#   Kernel hacking -> printk and dmesg options -> Enable dynamic printk() support: [ ]
+#   Boot options -> Built-in kernel command string:
+#     console=ttyS0,115200 earlycon mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp
+
+make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- vmlinux -j$(nproc)
+```
+
+##### 4.1.6.4 LoongArch64 Boot Loader
+
+LoongArch64 on PRTOS does **not** use U-Boot. Instead, PRTOS uses its own **RSW (Resident Software)** boot loader located at `user/bootloaders/rsw/loongarch64/`. The RSW is a lightweight stub that:
+
+1. Runs in Direct Address (DA) mode at reset
+2. Parses the PRTOS container image
+3. Loads the PRTOS hypervisor core and partition images
+4. Transfers control to the hypervisor
+
+QEMU's `-kernel resident_sw` option loads the RSW directly, which in turn boots the hypervisor and all partitions.
+
+##### 4.1.6.5 Compiling and Running PRTOS `linux-smp` partition with 4 `vCPU`
+
+```
+git clone https://github.com/prtos-project/prtos-hypervisor.git
+cd prtos-hypervisor
+cp prtos_config.loongarch64 prtos_config
+make defconfig
+make
+
+# Copy Linux kernel to example directory
+cp /path/to/linux-6.19.9/vmlinux \
+   user/bail/examples/linux_4vcpu_1partion_loongarch64/
+
+cd user/bail/examples/linux_4vcpu_1partion_loongarch64
+make clean && make
+make run.loongarch64
+```
+The output is as follows:
+
+```
+Welcome to Buildroot
+(none) login:
+```
+
+##### 4.1.6.6 Compiling and Running PRTOS `virtio_linux_demo_2p_loongarch64` (Dual SMP Linux + Virtio)
+```
+cd prtos-hypervisor
+cp prtos_config.loongarch64 prtos_config
+make defconfig
+make
+cd user/bail/examples/virtio_linux_demo_2p_loongarch64
+make run.loongarch64
+```
+
+See `user/bail/examples/virtio_linux_demo_2p_loongarch64/README.md` for full documentation.
+
 ### 4.2 Commands to Automatically Run Test Suites for All Platforms
 ```
 bash scripts/run_test.sh -h
@@ -435,6 +536,48 @@ The test report of run `bash scripts/run_test.sh --arch amd64 check-all` should 
   virtio_linux_demo_2p_amd64 PASS
 --------------------------------------
   Total: 27  Pass: 16  Fail: 0  Skip: 11
+======================================
+```
+
+The test report of run `bash scripts/run_test.sh --arch loongarch64 check-all` should be:
+```
+======================================
+  Test Report [loongarch64]
+======================================
+  example.001          PASS
+  example.002          PASS
+  example.003          PASS
+  example.004          PASS
+  example.005          PASS
+  example.006          PASS
+  example.007          PASS
+  example.008          PASS
+  example.009          PASS
+  helloworld           PASS
+  helloworld_smp       PASS
+  freertos_para_virt_aarch64 SKIP
+  freertos_hw_virt_aarch64 SKIP
+  freertos_para_virt_riscv SKIP
+  freertos_hw_virt_riscv SKIP
+  freertos_para_virt_amd64 SKIP
+  freertos_hw_virt_amd64 SKIP
+  linux_aarch64        SKIP
+  linux_4vcpu_1partion_aarch64 SKIP
+  linux_4vcpu_1partion_riscv64 SKIP
+  linux_4vcpu_1partion_amd64 SKIP
+  mix_os_demo_aarch64  SKIP
+  mix_os_demo_riscv64  SKIP
+  mix_os_demo_amd64    SKIP
+  virtio_linux_demo_2p_aarch64 SKIP
+  virtio_linux_demo_2p_riscv64 SKIP
+  virtio_linux_demo_2p_amd64 SKIP
+  freertos_para_virt_loongarch64 PASS
+  freertos_hw_virt_loongarch64 PASS
+  linux_4vcpu_1partion_loongarch64 PASS
+  mix_os_demo_loongarch64 PASS
+  virtio_linux_demo_2p_loongarch64 PASS
+--------------------------------------
+  Total: 32  Pass: 16  Fail: 0  Skip: 16
 ======================================
 ```
 

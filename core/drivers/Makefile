@@ -29,6 +29,10 @@ ifdef CONFIG_riscv64
 srcs-$(CONFIG_DEV_UART) += pc_uart.c
 endif
 
+ifdef CONFIG_loongarch64
+srcs-$(CONFIG_DEV_UART) += pc_uart.c
+endif
+
 srcs-$(CONFIG_DEV_MEMBLOCK) += memblock.c
 
 SRCS := $(srcs-y) $(srcs-m)

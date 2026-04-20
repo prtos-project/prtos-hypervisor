@@ -93,7 +93,7 @@ static const kdevice_t *get_mem_block(prtos_u32_t sub_id) {
 }
 
 prtos_s32_t __VBOOT init_mem_block(void) {
-#if defined(CONFIG_MMU) && !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
+#if defined(CONFIG_MMU) && !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64) && !defined(CONFIG_loongarch64)
     prtos_s32_t i, num_of_pages;
 #endif
     prtos_s32_t e;
@@ -124,6 +124,10 @@ prtos_s32_t __VBOOT init_mem_block(void) {
             mem_block_data[e].addr = (prtos_address_t)prtos_ipa_to_va(
                 prtos_conf_phys_mem_area_table[prtos_conf_mem_block_table[e].physical_memory_areas_offset].start_addr);
         }
+#elif defined(CONFIG_loongarch64)
+        /* On loongarch64, use DMW cached window to access physical memory directly. */
+        mem_block_data[e].addr = (prtos_address_t)_PHYS2VIRT(
+            prtos_conf_phys_mem_area_table[prtos_conf_mem_block_table[e].physical_memory_areas_offset].start_addr);
 #else
         num_of_pages = SIZE2PAGES(prtos_conf_phys_mem_area_table[prtos_conf_mem_block_table[e].physical_memory_areas_offset].size);
         if (!(mem_block_data[e].addr = vmm_alloc(num_of_pages))) {

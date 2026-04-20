@@ -1,0 +1,64 @@
+/dts-v1/;
+
+/ {
+	#address-cells = <0x02>;
+	#size-cells = <0x02>;
+	compatible = "linux,dummy-loongson3";
+	model = "prtos-loongarch64-virt";
+
+	cpus {
+		#address-cells = <0x01>;
+		#size-cells = <0x00>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "loongarch,loongson-64bit";
+			reg = <0x00>;
+			phandle = <0x01>;
+		};
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+                reg = <0x00 0x80000000 0x00 0x20000000>;
+	};
+
+	cpuic: interrupt-controller {
+		compatible = "loongson,cpu-interrupt-controller";
+		#interrupt-cells = <0x01>;
+		interrupt-controller;
+		phandle = <0x8001>;
+	};
+
+	eiointc: eiointc {
+		compatible = "loongson,ls2k2000-eiointc";
+		#interrupt-cells = <0x01>;
+		interrupt-controller;
+		interrupt-parent = <&cpuic>;
+		interrupts = <0x03>;
+		phandle = <0x8002>;
+	};
+
+	pch_pic: interrupt-controller@10000000 {
+		compatible = "loongson,pch-pic-1.0";
+		reg = <0x00 0x10000000 0x00 0x400>;
+		#interrupt-cells = <0x02>;
+		interrupt-controller;
+		interrupt-parent = <&eiointc>;
+		loongson,pic-base-vec = <0x00>;
+		phandle = <0x8003>;
+	};
+
+	chosen {
+		bootargs = "console=ttyS0,115200 earlycon mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp";
+		stdout-path = "/serial@1fe001e0";
+	};
+
+	serial@1fe001e0 {
+		compatible = "ns16550a";
+		reg = <0x00 0x1fe001e0 0x00 0x100>;
+		clock-frequency = <100000000>;
+		interrupt-parent = <&pch_pic>;
+		interrupts = <0x02 0x04>;
+	};
+};

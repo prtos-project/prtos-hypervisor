@@ -158,7 +158,14 @@ EXTRA_CLEAN_FILES = \
 	user/bail/examples/example.008/resident_sw_image \
 	user/bootloaders/rsw/aarch64/rsw.lds \
 	user/bail/examples/linux_4vcpu_1partition_riscv64/Image \
-	user/bail/examples/mix_os_demo_riscv64/Image
+	user/bail/examples/mix_os_demo_riscv64/Image \
+	user/bail/examples/freertos_hw_virt_loongarch64/freertos_hw_virt_loongarch64.output \
+	user/bail/examples/freertos_hw_virt_loongarch64/partition \
+	user/bail/examples/freertos_hw_virt_loongarch64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/freertos_para_virt_loongarch64/freertos_para_virt_loongarch64.output \
+	user/bail/examples/freertos_para_virt_loongarch64/partition \
+	user/bail/examples/freertos_para_virt_loongarch64/prtos_cf.bin.prtos_conf \
+	user/bail/examples/mix_os_demo_loongarch64/partition_freertos
 
 scripts: 
 	@exec echo -e "\n> Building Kconfig:";

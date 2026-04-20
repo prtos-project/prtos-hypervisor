@@ -81,6 +81,15 @@ void error_printf(char *fmt, ...) {
 #define PRINT_PREF
 #endif
 
+#if defined(CONFIG_loongarch64)
+#ifndef EM_LOONGARCH
+#define EM_LOONGARCH 258
+#endif
+#define EM_ARCH EM_LOONGARCH
+#define ELF(x) Elf64_##x
+#define PRINT_PREF
+#endif
+
 static int parse_elf_image(int fd_elf) {
     struct prtos_image_hdr *prtos_image_hdr = 0;
     struct pef_segment *pef_sect;
@@ -121,6 +130,11 @@ static int parse_elf_image(int fd_elf) {
                          "Rebuild prtoseformat for the correct architecture (make distclean && make)",
                          elf_class == ELFCLASS32 ? "32-bit (ELFCLASS32)" : "unknown");
 #elif defined(CONFIG_riscv64)
+        if (elf_class != ELFCLASS64)
+            error_printf("ELF class mismatch: expected 64-bit (ELFCLASS64) but got %s. "
+                         "Rebuild prtoseformat for the correct architecture (make distclean && make)",
+                         elf_class == ELFCLASS32 ? "32-bit (ELFCLASS32)" : "unknown");
+#elif defined(CONFIG_loongarch64)
         if (elf_class != ELFCLASS64)
             error_printf("ELF class mismatch: expected 64-bit (ELFCLASS64) but got %s. "
                          "Rebuild prtoseformat for the correct architecture (make distclean && make)",

@@ -46,6 +46,9 @@ extern void setup_smp(void);
 #elif defined(CONFIG_riscv64)
 #define CROSS_CPU_SCHED_NOTIFY(cpu) riscv_send_ipi_to(cpu)
 #define smp_halt_all() riscv_send_ipi_all_others()
+#elif defined(CONFIG_loongarch64)
+#define CROSS_CPU_SCHED_NOTIFY(cpu) loongarch_send_ipi_to(cpu)
+#define smp_halt_all() loongarch_send_ipi_all_others()
 #endif
 #endif
 

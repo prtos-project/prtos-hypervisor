@@ -204,7 +204,7 @@ struct prtos_conf_mem_block {
 };
 #endif
 
-#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_loongarch64) || defined(CONFIG_loongarch64)
 #define CONFIG_DEV_NO_UARTS 2
 #endif
 
@@ -218,7 +218,7 @@ struct prtos_conf_device {
         prtos_u32_t baud_rate;
     } uart[CONFIG_DEV_NO_UARTS];
 #endif
-#if defined(CONFIG_DEV_VGA) || defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#if defined(CONFIG_DEV_VGA) || defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_loongarch64) || defined(CONFIG_loongarch64)
     struct prtos_conf_vga_cfg {
     } vga;
 #endif

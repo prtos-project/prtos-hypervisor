@@ -193,6 +193,11 @@ void rsw_main(void) {
         /* Pass boot hartid in a0 so that PRTOS knows which hart is BSP */
         ((void (*)(prtos_u32_t))ADDR2PTR(hpv_entry_point[0]))(rsw_boot_hartid);
     }
+#elif defined(CONFIG_loongarch64)
+    {
+        extern prtos_u32_t rsw_boot_cpuid;
+        ((void (*)(prtos_u32_t))ADDR2PTR(hpv_entry_point[0]))(rsw_boot_cpuid);
+    }
 #elif defined(CONFIG_amd64)
     {
         /* The hypervisor start.S expects 32-bit protected mode entry.
