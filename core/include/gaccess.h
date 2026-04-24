@@ -27,8 +27,8 @@
 
 extern void *prtos_ipa_to_va(prtos_u64_t ipa);
 #define __arch_gp_to_va(ptr) prtos_ipa_to_va((prtos_u64_t)(prtos_address_t)(ptr))
-#elif defined(CONFIG_riscv64)
-/* RISC-V identity-mapped: guest pointers are physical addresses.
+#elif defined(CONFIG_riscv64) || defined(CONFIG_loongarch64)
+/* RISC-V/LoongArch identity-mapped: guest pointers are physical addresses.
  * The hypervisor is at CONFIG_PRTOS_OFFSET (low address) and partition
  * memory is above it, so the aarch64 check (param < OFFSET) would
  * incorrectly reject valid partition addresses. Accept all non-null
@@ -66,7 +66,7 @@ static inline prtos_s32_t __check_gp_param_impl(void *param, prtos_u_size_t size
     return ((flags & PFLAG_RW) ? asm_rw_check((prtos_address_t)param, size, alignment) : asm_ronly_check((prtos_address_t)param, size, alignment));
 }
 
-#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_loongarch64)
 /*
  * On AArch64/RISC-V, guest pointers are IPAs that must be translated.
  * This macro validates the pointer and then translates it in-place.

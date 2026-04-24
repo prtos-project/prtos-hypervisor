@@ -20,7 +20,7 @@
 #include <arch/prtos_def.h>
 
 void setup_pct_mm(partition_control_table_t *part_ctrl_table, kthread_t *k) {
-#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64) && !defined(CONFIG_loongarch64)
     part_ctrl_table->arch._ARCH_PTDL1_REG = k->ctrl.g->karch.ptd_level_1;
 #endif
 }

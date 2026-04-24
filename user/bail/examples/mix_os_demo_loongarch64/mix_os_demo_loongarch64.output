@@ -1,0 +1,31 @@
+Makefile:136: warning: overriding recipe for target 'clean'
+../..//common/rules.mk:98: warning: ignoring old recipe for target 'clean'
+make[1]: Entering directory '/home/chenweis/hdd/Repo/fork_os/prtos-hypervisor/user/bail/examples/mix_os_demo_loongarch64'
+Makefile:136: warning: overriding recipe for target 'clean'
+../..//common/rules.mk:98: warning: ignoring old recipe for target 'clean'
+make[1]: Leaving directory '/home/chenweis/hdd/Repo/fork_os/prtos-hypervisor/user/bail/examples/mix_os_demo_loongarch64'
+make[1]: Entering directory '/home/chenweis/hdd/Repo/fork_os/prtos-hypervisor/user/bail/examples/mix_os_demo_loongarch64'
+Makefile:136: warning: overriding recipe for target 'clean'
+../..//common/rules.mk:98: warning: ignoring old recipe for target 'clean'
+mkdir -p obj/
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ ../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/queue.c -o obj/queue.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ ../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/list.c -o obj/list.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ ../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/tasks.c -o obj/tasks.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ ../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/timers.c -o obj/timers.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ ../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/portable/MemMang/heap_1.c -o obj/heap_1.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ ../freertos_para_virt_riscv/port.c -o obj/port.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ ../freertos_para_virt_riscv/portASM.S -o obj/portASM.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ main.c -o obj/main.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ hdr_freertos.c -o obj/hdr_freertos.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ uart.c -o obj/uart.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ ../freertos_para_virt_riscv/start.S -o obj/start.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ ../freertos_para_virt_riscv/tick_config.c -o obj/tick_config.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ ../freertos_para_virt_riscv/printf-stdarg.c -o obj/printf-stdarg.o
+riscv64-linux-gnu-gcc -c -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -Wall -Wextra -g -DGUEST -I./include -I../freertos_para_virt_riscv/include -I../native_freertos_run_on_qemu_risc64_virt/FreeRTOS/Source/include/ ../freertos_para_virt_riscv/nostdlib.c -o obj/nostdlib.o
+riscv64-linux-gnu-ld -T linker_freertos.ld obj/queue.o obj/list.o obj/tasks.o obj/timers.o obj/heap_1.o obj/port.o obj/portASM.o obj/main.o obj/hdr_freertos.o obj/uart.o obj/start.o obj/tick_config.o obj/printf-stdarg.o obj/nostdlib.o /usr/lib/gcc-cross/riscv64-linux-gnu/13/libgcc.a -o partition_freertos
+riscv64-linux-gnu-ld: warning: partition_freertos has a LOAD segment with RWX permissions
+/home/chenweis/hdd/Repo/fork_os/prtos-hypervisor/user/bin/prtoseformat build partition_freertos -c -o partition_freertos.pef
+prtoseformat: Malformed ELF header (e_type=2, e_machine=243 expected=258, e_phentsize=56 expected=56)
+make[1]: *** [../..//common/rules.mk:76: partition_freertos.pef] Error 2
+make[1]: Leaving directory '/home/chenweis/hdd/Repo/fork_os/prtos-hypervisor/user/bail/examples/mix_os_demo_loongarch64'
+make: *** [../run.mk:103: run.loongarch64] Error 2

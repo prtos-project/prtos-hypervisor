@@ -22,7 +22,7 @@
 #include <arch/asm.h>
 #include <arch/prtos_def.h>
 
-#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_loongarch64)
 extern void setup_stage2_mmu(kthread_t *k);
 #endif
 #ifdef CONFIG_AARCH64
@@ -106,12 +106,22 @@ void start_up_guest(prtos_address_t entry) {
 #ifdef CONFIG_riscv64
     setup_stage2_mmu(k);
 #endif
+#ifdef CONFIG_loongarch64
+    setup_stage2_mmu(k);
+#endif
     switch_kthread_arch_post(k);
 #endif
 
 #ifdef CONFIG_riscv64
     /* SBI HSM secondary vCPU boot: jump to HSM entry point instead of
      * partition entry.  hsm_entry is set by prtos_sbi_hsm_hart_start(). */
+    if (k->ctrl.g->karch.hsm_entry != 0) {
+        JMP_PARTITION_HSM(k);
+        /* unreachable */
+    }
+#endif
+#ifdef CONFIG_loongarch64
+    /* IOCSR HSM secondary vCPU boot */
     if (k->ctrl.g->karch.hsm_entry != 0) {
         JMP_PARTITION_HSM(k);
         /* unreachable */
@@ -130,6 +140,15 @@ void start_up_guest(prtos_address_t entry) {
     }
 #endif
     load_part_page_table(k);
+#endif
+#ifdef CONFIG_loongarch64
+    {
+        prtos_u64_t dmw0, dmw1;
+        __asm__ __volatile__("csrrd %0, 0x180" : "=r"(dmw0));
+        __asm__ __volatile__("csrrd %0, 0x181" : "=r"(dmw1));
+        kprintf("[PRTOS] DMW0=0x%llx DMW1=0x%llx\n",
+                (unsigned long long)dmw0, (unsigned long long)dmw1);
+    }
 #endif
     JMP_PARTITION(entry, k);
 
@@ -275,6 +294,11 @@ partition_t *create_partition(struct prtos_conf_part *cfg) {
         k->ctrl.g->karch.hsm_entry = 0;
         k->ctrl.g->karch.hsm_opaque = 0;
 #endif
+#ifdef CONFIG_loongarch64
+        /* Initialize IOCSR HSM fields */
+        k->ctrl.g->karch.hsm_entry = 0;
+        k->ctrl.g->karch.hsm_opaque = 0;
+#endif
 #ifdef CONFIG_VMX
         /* Setup VMX for hw-virt partitions (explicit hw_virt flag). */
         if (i == 0) {
@@ -360,7 +384,7 @@ void reset_kthread(kthread_t *k, prtos_address_t ptd_level_1, prtos_address_t en
     setup_pct(k->ctrl.g->part_ctrl_table, k, get_partition(k)->cfg);
     k->ctrl.g->part_ctrl_table->reset_counter++;
     k->ctrl.g->part_ctrl_table->reset_status = status;
-#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64) && !defined(CONFIG_loongarch64)
 #ifdef CONFIG_VMX
     if (!k->ctrl.g->karch.vmx) {
 #endif
@@ -410,7 +434,7 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
     extern void reset_part_ports(partition_t * p);
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     struct prtos_conf_boot_part *prtos_conf_boot_part;
-#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64) && !defined(CONFIG_loongarch64)
     struct prtos_image_hdr *prtos_image_hdr = 0;
 #endif
     prtos_address_t ptd_level_1;
@@ -422,7 +446,7 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
     // Is partition image valid?
     if (!(prtos_conf_boot_part->flags & PRTOS_PART_BOOT)) return -1;
 
-#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_loongarch64)
     /* AArch64/RISC-V: physmm functions are not implemented; skip physical validation. */
     ptd_level_1 = 0;
 #else
@@ -495,7 +519,7 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
             p->op_mode = PRTOS_OPMODE_COLD_RESET;
             p->kthread[0]->ctrl.g->part_ctrl_table->reset_counter = -1;
             reset_part_ports(p);
-#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_loongarch64)
             /* AArch64/RISC-V: no separate partition loader; boot directly to
              * the partition entry point from the configuration table. */
             reset_kthread(p->kthread[0], ptd_level_1, prtos_conf_boot_partition_table[p->cfg->id].entry_point, status);

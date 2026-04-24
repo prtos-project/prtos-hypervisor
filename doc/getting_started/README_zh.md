@@ -12,6 +12,7 @@
 | **AMD64（x86_64）** | [English](amd64_getting_started.md) / [中文](amd64_getting_started_zh.md) | [English](amd64_api_reference.md) / [中文](amd64_api_reference_zh.md) |
 | **AArch64（ARMv8）** | [English](aarch64_getting_started.md) / [中文](aarch64_getting_started_zh.md) | [English](aarch64_api_reference.md) / [中文](aarch64_api_reference_zh.md) |
 | **RISC-V 64** | [English](riscv64_getting_started.md) / [中文](riscv64_getting_started_zh.md) | [English](riscv64_api_reference.md) / [中文](riscv64_api_reference_zh.md) |
+| **LoongArch64** | [English](loongarch64_getting_started.md) / [中文](loongarch64_getting_started_zh.md) | [English](loongarch64_api_reference.md) / [中文](loongarch64_api_reference_zh.md) |
 
 ## 如何选择平台
 
@@ -22,6 +23,8 @@
 - **RISC-V 64（RV64）**：通过 H-extension 与 G-stage 地址转换提供硬件辅助虚拟化能力，面向快速发展的 RISC-V 嵌入式生态。需要 `riscv64-linux-gnu-gcc` 交叉编译器。
 
 - **AMD64（x86_64）**：通过 Intel VT-x/VMX 与 EPT 提供硬件辅助虚拟化能力。可在标准 x86_64 主机上配合 KVM 加速运行。支持 PCI 设备直通与 Virtio I/O 虚拟化。
+
+- **LoongArch64**：使用 trap-and-emulate para-virtualization 方式。Guest 运行在 PLV3，所有特权 CSR/TLB/定时器操作由 PRTOS 捕获并模拟。需要 `loongarch64-linux-gnu-gcc` 交叉编译器。不使用 U-Boot，使用 PRTOS RSW 引导加载器。
 
 ## 快速开始（适用于全部平台）
 
@@ -37,13 +40,13 @@ git clone https://github.com/prtos-project/prtos-hypervisor.git
 cd prtos-hypervisor
 
 # 3. 选择平台并构建
-cp prtos_config.<arch> prtos_config   # arch: x86, aarch64, riscv64, amd64
+cp prtos_config.<arch> prtos_config   # arch: x86, aarch64, riscv64, amd64, loongarch64
 make defconfig
 make
 
 # 4. 运行示例
 cd user/bail/examples/helloworld
-make run.<arch>                        # arch: x86, aarch64, riscv64, amd64
+make run.<arch>                        # arch: x86, aarch64, riscv64, amd64, loongarch64
 ```
 
 ## 延伸阅读

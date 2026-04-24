@@ -12,6 +12,7 @@ Welcome to the PRTOS Hypervisor Getting Started documentation. This directory pr
 | **AMD64 (x86_64)** | [English](amd64_getting_started.md) / [中文](amd64_getting_started_zh.md) | [English](amd64_api_reference.md) / [中文](amd64_api_reference_zh.md) |
 | **AArch64 (ARMv8)** | [English](aarch64_getting_started.md) / [中文](aarch64_getting_started_zh.md) | [English](aarch64_api_reference.md) / [中文](aarch64_api_reference_zh.md) |
 | **RISC-V 64** | [English](riscv64_getting_started.md) / [中文](riscv64_getting_started_zh.md) | [English](riscv64_api_reference.md) / [中文](riscv64_api_reference_zh.md) |
+| **LoongArch64** | [English](loongarch64_getting_started.md) / [中文](loongarch64_getting_started_zh.md) | [English](loongarch64_api_reference.md) / [中文](loongarch64_api_reference_zh.md) |
 
 ## Choosing a Platform
 
@@ -22,6 +23,8 @@ Welcome to the PRTOS Hypervisor Getting Started documentation. This directory pr
 - **RISC-V 64 (RV64)**: Hardware-assisted virtualization via H-extension with G-stage address translation. Targets the growing RISC-V embedded ecosystem. Requires `riscv64-linux-gnu-gcc` cross-compiler.
 
 - **AMD64 (x86_64)**: Hardware-assisted virtualization via Intel VT-x/VMX with EPT. Runs on standard x86_64 hosts with KVM acceleration. Supports PCI device passthrough and Virtio I/O virtualization.
+
+- **LoongArch64**: Trap-and-emulate para-virtualization. The guest runs at PLV3 with all privileged CSR/TLB/timer operations trapped and emulated by PRTOS. Requires `loongarch64-linux-gnu-gcc` cross-compiler. Does not use U-Boot — uses PRTOS RSW boot loader.
 
 ## Quick Start (All Platforms)
 
@@ -37,13 +40,13 @@ git clone https://github.com/prtos-project/prtos-hypervisor.git
 cd prtos-hypervisor
 
 # 3. Choose your platform and build
-cp prtos_config.<arch> prtos_config   # arch: x86, aarch64, riscv64, amd64
+cp prtos_config.<arch> prtos_config   # arch: x86, aarch64, riscv64, amd64, loongarch64
 make defconfig
 make
 
 # 4. Run an example
 cd user/bail/examples/helloworld
-make run.<arch>                        # arch: x86, aarch64, riscv64, amd64
+make run.<arch>                        # arch: x86, aarch64, riscv64, amd64, loongarch64
 ```
 
 ## Further Reading

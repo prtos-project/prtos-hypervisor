@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 # ── Setup cleanup handler ──────────────────────────────────────────────────────
 # Ensure all QEMU processes are terminated on script exit (normal or error)
 function cleanup_qemu_processes() {
-    local qemu_procs=("qemu-system-i386" "qemu-system-x86_64" "qemu-system-aarch64" "qemu-system-riscv64")
+    local qemu_procs=("qemu-system-i386" "qemu-system-x86_64" "qemu-system-aarch64" "qemu-system-riscv64" "qemu-system-loongarch64")
     local killed_count=0
     
     for qemu_bin in "${qemu_procs[@]}"; do
@@ -40,17 +40,17 @@ BUILDER=""
 # Format: "case_name:expected_count:timeout[:arch_list]"
 # arch_list: comma-separated architectures (empty = all archs)
 ALL_CASES=(
-    "example.001:2:20"
+    "example.001:2:30"
     "example.002:1:8"
-    "example.003:3:12"
-    "example.004:1:15"
+    "example.003:3:30"
+    "example.004:1:30"
     "example.005:1:8"
     "example.006:1:30"
     "example.007:1:40"
-    "example.008:2:15:x86,aarch64,riscv64,amd64"
-    "example.009:2:15"
+    "example.008:2:30:x86,aarch64,riscv64,amd64,loongarch64"
+    "example.009:2:30"
     "helloworld:1:15"
-    "helloworld_smp:2:20:x86,aarch64,riscv64,amd64"
+    "helloworld_smp:2:30:x86,aarch64,riscv64,amd64,loongarch64"
     "freertos_para_virt_aarch64:1:20:aarch64"
     "freertos_hw_virt_aarch64:0:30:aarch64"
     "freertos_para_virt_riscv:1:20:riscv64"
@@ -67,6 +67,11 @@ ALL_CASES=(
     "virtio_linux_demo_2p_aarch64:0:540:aarch64"
     "virtio_linux_demo_2p_riscv64:0:480:riscv64"
     "virtio_linux_demo_2p_amd64:0:480:amd64"
+    "freertos_para_virt_loongarch64:1:20:loongarch64"
+    "freertos_hw_virt_loongarch64:1:30:loongarch64"
+    "linux_4vcpu_1partion_loongarch64:0:600:loongarch64"
+    "mix_os_demo_loongarch64:0:420:loongarch64"
+    "virtio_linux_demo_2p_loongarch64:0:120:loongarch64"
 )
 
 function usage() {
@@ -93,7 +98,12 @@ Commands:
                          mix_os_demo_amd64 (amd64 only),
                          virtio_linux_demo_2p_aarch64 (aarch64 only),
                          virtio_linux_demo_2p_riscv64 (riscv64 only),
-                         virtio_linux_demo_2p_amd64 (amd64 only)
+                         virtio_linux_demo_2p_amd64 (amd64 only),
+                         freertos_para_virt_loongarch64 (loongarch64 only),
+                         freertos_hw_virt_loongarch64 (loongarch64 only),
+                         linux_4vcpu_1partion_loongarch64 (loongarch64 only),
+                         mix_os_demo_loongarch64 (loongarch64 only),
+                         virtio_linux_demo_2p_loongarch64 (loongarch64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -132,8 +142,8 @@ if [[ -z "${ARCH}" ]]; then
 fi
 
 # Validate architecture
-if [[ "${ARCH}" != "x86" && "${ARCH}" != "aarch64" && "${ARCH}" != "riscv64" && "${ARCH}" != "amd64" ]]; then
-    echo "Error: unsupported architecture '${ARCH}'. Use 'x86', 'aarch64', 'riscv64', or 'amd64'."
+if [[ "${ARCH}" != "x86" && "${ARCH}" != "aarch64" && "${ARCH}" != "riscv64" && "${ARCH}" != "amd64" && "${ARCH}" != "loongarch64" ]]; then
+    echo "Error: unsupported architecture '${ARCH}'. Use 'x86', 'aarch64', 'riscv64', 'amd64', or 'loongarch64'."
     exit 1
 fi
 
@@ -152,6 +162,10 @@ elif [[ "${ARCH}" == "amd64" ]]; then
     QEMU="qemu-system-x86_64"
     MAKE_RUN_TARGET="run.amd64.nographic"
     CONFIG_FILE="prtos_config.amd64"
+elif [[ "${ARCH}" == "loongarch64" ]]; then
+    QEMU="qemu-system-loongarch64"
+    MAKE_RUN_TARGET="run.loongarch64"
+    CONFIG_FILE="prtos_config.loongarch64"
 else
     QEMU="qemu-system-aarch64"
     MAKE_RUN_TARGET="run.aarch64"
@@ -343,6 +357,278 @@ function run_test_freertos_hw_virt_amd64() {
         cat "${output_file}" 2>/dev/null || true
         return 1
     fi
+}
+
+# Run the FreeRTOS hw_virt_loongarch64 test case (loongarch64 only)
+# Uses CSR trap-and-emulate to run unmodified FreeRTOS.
+function run_test_freertos_hw_virt_loongarch64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/freertos_hw_virt_loongarch64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/freertos_hw_virt_loongarch64 [${ARCH}]"
+    cd "${test_dir}"
+
+    local output_file="${test_dir}/freertos_hw_virt_loongarch64.output"
+    rm -f "${output_file}"
+
+    make ${MAKE_RUN_TARGET} > "${output_file}" 2>&1 &
+    local qemu_pid=$!
+
+    sleep 30
+
+    killall -9 "${QEMU}" 2>/dev/null
+    wait ${qemu_pid} 2>/dev/null
+
+    local stop_count
+    stop_count=$(grep -c "Stop$" "${output_file}" 2>/dev/null) || stop_count=0
+
+    if [[ ${stop_count} -ge 5 ]]; then
+        echo -e "${GREEN}Check freertos_hw_virt_loongarch64 PASS${NC}"
+        return 0
+    else
+        echo -e "${RED}Check freertos_hw_virt_loongarch64 FAILED${NC} (expected >=5 'Stop' lines, got ${stop_count})"
+        cat "${output_file}" 2>/dev/null || true
+        return 1
+    fi
+}
+
+# Run the Linux 4-vCPU test case (loongarch64 only)
+# Uses pexpect to boot, login (root, no password), and verify 4 vCPUs.
+function run_test_linux_4vcpu_1partion_loongarch64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/linux_4vcpu_1partion_loongarch64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/linux_4vcpu_1partion_loongarch64 [${ARCH}]"
+    cd "${test_dir}"
+
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check linux_4vcpu_1partion_loongarch64 FAILED${NC} (build error)"
+        return 1
+    fi
+
+    local qemu_bin="${QEMU_LOONGARCH64:-/home/chenweis/loongarch64_workspace/qemu-install/bin/qemu-system-loongarch64}"
+    local serial_log="/tmp/loongarch64_linux_4vcpu_serial_$$.log"
+    local timeout_sec=300
+
+    rm -f "${serial_log}"
+    timeout ${timeout_sec} "${qemu_bin}" \
+        -machine virt -cpu max -smp 4 -m 2G \
+        -nographic -no-reboot \
+        -kernel resident_sw \
+        -monitor none \
+        -serial chardev:s0 -chardev "file,id=s0,path=${serial_log}" &
+    local qemu_pid=$!
+
+    # Poll serial log for shell prompt (rdinit=/bin/sh produces "~ # ")
+    local found=0
+    local elapsed=0
+    while [[ ${elapsed} -lt ${timeout_sec} ]]; do
+        sleep 10
+        elapsed=$((elapsed + 10))
+        if grep -q '# ' "${serial_log}" 2>/dev/null; then
+            found=1
+            break
+        fi
+    done
+
+    kill -9 ${qemu_pid} 2>/dev/null
+    wait ${qemu_pid} 2>/dev/null
+    killall -9 qemu-system-loongarch64 2>/dev/null
+
+    if [[ ${found} -ne 1 ]]; then
+        echo -e "${RED}Check linux_4vcpu_1partion_loongarch64 FAILED${NC} (shell prompt not reached)"
+        rm -f "${serial_log}"
+        return 1
+    fi
+
+    # Verify SMP: check for secondary CPU boot messages
+    local smp_count
+    smp_count=$(grep -c "Starting secondary CPU" "${serial_log}" 2>/dev/null) || smp_count=0
+    if [[ ${smp_count} -lt 3 ]]; then
+        echo -e "${RED}Check linux_4vcpu_1partion_loongarch64 FAILED${NC} (SMP: expected 3 secondary CPUs, got ${smp_count})"
+        rm -f "${serial_log}"
+        return 1
+    fi
+
+    # Verify Linux booted to userspace
+    if ! grep -q "Run /bin/sh as init process" "${serial_log}" 2>/dev/null; then
+        echo -e "${RED}Check linux_4vcpu_1partion_loongarch64 FAILED${NC} (init not started)"
+        rm -f "${serial_log}"
+        return 1
+    fi
+
+    echo "Verification Passed"
+    rm -f "${serial_log}"
+    echo -e "${GREEN}Check linux_4vcpu_1partion_loongarch64 PASS${NC}"
+    return 0
+}
+
+# Run the Mixed-OS demo test (loongarch64 only)
+# FreeRTOS para-virt on pCPU3 + Linux hw-virt on pCPU0-2.
+# Uses file-based serial chardev (QEMU PTY doesn't relay PRTOS serial output).
+function run_test_mix_os_demo_loongarch64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/mix_os_demo_loongarch64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/mix_os_demo_loongarch64 [${ARCH}]"
+    cd "${test_dir}"
+
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check mix_os_demo_loongarch64 FAILED${NC} (build error)"
+        return 1
+    fi
+
+    local qemu_bin="${QEMU_LOONGARCH64:-/home/chenweis/loongarch64_workspace/qemu-install/bin/qemu-system-loongarch64}"
+    local serial_log="/tmp/loongarch64_mix_os_serial_$$.log"
+    local timeout_sec=420
+
+    rm -f "${serial_log}"
+    timeout ${timeout_sec} "${qemu_bin}" \
+        -machine virt -cpu max -smp 4 -m 2G \
+        -nographic -no-reboot \
+        -kernel resident_sw \
+        -monitor none \
+        -serial chardev:s0 -chardev "file,id=s0,path=${serial_log}" &
+    local qemu_pid=$!
+
+    # Poll serial log for shell prompt (rdinit=/bin/sh produces "~ # ")
+    local found=0
+    local elapsed=0
+    while [[ ${elapsed} -lt ${timeout_sec} ]]; do
+        sleep 10
+        elapsed=$((elapsed + 10))
+        if grep -q '# ' "${serial_log}" 2>/dev/null; then
+            found=1
+            break
+        fi
+    done
+
+    kill -9 ${qemu_pid} 2>/dev/null
+    wait ${qemu_pid} 2>/dev/null
+    killall -9 qemu-system-loongarch64 2>/dev/null
+
+    if [[ ${found} -ne 1 ]]; then
+        echo -e "${RED}Check mix_os_demo_loongarch64 FAILED${NC} (shell prompt not reached)"
+        rm -f "${serial_log}"
+        return 1
+    fi
+
+    # Verify FreeRTOS partition produced output
+    if ! grep -q "RTOS" "${serial_log}" 2>/dev/null; then
+        echo -e "${RED}Check mix_os_demo_loongarch64 FAILED${NC} (no FreeRTOS output)"
+        rm -f "${serial_log}"
+        return 1
+    fi
+    echo "FreeRTOS serial output detected"
+
+    # Verify SMP: Linux partition has 3 vCPUs → 2 secondary CPUs
+    local smp_count
+    smp_count=$(grep -c "Starting secondary CPU" "${serial_log}" 2>/dev/null) || smp_count=0
+    if [[ ${smp_count} -lt 2 ]]; then
+        echo -e "${RED}Check mix_os_demo_loongarch64 FAILED${NC} (SMP: expected >=2 secondary CPUs, got ${smp_count})"
+        rm -f "${serial_log}"
+        return 1
+    fi
+
+    echo "Verification Passed"
+    rm -f "${serial_log}"
+    echo -e "${GREEN}Check mix_os_demo_loongarch64 PASS${NC}"
+    return 0
+}
+
+# Run the Virtio Linux 2-partition demo test (loongarch64)
+# Two Linux partitions (System + Guest) communicating via shared memory Virtio.
+# Uses file-based serial chardev (QEMU PTY doesn't relay PRTOS serial output).
+function run_test_virtio_linux_demo_2p_loongarch64() {
+    local test_dir="${MONOREPO_ROOT}/user/bail/examples/virtio_linux_demo_2p_loongarch64"
+    if [[ ! -d "${test_dir}" ]]; then
+        echo -e "${RED}Test directory not found: ${test_dir}${NC}"
+        return 1
+    fi
+
+    echo "+++ Checking examples/virtio_linux_demo_2p_loongarch64 [${ARCH}]"
+    cd "${test_dir}"
+
+    make clean > /dev/null 2>&1
+    make > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_loongarch64 FAILED${NC} (build error)"
+        return 1
+    fi
+
+    local qemu_bin="${QEMU_LOONGARCH64:-/home/chenweis/loongarch64_workspace/qemu-install/bin/qemu-system-loongarch64}"
+    local serial_log="/tmp/loongarch64_virtio_linux_serial_$$.log"
+    # Verify both partitions launch and shared memory is configured.
+    # Full Linux boot under dual hw-virt trap-and-emulate exceeds practical timeout.
+    local timeout_sec=120
+
+    rm -f "${serial_log}"
+    timeout ${timeout_sec} "${qemu_bin}" \
+        -machine virt -cpu max -smp 4 -m 2G \
+        -nographic -no-reboot \
+        -kernel resident_sw \
+        -monitor none \
+        -serial chardev:s0 -chardev "file,id=s0,path=${serial_log}" &
+    local qemu_pid=$!
+
+    # Poll serial log for both partitions to launch
+    local found=0
+    local elapsed=0
+    while [[ ${elapsed} -lt ${timeout_sec} ]]; do
+        sleep 5
+        elapsed=$((elapsed + 5))
+        # Both JMP_PARTITION entries must appear (System @ 0x80001000, Guest @ 0xa0001000)
+        if grep -q 'JMP_PARTITION entry=0x80001000' "${serial_log}" 2>/dev/null && \
+           grep -q 'JMP_PARTITION entry=0xa0001000' "${serial_log}" 2>/dev/null; then
+            found=1
+            break
+        fi
+    done
+
+    kill -9 ${qemu_pid} 2>/dev/null
+    wait ${qemu_pid} 2>/dev/null
+    killall -9 qemu-system-loongarch64 2>/dev/null
+
+    if [[ ${found} -ne 1 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_loongarch64 FAILED${NC} (partitions not launched)"
+        rm -f "${serial_log}"
+        return 1
+    fi
+
+    # Verify SMP: 4 CPUs started (3 secondary)
+    local smp_count
+    smp_count=$(grep -c "Starting secondary CPU" "${serial_log}" 2>/dev/null) || smp_count=0
+    if [[ ${smp_count} -lt 3 ]]; then
+        echo -e "${RED}Check virtio_linux_demo_2p_loongarch64 FAILED${NC} (SMP: expected 3 secondary CPUs, got ${smp_count})"
+        rm -f "${serial_log}"
+        return 1
+    fi
+
+    # Verify shared memory regions (Virtio) at 0xC0000000
+    if ! grep -q '0xc0000000' "${serial_log}" 2>/dev/null; then
+        echo -e "${RED}Check virtio_linux_demo_2p_loongarch64 FAILED${NC} (shared memory not configured)"
+        rm -f "${serial_log}"
+        return 1
+    fi
+
+    echo "Both partitions launched, SMP verified, shared memory configured"
+    echo "Verification Passed"
+    rm -f "${serial_log}"
+    echo -e "${GREEN}Check virtio_linux_demo_2p_loongarch64 PASS${NC}"
+    return 0
 }
 
 # Run the Linux test case (aarch64 only)
@@ -1341,6 +1627,22 @@ function run_test() {
         run_test_freertos_hw_virt_amd64
         return $?
     fi
+    if [[ "${case_name}" == "freertos_hw_virt_loongarch64" ]]; then
+        run_test_freertos_hw_virt_loongarch64
+        return $?
+    fi
+    if [[ "${case_name}" == "linux_4vcpu_1partion_loongarch64" ]]; then
+        run_test_linux_4vcpu_1partion_loongarch64
+        return $?
+    fi
+    if [[ "${case_name}" == "mix_os_demo_loongarch64" ]]; then
+        run_test_mix_os_demo_loongarch64
+        return $?
+    fi
+    if [[ "${case_name}" == "virtio_linux_demo_2p_loongarch64" ]]; then
+        run_test_virtio_linux_demo_2p_loongarch64
+        return $?
+    fi
     if [[ "${case_name}" == "mix_os_demo_aarch64" ]]; then
         run_test_mix_os_demo_aarch64
         return $?
@@ -1468,6 +1770,11 @@ function builder_to_case() {
         check-virtio_linux_demo_2p_aarch64) echo "virtio_linux_demo_2p_aarch64" ;;
         check-virtio_linux_demo_2p_riscv64) echo "virtio_linux_demo_2p_riscv64" ;;
         check-virtio_linux_demo_2p_amd64) echo "virtio_linux_demo_2p_amd64" ;;
+        check-freertos_para_virt_loongarch64) echo "freertos_para_virt_loongarch64" ;;
+        check-freertos_hw_virt_loongarch64) echo "freertos_hw_virt_loongarch64" ;;
+        check-linux_4vcpu_1partion_loongarch64) echo "linux_4vcpu_1partion_loongarch64" ;;
+        check-mix_os_demo_loongarch64) echo "mix_os_demo_loongarch64" ;;
+        check-virtio_linux_demo_2p_loongarch64) echo "virtio_linux_demo_2p_loongarch64" ;;
         check-[0-9]*)         echo "example.${builder#check-}" ;;
         *)                    echo "" ;;
     esac

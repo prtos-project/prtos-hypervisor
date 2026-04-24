@@ -32,6 +32,15 @@ RESERVE_IOPORTS(DEFAULT_PORT, 5);
 #define RISCV_UART_LSR_THRE 0x20  /* THR Empty */
 #endif
 
+#if defined(CONFIG_loongarch64)
+#include <arch/layout.h>
+/* LoongArch64 QEMU virt: 16550 UART at MMIO address via uncached DMW */
+#define LOONGARCH_UART_BASE ((volatile prtos_u8_t *)UART_BASE)
+#define LOONGARCH_UART_THR  0  /* Transmit Holding Register */
+#define LOONGARCH_UART_LSR  5  /* Line Status Register */
+#define LOONGARCH_UART_LSR_THRE 0x20  /* THR Empty */
+#endif
+
 #define _UART_MAX_FREQ 115200
 static void __init_uart(prtos_u32_t baudrate) {
 #if defined(CONFIG_x86) || defined(CONFIG_amd64)
@@ -59,6 +68,11 @@ static void __init_uart(prtos_u32_t baudrate) {
     /* 16550 UART on QEMU virt is already initialized by OpenSBI */
     (void)baudrate;
 #endif
+
+#if defined(CONFIG_loongarch64)
+    /* 16550 UART on QEMU virt already initialized by firmware */
+    (void)baudrate;
+#endif
 }
 
 static inline void put_char_uart(prtos_s32_t c) {
@@ -73,6 +87,11 @@ static inline void put_char_uart(prtos_s32_t c) {
     while (!(RISCV_UART_BASE[RISCV_UART_LSR] & RISCV_UART_LSR_THRE))
         ;
     RISCV_UART_BASE[RISCV_UART_THR] = (prtos_u8_t)c;
+#endif
+#if defined(CONFIG_loongarch64)
+    while (!(LOONGARCH_UART_BASE[LOONGARCH_UART_LSR] & LOONGARCH_UART_LSR_THRE))
+        ;
+    LOONGARCH_UART_BASE[LOONGARCH_UART_THR] = (prtos_u8_t)c;
 #endif
 }
 

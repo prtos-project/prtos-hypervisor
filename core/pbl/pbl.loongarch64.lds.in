@@ -1,0 +1,40 @@
+/*
+ * FILE: pbl.loongarch64.lds.in
+ *
+ * ld script to build the LoongArch64 PBL
+ *
+ * http://www.prtos.org/
+ */
+
+#include <config.h>
+#include <arch/paging.h>
+
+OUTPUT_FORMAT("elf64-loongarch", "elf64-loongarch", "elf64-loongarch")
+OUTPUT_ARCH("loongarch")
+ENTRY(_start)
+
+SECTIONS
+{
+    _spbl = .;
+    . = (PRTOS_PCTRLTAB_ADDR)-256*1024-(4096*18);
+    .bss ALIGN(8) : {
+	_sbss = .;
+	*(COMMON)
+        *(.bss)
+	_ebss = .;
+    }
+
+    . = (PRTOS_PCTRLTAB_ADDR)-256*1024;
+
+    .text ALIGN(8): {
+        *(.text)
+    }
+    .data ALIGN(8) : {
+        *(.data)
+    }
+    _epbl = .;
+    /DISCARD/ : {
+        *(.note)
+        *(.comment*)
+    }
+}

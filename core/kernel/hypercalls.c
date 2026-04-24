@@ -138,13 +138,13 @@ __hypercall prtos_s32_t resume_vcpu_sys(prtos_id_t vcpu_id) {
 __hypercall prtos_s32_t reset_vcpu_sys(prtos_id_t vcpu_id, prtos_address_t ptd_level_1_table, prtos_address_t entry_point, prtos_u32_t status) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     partition_t *partition = get_partition(info->sched.current_kthread);
-#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64)
+#if !defined(CONFIG_AARCH64) && !defined(CONFIG_riscv64) && !defined(CONFIG_loongarch64)
     struct phys_page *ptd_level_1_page;
 #endif
 
     if (vcpu_id >= partition->cfg->num_of_vcpus) return PRTOS_INVALID_PARAM;
 
-#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64)
+#if defined(CONFIG_AARCH64) || defined(CONFIG_riscv64) || defined(CONFIG_loongarch64)
     /* AArch64/RISC-V: stage-2 MMU provides memory isolation; no x86-style
      * page table validation needed. ptd_level_1_table is unused. */
 #else
@@ -333,6 +333,7 @@ __hypercall prtos_s32_t idle_self_sys(void) {
     prtos_word_t arg = KID2PARTID(info->sched.current_kthread->ctrl.g->id);
 #endif
     ASSERT(!hw_is_sti());
+
 
 #ifdef CONFIG_AUDIT_EVENTS
     raise_audit_event(TRACE_SCHED_MODULE, AUDIT_SCHED_PART_IDLE, 1, &arg);

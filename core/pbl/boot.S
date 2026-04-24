@@ -109,3 +109,33 @@ start_stack:
 .global end_stack
 end_stack:
 #endif
+
+#ifdef CONFIG_loongarch64
+.global _start, start
+_start:
+start:
+        /* a0 = pointer to partition_control_table provided by hypervisor */
+        la.local $t0, part_ctrl_table_ptr
+        st.d    $a0, $t0, 0
+
+        la.local $sp, end_stack
+
+        bl      main_pbl
+        /* main_pbl returns entry point in a0 */
+        move    $t0, $a0
+
+        la.local $t1, part_ctrl_table_ptr
+        ld.d    $a0, $t1, 0
+
+        jr      $t0
+1:
+        idle    0
+        b       1b
+
+.bss
+.global start_stack
+start_stack:
+        .zero STACK_SIZE
+.global end_stack
+end_stack:
+#endif
