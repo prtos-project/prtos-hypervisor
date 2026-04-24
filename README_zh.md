@@ -39,8 +39,7 @@ PRTOS Hypervisor源代码目录结构如下图所示：
 - [x] QEMU 32位 X86平台
 - [x] QEMU ARMv8 仿真平台
 - [x] QEMU RISC-V 仿真平台
-- [x] QEMU 64位 X86平台 (AMD64)
-
+- [x] QEMU 64位 X86平台 (AMD64)- [x] QEMU LoongArch64 仿真平台
 **计划支持平台**
 - [x] 树莓派4b/5b单板机
 
@@ -248,6 +247,95 @@ make run.riscv64
 
 详细文档参见 `user/bail/examples/virtio_linux_demo_2p_riscv64/README.md`。
 
+### 6.6 LoongArch64 平台
+#### 6.6.1 LoongArch64 平台依赖包安装
+
+```
+# LoongArch64 交叉编译器与仿真器
+sudo apt-get install -y gcc-loongarch64-linux-gnu qemu-system-loongarch64
+```
+
+> **说明**：LoongArch64 采用陷入模拟的半虚拟化方式。客户机 Linux 内核运行于 PLV3，所有特权 CSR / TLB / 定时器操作由 PRTOS Hypervisor 陷入并模拟。
+
+#### 6.6.2 构建 Buildroot（rootfs）
+
+```bash
+cd /path/to/buildroot
+
+# 以 QEMU LoongArch64 virt defconfig 为起点
+make qemu_loongarch64_virt_efi_defconfig
+
+# 根据需要调整配置
+make menuconfig
+
+make -j$(nproc)
+```
+
+生成的 cpio 镜像位于 `output/images/rootfs.cpio`。
+
+#### 6.6.3 构建 Linux 内核
+
+```bash
+cd /path/to/linux-6.19.9
+
+make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- loongson3_defconfig
+make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- menuconfig
+# 需要设置：
+#   General setup -> Initramfs source file(s):
+#     /path/to/buildroot/output/images/rootfs.cpio
+
+make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- vmlinux -j$(nproc)
+```
+
+#### 6.6.4 LoongArch64 引导加载器
+
+LoongArch64 在 PRTOS 上 **不** 使用 U-Boot。PRTOS 使用位于 `user/bootloaders/rsw/loongarch64/` 的自有 RSW (Resident Software) 引导加载器。RSW 是一个轻量级引导桩，负责：
+
+1. 在复位后以直接地址 (DA) 模式运行
+2. 解析 PRTOS 容器镜像
+3. 加载 PRTOS Hypervisor 核心与各分区镜像
+4. 将控制权交给 Hypervisor
+
+QEMU 的 `-kernel resident_sw` 选项直接加载 RSW，后者完成 Hypervisor 与全部分区的启动。
+
+#### 6.6.5 PRTOS 编译和运行 4 vCPU `linux-smp` 示例
+
+```
+git clone https://github.com/prtos-project/prtos-hypervisor.git
+cd prtos-hypervisor
+cp prtos_config.loongarch64 prtos_config
+make defconfig
+make
+
+# 复制 Linux 内核到示例目录
+cp /path/to/linux-6.19.9/vmlinux \
+   user/bail/examples/linux_4vcpu_1partion_loongarch64/
+
+cd user/bail/examples/linux_4vcpu_1partion_loongarch64
+make clean && make
+make run.loongarch64
+```
+
+输出如下：
+
+```
+Welcome to Buildroot
+(none) login:
+```
+
+#### 6.6.6 PRTOS 编译和运行 `virtio_linux_demo_2p_loongarch64`（双 SMP Linux + Virtio 设备虚拟化）
+
+```
+cd prtos-hypervisor
+cp prtos_config.loongarch64 prtos_config
+make defconfig
+make
+cd user/bail/examples/virtio_linux_demo_2p_loongarch64
+make run.loongarch64
+```
+
+详细文档参见 `user/bail/examples/virtio_linux_demo_2p_loongarch64/README.md`。
+
 ## 7. 测试
 
 ### 7.1 自动运行所有平台测试集的命令
@@ -432,6 +520,48 @@ The test report of run `bash scripts/run_test.sh --arch amd64 check-all` should 
   virtio_linux_demo_2p_amd64 PASS
 --------------------------------------
   Total: 27  Pass: 16  Fail: 0  Skip: 11
+======================================
+```
+
+`bash scripts/run_test.sh --arch loongarch64 check-all` 的期望测试报告：
+```
+======================================
+  Test Report [loongarch64]
+======================================
+  example.001          PASS
+  example.002          PASS
+  example.003          PASS
+  example.004          PASS
+  example.005          PASS
+  example.006          PASS
+  example.007          PASS
+  example.008          PASS
+  example.009          PASS
+  helloworld           PASS
+  helloworld_smp       PASS
+  freertos_para_virt_aarch64 SKIP
+  freertos_hw_virt_aarch64 SKIP
+  freertos_para_virt_riscv SKIP
+  freertos_hw_virt_riscv SKIP
+  freertos_para_virt_amd64 SKIP
+  freertos_hw_virt_amd64 SKIP
+  linux_aarch64        SKIP
+  linux_4vcpu_1partion_aarch64 SKIP
+  linux_4vcpu_1partion_riscv64 SKIP
+  linux_4vcpu_1partion_amd64 SKIP
+  mix_os_demo_aarch64  SKIP
+  mix_os_demo_riscv64  SKIP
+  mix_os_demo_amd64    SKIP
+  virtio_linux_demo_2p_aarch64 SKIP
+  virtio_linux_demo_2p_riscv64 SKIP
+  virtio_linux_demo_2p_amd64 SKIP
+  freertos_para_virt_loongarch64 PASS
+  freertos_hw_virt_loongarch64 PASS
+  linux_4vcpu_1partion_loongarch64 PASS
+  mix_os_demo_loongarch64 PASS
+  virtio_linux_demo_2p_loongarch64 PASS
+--------------------------------------
+  Total: 32  Pass: 16  Fail: 0  Skip: 16
 ======================================
 ```
 
