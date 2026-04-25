@@ -97,22 +97,28 @@ try:
 except socket.timeout:
     pass
 
-# Send newline to trigger getty re-display login prompt
-sock.sendall(b"\r\n")
-time.sleep(3)
+# Send newline to trigger getty re-display login prompt (with retry)
+login_found = False
+for attempt in range(6):
+    sock.sendall(b"\r\n")
+    time.sleep(5)
+    buf = b""
+    sock.settimeout(3)
+    try:
+        while True:
+            d = sock.recv(4096)
+            if not d: break
+            buf += d
+    except socket.timeout:
+        pass
+    text = buf.decode('latin-1', errors='replace')
+    if 'login' in text.lower():
+        login_found = True
+        break
+    # Guest may still be booting, wait and retry
+    print("[TEST] COM2 login prompt not ready yet, retrying (%d/6)..." % (attempt + 1))
 
-buf = b""
-sock.settimeout(3)
-try:
-    while True:
-        d = sock.recv(4096)
-        if not d: break
-        buf += d
-except socket.timeout:
-    pass
-
-text = buf.decode('latin-1', errors='replace')
-if 'login' not in text.lower():
+if not login_found:
     print("[FAIL] No login prompt on COM2")
     print("[COM2] Received: %s" % repr(text[:200]))
     sock.close(); proc.kill(); proc.wait(); sys.exit(1)
