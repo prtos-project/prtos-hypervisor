@@ -102,19 +102,39 @@ try:
     print("=== Waiting %ds for Guest boot ===" % BOOT_WAIT)
     time.sleep(BOOT_WAIT)
 
-    # Connect to TCP bridge via telnet
+    # Connect to TCP bridge via telnet (with retry)
     print("\n=== Connecting to TCP bridge (telnet 127.0.0.1 4321) ===")
-    child.sendline("telnet 127.0.0.1 4321")
-    time.sleep(2)
+    tcp_connected = False
+    for attempt in range(3):
+        child.sendline("telnet 127.0.0.1 4321")
+        idx = child.expect(["login:", "Connection refused", "Escape character",
+                            pexpect.TIMEOUT], timeout=60)
+        if idx == 0:
+            tcp_connected = True
+            break
+        elif idx == 1:
+            # Connection refused - Guest not ready yet, wait and retry
+            print("\n[RETRY] TCP bridge connection refused, waiting 20s (%d/3)..." % (attempt + 1))
+            time.sleep(20)
+        elif idx == 2:
+            # Connected but no login prompt yet - send newline to trigger
+            time.sleep(5)
+            child.sendline("")
+            idx2 = child.expect(["login:", pexpect.TIMEOUT], timeout=30)
+            if idx2 == 0:
+                tcp_connected = True
+                break
+            print("\n[RETRY] Connected but no login prompt, retrying (%d/3)..." % (attempt + 1))
+            # Exit telnet gracefully
+            child.send("\x1d")  # Ctrl-]
+            time.sleep(0.5)
+            child.sendline("quit")
+            time.sleep(2)
+        else:
+            print("\n[RETRY] Telnet timeout, retrying (%d/3)..." % (attempt + 1))
+            time.sleep(10)
 
-    # Wait for Guest login prompt
-    idx = child.expect(["login:", "Connection refused", pexpect.TIMEOUT],
-                       timeout=30)
-    if idx == 1:
-        print("\n\nFAIL: TCP bridge connection refused")
-        child.close(force=True)
-        sys.exit(1)
-    if idx == 2:
+    if not tcp_connected:
         print("\n\nFAIL: No login prompt from TCP bridge")
         child.close(force=True)
         sys.exit(1)
