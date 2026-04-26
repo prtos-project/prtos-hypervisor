@@ -54,8 +54,9 @@ case "${_sdk_basename}" in
     *-x86)      ARCH="x86" ;;
     *-aarch64)  ARCH="aarch64" ;;
     *-riscv64)  ARCH="riscv64" ;;
-    *-amd64)    ARCH="amd64" ;;
-    *)          error "Cannot detect arch from sdk-dir '${SDK_INSTALL_DIR}'. Name must end with -x86, -aarch64, -riscv64, or -amd64." ;;
+    *-amd64)          ARCH="amd64" ;;
+    *-loongarch64)    ARCH="loongarch64" ;;
+    *)                error "Cannot detect arch from sdk-dir '${SDK_INSTALL_DIR}'. Name must end with -x86, -aarch64, -riscv64, -amd64, or -loongarch64." ;;
 esac
 
 cd "${REPO_ROOT}"
