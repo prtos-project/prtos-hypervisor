@@ -662,7 +662,9 @@ function run_test_linux_aarch64() {
 
     # Run pexpect-based login test
     python3 -u << 'PYTEST' 2>&1
-import pexpect, sys, time
+import pexpect, sys, time, subprocess
+subprocess.run(['killall', '-9', 'qemu-system-aarch64'], capture_output=True)
+time.sleep(2)
 child = pexpect.spawn(
     'qemu-system-aarch64 '
     '-machine virt,gic_version=3 '
@@ -750,7 +752,9 @@ function run_test_linux_4vcpu_1partion_aarch64() {
 
     # Run pexpect-based login test
     python3 -u << 'PYTEST' 2>&1
-import pexpect, sys, time
+import pexpect, sys, time, subprocess
+subprocess.run(['killall', '-9', 'qemu-system-aarch64'], capture_output=True)
+time.sleep(2)
 child = pexpect.spawn(
     'qemu-system-aarch64 '
     '-machine virt,gic_version=3 '
@@ -837,7 +841,9 @@ function run_test_mix_os_demo_aarch64() {
 
     # Run pexpect-based test (use -kernel boot, no u-boot needed for mixed-OS)
     python3 -u << 'PYTEST' 2>&1
-import pexpect, sys, time
+import pexpect, sys, time, subprocess
+subprocess.run(['killall', '-9', 'qemu-system-aarch64'], capture_output=True)
+time.sleep(2)
 child = pexpect.spawn(
     'qemu-system-aarch64 '
     '-machine virt,gic_version=3 '
@@ -934,7 +940,10 @@ function run_test_linux_4vcpu_1partion_riscv64() {
         resident_sw resident_sw.bin
 
     python3 -u << 'PYTEST' 2>&1
-import pexpect, sys, time
+import pexpect, sys, time, subprocess
+# Kill leftover QEMU processes before starting
+subprocess.run(['killall', '-9', 'qemu-system-riscv64'], capture_output=True)
+time.sleep(2)
 child = pexpect.spawn(
     'qemu-system-riscv64 '
     '-machine virt -cpu rv64 -smp 4 -m 1G '
@@ -1012,7 +1021,10 @@ function run_test_mix_os_demo_riscv64() {
         resident_sw resident_sw.bin
 
     python3 -u << 'PYTEST' 2>&1
-import pexpect, sys, time
+import pexpect, sys, time, subprocess
+# Kill leftover QEMU processes before starting
+subprocess.run(['killall', '-9', 'qemu-system-riscv64'], capture_output=True)
+time.sleep(2)
 child = pexpect.spawn(
     'qemu-system-riscv64 '
     '-machine virt -cpu rv64 -smp 4 -m 1G '
@@ -1120,10 +1132,12 @@ function run_test_linux_4vcpu_1partion_amd64() {
     export KVM_OK=${kvm_ok}
 
     python3 -u << 'PYTEST' 2>&1
-import pexpect, sys, time, os
+import pexpect, sys, time, os, subprocess
 kvm_ok = int(os.environ.get('KVM_OK', '1'))
 sg_pre = "sg kvm -c '" if kvm_ok == 2 else ""
 sg_post = "'" if kvm_ok == 2 else ""
+subprocess.run(['killall', '-9', 'qemu-system-x86_64'], capture_output=True)
+time.sleep(2)
 cmd = (f"{sg_pre}qemu-system-x86_64 "
     "-enable-kvm -cpu host,-waitpkg "
        "-m 512 -smp 4 "
@@ -1233,10 +1247,12 @@ function run_test_mix_os_demo_amd64() {
     export KVM_OK=${kvm_ok}
 
     python3 -u << 'PYTEST' 2>&1
-import pexpect, sys, time, os
+import pexpect, sys, time, os, subprocess
 kvm_ok = int(os.environ.get('KVM_OK', '1'))
 sg_pre = "sg kvm -c '" if kvm_ok == 2 else ""
 sg_post = "'" if kvm_ok == 2 else ""
+subprocess.run(['killall', '-9', 'qemu-system-x86_64'], capture_output=True)
+time.sleep(2)
 cmd = (f"{sg_pre}qemu-system-x86_64 "
     "-enable-kvm -cpu host,-waitpkg "
        "-m 512 -smp 4 "
@@ -1344,7 +1360,9 @@ function run_test_virtio_linux_demo_2p_aarch64() {
     cp ${MONOREPO_ROOT}/user/bail/bin/u-boot.bin u-boot/u-boot.bin
 
     python3 -u << 'PYTEST' 2>&1
-import pexpect, sys, time
+import pexpect, sys, time, subprocess
+subprocess.run(['killall', '-9', 'qemu-system-aarch64'], capture_output=True)
+time.sleep(2)
 child = pexpect.spawn(
     'qemu-system-aarch64 '
     '-machine virt,gic_version=3 '
@@ -1415,7 +1433,9 @@ function run_test_virtio_linux_demo_2p_riscv64() {
         resident_sw resident_sw.bin
 
     python3 -u << 'PYTEST' 2>&1
-import pexpect, sys, time
+import pexpect, sys, time, subprocess
+subprocess.run(['killall', '-9', 'qemu-system-riscv64'], capture_output=True)
+time.sleep(2)
 child = pexpect.spawn(
     'qemu-system-riscv64 '
     '-machine virt -cpu rv64 -smp 4 -m 1G '
