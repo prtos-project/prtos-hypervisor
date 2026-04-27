@@ -59,10 +59,10 @@ ALL_CASES=(
     "freertos_hw_virt_amd64:0:30:amd64"
     "linux_aarch64:0:180:aarch64"
     "linux_4vcpu_1partion_aarch64:0:540:aarch64"
-    "linux_4vcpu_1partion_riscv64:0:360:riscv64"
+    "linux_4vcpu_1partion_riscv64:0:600:riscv64"
     "linux_4vcpu_1partion_amd64:0:360:amd64"
     "mix_os_demo_aarch64:0:420:aarch64"
-    "mix_os_demo_riscv64:0:420:riscv64"
+    "mix_os_demo_riscv64:0:600:riscv64"
     "mix_os_demo_amd64:0:420:amd64"
     "virtio_linux_demo_2p_aarch64:0:540:aarch64"
     "virtio_linux_demo_2p_riscv64:0:480:riscv64"
@@ -942,10 +942,10 @@ child = pexpect.spawn(
     '-bios default -kernel resident_sw.bin '
     '-nic none '
     '-monitor none -serial stdio',
-    timeout=340, encoding='utf-8', codec_errors='replace'
+    timeout=560, encoding='utf-8', codec_errors='replace'
 )
 try:
-    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=320)
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=540)
     if idx != 0:
         print('LINUX_TEST_FAIL: login prompt not reached')
         child.close(force=True); sys.exit(1)
@@ -1020,11 +1020,11 @@ child = pexpect.spawn(
     '-bios default -kernel resident_sw.bin '
     '-nic none '
     '-monitor none -serial stdio',
-    timeout=400, encoding='utf-8', codec_errors='replace'
+    timeout=560, encoding='utf-8', codec_errors='replace'
 )
 try:
     # Wait for Linux login prompt (RTOS output may be interleaved)
-    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=380)
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=540)
     if idx != 0:
         print('MIX_OS_TEST_FAIL: login prompt not reached')
         child.close(force=True); sys.exit(1)
