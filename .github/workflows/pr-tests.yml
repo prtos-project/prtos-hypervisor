@@ -11,22 +11,11 @@ concurrency:
 jobs:
   test-x86:
     name: x86
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, chenweis-M9-PRO]
     timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc-multilib \
-            qemu-system-x86 \
-            python3-pexpect \
-            libncurses-dev \
-            bison \
-            flex
 
       - name: Build & Test (x86)
         run: |
@@ -37,25 +26,16 @@ jobs:
 
   test-amd64:
     name: amd64
-    runs-on: ubuntu-24.04
+    needs: test-x86
+    runs-on: [self-hosted, chenweis-M9-PRO]
     timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc \
-            qemu-system-x86 \
-            python3-pexpect \
-            libncurses-dev \
-            bison \
-            flex
-
       - name: Build & Test (amd64)
         run: |
+          make distclean 2>/dev/null || true
           cp prtos_config.amd64 prtos_config
           make defconfig
           make
@@ -63,25 +43,16 @@ jobs:
 
   test-aarch64:
     name: aarch64
-    runs-on: ubuntu-24.04
+    needs: test-x86
+    runs-on: [self-hosted, chenweis-M9-PRO]
     timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu \
-            qemu-system-arm \
-            python3-pexpect \
-            libncurses-dev \
-            bison \
-            flex
-
       - name: Build & Test (aarch64)
         run: |
+          make distclean 2>/dev/null || true
           cp prtos_config.aarch64 prtos_config
           make defconfig
           make
@@ -89,25 +60,16 @@ jobs:
 
   test-riscv64:
     name: riscv64
-    runs-on: ubuntu-24.04
+    needs: test-x86
+    runs-on: [self-hosted, chenweis-M9-PRO]
     timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc-riscv64-linux-gnu \
-            qemu-system-misc \
-            python3-pexpect \
-            libncurses-dev \
-            bison \
-            flex
-
       - name: Build & Test (riscv64)
         run: |
+          make distclean 2>/dev/null || true
           cp prtos_config.riscv64 prtos_config
           make defconfig
           make

@@ -1323,22 +1323,25 @@ function run_test_virtio_linux_demo_2p_aarch64() {
         -d resident_sw.bin resident_sw_image > /dev/null 2>&1
 
     # Build U-Boot with larger CONFIG_SYS_BOOTM_LEN for ~103MB image
-    local uboot_src
-    uboot_src="$(realpath "${MONOREPO_ROOT}/../u-boot" 2>/dev/null || echo "")"
-    if [[ -z "${uboot_src}" || ! -d "${uboot_src}" ]]; then
-        echo -e "${RED}Check virtio_linux_demo_2p_aarch64 FAILED${NC} (u-boot source not found at ${MONOREPO_ROOT}/../u-boot)"
-        return 1
-    fi
+    # local uboot_src
+    # uboot_src="$(realpath "${MONOREPO_ROOT}/../u-boot" 2>/dev/null || echo "")"
+    # if [[ -z "${uboot_src}" || ! -d "${uboot_src}" ]]; then
+    #     echo -e "${RED}Check virtio_linux_demo_2p_aarch64 FAILED${NC} (u-boot source not found at ${MONOREPO_ROOT}/../u-boot)"
+    #     return 1
+    # fi
+    # mkdir -p u-boot
+    # if [[ ! -f u-boot/u-boot.bin ]]; then
+    #     make -C "${uboot_src}" qemu_arm64_defconfig > /dev/null 2>&1
+    #     "${uboot_src}/scripts/config" --file "${uboot_src}/.config" \
+    #         --set-val CONFIG_SYS_BOOTM_LEN 0x10000000
+    #     "${uboot_src}/scripts/config" --file "${uboot_src}/.config" \
+    #         --set-str CONFIG_PREBOOT 'bootm 0x40200000 - ${fdtcontroladdr}'
+    #     make -C "${uboot_src}" -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- > /dev/null 2>&1
+    #     cp "${uboot_src}/u-boot.bin" u-boot/u-boot.bin
+    # fi
+    pwd
     mkdir -p u-boot
-    if [[ ! -f u-boot/u-boot.bin ]]; then
-        make -C "${uboot_src}" qemu_arm64_defconfig > /dev/null 2>&1
-        "${uboot_src}/scripts/config" --file "${uboot_src}/.config" \
-            --set-val CONFIG_SYS_BOOTM_LEN 0x10000000
-        "${uboot_src}/scripts/config" --file "${uboot_src}/.config" \
-            --set-str CONFIG_PREBOOT 'bootm 0x40200000 - ${fdtcontroladdr}'
-        make -C "${uboot_src}" -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- > /dev/null 2>&1
-        cp "${uboot_src}/u-boot.bin" u-boot/u-boot.bin
-    fi
+    cp ${MONOREPO_ROOT}/user/bail/bin/u-boot.bin u-boot/u-boot.bin
 
     python3 -u << 'PYTEST' 2>&1
 import pexpect, sys, time
