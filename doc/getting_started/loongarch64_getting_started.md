@@ -74,6 +74,41 @@ bash scripts/run_test.sh --arch loongarch64 check-all
 
 Expected: 16 Pass, 0 Fail (16 cases for other architectures are reported as SKIP).
 
+### Run FreeRTOS Para-Virtualization Demo
+
+```bash
+cd user/bail/examples/freertos_para_virt_loongarch64
+make run.loongarch64
+```
+
+### Run FreeRTOS HW-Virtualization (LVZ Shim) Demo
+
+```bash
+cd user/bail/examples/freertos_hw_virt_loongarch64
+make run.loongarch64
+```
+
+### Run Linux 4-vCPU Demo
+
+```bash
+cd user/bail/examples/linux_4vcpu_1partion_loongarch64
+make run.loongarch64
+```
+
+### Run Mixed-OS Demo
+
+```bash
+cd user/bail/examples/mix_os_demo_loongarch64
+make run.loongarch64
+```
+
+### Run Virtio Demo
+
+```bash
+cd user/bail/examples/virtio_linux_demo_2p_loongarch64
+make run.loongarch64
+```
+
 ## Available Examples
 
 | Example | Description |
@@ -113,12 +148,18 @@ make -j$(nproc)
 
 ```bash
 cd /path/to/linux-6.19.9
-make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- loongson3_defconfig
+make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- loongson64_defconfig
 make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- menuconfig
 # Set:
-#   General setup -> Initramfs source file(s):
+#   General setup -> Initial RAM filesystem and RAM disk support -> Initramfs source file(s):
 #     /path/to/buildroot/output/images/rootfs.cpio
-#   Boot options -> Built-in kernel command string: console=ttyS0,115200 earlycon
+#   Device Drivers -> Input device support -> Hardware I/O ports -> i8042 PC Keyboard controller: [ ]
+#   Device Drivers -> Input device support -> Keyboards -> AT keyboard: [ ]
+#   Device Drivers -> Input device support -> Mice -> PS/2 mouse: [ ]
+#   Kernel hacking -> printk and dmesg options -> Enable dynamic printk() support: [ ]
+#   Boot options -> Built-in kernel command string:
+#     console=ttyS0,115200 earlycon mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp
+#   Boot options -> Built-in command line override (CONFIG_CMDLINE_FORCE): [*]
 
 make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- vmlinux -j$(nproc)
 ```
@@ -139,6 +180,23 @@ Expected:
 Welcome to Buildroot
 (none) login:
 ```
+
+## Building U-Boot (Reference)
+
+> **Note**: PRTOS on LoongArch64 does **not** use U-Boot as its boot loader. Instead, it uses the RSW (Resident Software) boot stub at `user/bootloaders/rsw/loongarch64/`. However, if you are deploying on physical LoongArch hardware that requires U-Boot, you can build it as follows:
+
+```bash
+cd /path/to/u-boot
+
+# Configure for LoongArch64 virt platform
+make loongarch64_generic_defconfig
+
+# Build
+make CROSS_COMPILE=loongarch64-linux-gnu- -j$(nproc)
+# Produces u-boot.bin
+```
+
+For QEMU-based PRTOS development, U-Boot is not needed — the RSW stub is loaded directly by QEMU's `-kernel` option.
 
 ## QEMU Run Command Reference
 

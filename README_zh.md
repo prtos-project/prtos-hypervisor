@@ -39,7 +39,8 @@ PRTOS Hypervisor源代码目录结构如下图所示：
 - [x] QEMU 32位 X86平台
 - [x] QEMU ARMv8 仿真平台
 - [x] QEMU RISC-V 仿真平台
-- [x] QEMU 64位 X86平台 (AMD64)- [x] QEMU LoongArch64 仿真平台
+- [x] QEMU 64位 X86平台 (AMD64)
+- [x] QEMU LoongArch64 仿真平台
 **计划支持平台**
 - [x] 树莓派4b/5b单板机
 
@@ -278,11 +279,18 @@ make -j$(nproc)
 ```bash
 cd /path/to/linux-6.19.9
 
-make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- loongson3_defconfig
+make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- loongson64_defconfig
 make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- menuconfig
 # 需要设置：
-#   General setup -> Initramfs source file(s):
+#   General setup -> Initial RAM filesystem and RAM disk support -> Initramfs source file(s):
 #     /path/to/buildroot/output/images/rootfs.cpio
+#   Device Drivers -> Input device support -> Hardware I/O ports -> i8042 PC Keyboard controller: [ ]
+#   Device Drivers -> Input device support -> Keyboards -> AT keyboard: [ ]
+#   Device Drivers -> Input device support -> Mice -> PS/2 mouse: [ ]
+#   Kernel hacking -> printk and dmesg options -> Enable dynamic printk() support: [ ]
+#   Boot options -> Built-in kernel command string:
+#     console=ttyS0,115200 earlycon mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp
+#   Boot options -> Built-in command line override (CONFIG_CMDLINE_FORCE): [*]
 
 make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- vmlinux -j$(nproc)
 ```
@@ -334,6 +342,8 @@ cd user/bail/examples/virtio_linux_demo_2p_loongarch64
 make run.loongarch64
 ```
 
+系统分区 UART 控制台通过 stdio 输出。用户名 `root`，密码 `1234`。
+
 详细文档参见 `user/bail/examples/virtio_linux_demo_2p_loongarch64/README.md`。
 
 ## 7. 测试
@@ -360,7 +370,12 @@ Commands:
                          linux_4vcpu_1partion_amd64 (amd64 only),
                          mix_os_demo_aarch64 (aarch64 only),
                          mix_os_demo_riscv64 (riscv64 only),
-                         mix_os_demo_amd64 (amd64 only)
+                         mix_os_demo_amd64 (amd64 only),
+                         freertos_para_virt_loongarch64 (loongarch64 only),
+                         freertos_hw_virt_loongarch64 (loongarch64 only),
+                         linux_4vcpu_1partion_loongarch64 (loongarch64 only),
+                         mix_os_demo_loongarch64 (loongarch64 only),
+                         virtio_linux_demo_2p_loongarch64 (loongarch64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -368,6 +383,7 @@ Examples:
   run_test.sh --arch aarch64 check-all      # Run all AArch64 tests
   run_test.sh --arch aarch64 check-001      # Run single AArch64 test
   run_test.sh check-helloworld              # Run x86 helloworld test
+  run_test.sh --arch loongarch64 check-all  # Run all LoongArch64 tests
 
 ```
 

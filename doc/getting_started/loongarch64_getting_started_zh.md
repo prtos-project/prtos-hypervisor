@@ -74,6 +74,41 @@ bash scripts/run_test.sh --arch loongarch64 check-all
 
 预期：16 通过，0 失败（其他架构对应的 16 个用例标记为 SKIP）。
 
+### 运行 FreeRTOS 半虚拟化示例
+
+```bash
+cd user/bail/examples/freertos_para_virt_loongarch64
+make run.loongarch64
+```
+
+### 运行 FreeRTOS 硬件虚拟化（LVZ Shim）示例
+
+```bash
+cd user/bail/examples/freertos_hw_virt_loongarch64
+make run.loongarch64
+```
+
+### 运行 Linux 4 vCPU 示例
+
+```bash
+cd user/bail/examples/linux_4vcpu_1partion_loongarch64
+make run.loongarch64
+```
+
+### 运行混合操作系统示例
+
+```bash
+cd user/bail/examples/mix_os_demo_loongarch64
+make run.loongarch64
+```
+
+### 运行 Virtio 示例
+
+```bash
+cd user/bail/examples/virtio_linux_demo_2p_loongarch64
+make run.loongarch64
+```
+
 ## 可用示例
 
 | 示例 | 描述 |
@@ -113,12 +148,18 @@ make -j$(nproc)
 
 ```bash
 cd /path/to/linux-6.19.9
-make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- loongson3_defconfig
+make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- loongson64_defconfig
 make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- menuconfig
 # 设置：
-#   General setup -> Initramfs source file(s):
+#   General setup -> Initial RAM filesystem and RAM disk support -> Initramfs source file(s):
 #     /path/to/buildroot/output/images/rootfs.cpio
-#   Boot options -> Built-in kernel command string: console=ttyS0,115200 earlycon
+#   Device Drivers -> Input device support -> Hardware I/O ports -> i8042 PC Keyboard controller: [ ]
+#   Device Drivers -> Input device support -> Keyboards -> AT keyboard: [ ]
+#   Device Drivers -> Input device support -> Mice -> PS/2 mouse: [ ]
+#   Kernel hacking -> printk and dmesg options -> Enable dynamic printk() support: [ ]
+#   Boot options -> Built-in kernel command string:
+#     console=ttyS0,115200 earlycon mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp
+#   Boot options -> Built-in command line override (CONFIG_CMDLINE_FORCE): [*]
 
 make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- vmlinux -j$(nproc)
 ```
@@ -139,6 +180,23 @@ make run.loongarch64
 Welcome to Buildroot
 (none) login:
 ```
+
+## 构建 U-Boot（参考）
+
+> **说明**：PRTOS 在 LoongArch64 上**不**使用 U-Boot 作为引导加载器，而是使用位于 `user/bootloaders/rsw/loongarch64/` 的 RSW（Resident Software）引导桩。但如果您需要在物理 LoongArch 硬件上部署并需要 U-Boot，可以按以下方式构建：
+
+```bash
+cd /path/to/u-boot
+
+# 配置 LoongArch64 virt 平台
+make loongarch64_generic_defconfig
+
+# 构建
+make CROSS_COMPILE=loongarch64-linux-gnu- -j$(nproc)
+# 生成 u-boot.bin
+```
+
+对于基于 QEMU 的 PRTOS 开发，无需 U-Boot —— RSW 引导桩由 QEMU 的 `-kernel` 选项直接加载。
 
 ## QEMU 运行命令参考
 
