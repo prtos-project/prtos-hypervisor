@@ -349,6 +349,7 @@ make
 cd user/bail/examples/virtio_linux_demo_2p_loongarch64
 make run.loongarch64
 ```
+System Partition UART console on stdio. Login `root`/`1234`.
 
 See `user/bail/examples/virtio_linux_demo_2p_loongarch64/README.md` for full documentation.
 
@@ -374,7 +375,12 @@ Commands:
                          linux_4vcpu_1partion_amd64 (amd64 only),
                          mix_os_demo_aarch64 (aarch64 only),
                          mix_os_demo_riscv64 (riscv64 only),
-                         mix_os_demo_amd64 (amd64 only)
+                         mix_os_demo_amd64 (amd64 only),
+                         freertos_para_virt_loongarch64 (loongarch64 only),
+                         freertos_hw_virt_loongarch64 (loongarch64 only),
+                         linux_4vcpu_1partion_loongarch64 (loongarch64 only),
+                         mix_os_demo_loongarch64 (loongarch64 only),
+                         virtio_linux_demo_2p_loongarch64 (loongarch64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -382,6 +388,7 @@ Examples:
   run_test.sh --arch aarch64 check-all      # Run all AArch64 tests
   run_test.sh --arch aarch64 check-001      # Run single AArch64 test
   run_test.sh check-helloworld              # Run x86 helloworld test
+  run_test.sh --arch loongarch64 check-all  # Run all LoongArch64 tests
 
 ```
 ### 4.3 Expected Test Reports
