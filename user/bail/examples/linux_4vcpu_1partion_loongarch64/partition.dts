@@ -50,8 +50,7 @@
 	};
 
 	chosen {
-		bootargs = "console=ttyS0,115200 earlycon mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp";
-		stdout-path = "/serial@1fe001e0";
+		bootargs = "console=ttyS0,115200 mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp nokaslr";
 	};
 
 	serial@1fe001e0 {

@@ -26,25 +26,57 @@ extern prtos_u32_t prtos_lvz_available;
 static prtos_u32_t next_gid = 1;
 
 void switch_kthread_arch_pre(kthread_t *new, kthread_t *current) {
+    /*
+     * LVZ phase 14: snapshot the per-CPU SAVE5 ("from-LVZ-guest") flag
+     * into the *outgoing* thread's karch so it can be restored on
+     * resumption.  Without this, scheduling away from a vmexit'd LVZ
+     * guest into idle clears the flag and the eventual trap-return
+     * back to the guest takes the host restore path.
+     * Stored in bit 31 of guest_gid (which only uses bits 0..7).
+     */
+    if (prtos_lvz_available && current && current->ctrl.g &&
+        current->ctrl.g->karch.lvz_enabled) {
+        prtos_u64_t s5;
+        __asm__ __volatile__("csrrd %0, 0x35" : "=r"(s5));
+        if (s5) {
+            current->ctrl.g->karch.guest_gid |= (1u << 31);
+        } else {
+            current->ctrl.g->karch.guest_gid &= ~(1u << 31);
+        }
+    }
     if (new->ctrl.g) {
         setup_stage2_mmu(new);
 
         /* For LVZ: set GSTAT.GID for the new partition */
         if (prtos_lvz_available && new->ctrl.g->karch.lvz_enabled) {
             prtos_u64_t gstat;
+            prtos_u64_t gid = (prtos_u64_t)(new->ctrl.g->karch.guest_gid & 0xFF);
             __asm__ __volatile__("csrrd %0, 0x50" : "=r"(gstat));
             gstat &= ~(0xFFUL << 16);
-            gstat |= ((prtos_u64_t)new->ctrl.g->karch.guest_gid << 16);
+            gstat |= (gid << 16);
             __asm__ __volatile__("csrwr %0, 0x50" : "+r"(gstat));
         }
     }
 }
 
 void switch_kthread_arch_post(kthread_t *current) {
-    /* Clear LVZ flag when switching away from a guest */
-    if (prtos_lvz_available) {
-        __asm__ __volatile__("csrwr $zero, 0x35" ::: "memory"); /* Clear SAVE5 */
-        /* Clear GSTAT.PVM to prevent accidental guest entry */
+    /*
+     * Restore the per-thread SAVE5 snapshot so a vmexit'd LVZ guest
+     * resumes via _trap_restore_guest after schedule()→idle→schedule().
+     * For non-LVZ next thread, clear SAVE5/GSTAT.PVM so we don't
+     * accidentally re-enter guest mode.
+     */
+    if (!prtos_lvz_available) {
+        return;
+    }
+    if (current && current->ctrl.g && current->ctrl.g->karch.lvz_enabled) {
+        prtos_u64_t s5 = (current->ctrl.g->karch.guest_gid >> 31) & 1;
+        __asm__ __volatile__("csrwr %0, 0x35" : "+r"(s5));
+        return;
+    }
+    __asm__ __volatile__("csrwr $zero, 0x35" ::: "memory"); /* Clear SAVE5 */
+    /* Clear GSTAT.PVM to prevent accidental guest entry */
+    {
         prtos_u64_t mask = 0x2;
         __asm__ __volatile__("csrxchg $zero, %0, 0x50" : : "r"(mask));
     }
