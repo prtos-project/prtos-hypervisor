@@ -38,9 +38,9 @@ PARTITIONS=partition_system.pef partition_guest.pef
 # ============================================================================
 # Linux Workspace Paths
 # ============================================================================
-LINUX_WORKSPACE=/home/chenweis/hdd/Repo/loongarch64_linux_workspace
+LINUX_WORKSPACE=/home/chenweis/loongarch64_workspace
 LINUX_SRC=$(LINUX_WORKSPACE)/linux-6.19.9
-LINUX_VMLINUX=$(LINUX_SRC)/vmlinux.unstripped
+LINUX_VMLINUX=$(LINUX_SRC)/vmlinux
 
 # Buildroot rootfs source tree compiled into the kernel via
 # CONFIG_INITRAMFS_SOURCE.  rebuild_kernel.sh stages role-specific
@@ -247,45 +247,45 @@ include ../run.mk
 # QEMU Launch Target
 # ============================================================================
 
-run.loongarch64:
-	@$(MAKE) clean
-	@$(MAKE) resident_sw
-	@echo "=========================================================================="
-	@echo "  === Starting QEMU (LoongArch64 TCG) ==="
-	@echo ""
-	@echo "  NOTE: First boot is SLOW under QEMU TCG (no KVM/LVZ acceleration)."
-	@echo "        Approximate timeline (wall-clock, do NOT think it is hung):"
-	@echo "          ~30s   -> [RSW] PRTOS header signatures OK"
-	@echo "          ~75s   -> Linux kernel starts (System partition)"
-	@echo "          ~210s  -> 'Welcome to Buildroot / buildroot login:' prompt"
-	@echo ""
-	@echo "  When you see the login prompt:"
-	@echo "          login : root"
-	@echo "          passwd: 1234"
-	@echo ""
-	@echo "  KNOWN LIMITATION (LoongArch64-only): the LVZ TCG shim in"
-	@echo "  qemu c8d6d29131 implements only raw CSR read/write -- it does NOT"
-	@echo "  isolate guest CSRs/timer between partitions.  When the Guest also"
-	@echo "  runs Linux, QEMU MTTCG SIGSEGVs (~80s after kernel raid6 LSX init)."
-	@echo "  Therefore start_guest.S keeps the Guest in _secondary_wait and"
-	@echo "  virtio_backend in the System partition listens on TCP 4321 (so"
-	@echo "  'telnet 127.0.0.1 4321' connects), but no Guest login prompt is"
-	@echo "  delivered over the bridge.  The dual-kernel build infrastructure"
-	@echo "  (per-role DTBs, rebuild_kernel.sh) is in place; remove the"
-	@echo "  'b _secondary_wait' in start_guest.S after a full LVZ TCG"
-	@echo "  implementation lands in QEMU upstream.  See README_zh.md."
-	@echo ""
-	@echo "  Exit QEMU: Ctrl-A x"
-	@echo "=========================================================================="
-	@qemu-system-loongarch64 \
-		-machine virt \
-		-cpu max \
-		-smp 4 \
-		-m 2G \
-		-nographic -no-reboot \
-		-kernel resident_sw \
-		-monitor none \
-		-serial stdio
+# run.loongarch64:
+# 	@$(MAKE) clean
+# 	@$(MAKE) resident_sw
+# 	@echo "=========================================================================="
+# 	@echo "  === Starting QEMU (LoongArch64 TCG) ==="
+# 	@echo ""
+# 	@echo "  NOTE: First boot is SLOW under QEMU TCG (no KVM/LVZ acceleration)."
+# 	@echo "        Approximate timeline (wall-clock, do NOT think it is hung):"
+# 	@echo "          ~30s   -> [RSW] PRTOS header signatures OK"
+# 	@echo "          ~75s   -> Linux kernel starts (System partition)"
+# 	@echo "          ~210s  -> 'Welcome to Buildroot / buildroot login:' prompt"
+# 	@echo ""
+# 	@echo "  When you see the login prompt:"
+# 	@echo "          login : root"
+# 	@echo "          passwd: 1234"
+# 	@echo ""
+# 	@echo "  KNOWN LIMITATION (LoongArch64-only): the LVZ TCG shim in"
+# 	@echo "  qemu c8d6d29131 implements only raw CSR read/write -- it does NOT"
+# 	@echo "  isolate guest CSRs/timer between partitions.  When the Guest also"
+# 	@echo "  runs Linux, QEMU MTTCG SIGSEGVs (~80s after kernel raid6 LSX init)."
+# 	@echo "  Therefore start_guest.S keeps the Guest in _secondary_wait and"
+# 	@echo "  virtio_backend in the System partition listens on TCP 4321 (so"
+# 	@echo "  'telnet 127.0.0.1 4321' connects), but no Guest login prompt is"
+# 	@echo "  delivered over the bridge.  The dual-kernel build infrastructure"
+# 	@echo "  (per-role DTBs, rebuild_kernel.sh) is in place; remove the"
+# 	@echo "  'b _secondary_wait' in start_guest.S after a full LVZ TCG"
+# 	@echo "  implementation lands in QEMU upstream.  See README_zh.md."
+# 	@echo ""
+# 	@echo "  Exit QEMU: Ctrl-A x"
+# 	@echo "=========================================================================="
+# 	@qemu-system-loongarch64 \
+# 		-machine virt \
+# 		-cpu max \
+# 		-smp 4 \
+# 		-m 2G \
+# 		-nographic -no-reboot \
+# 		-kernel resident_sw \
+# 		-monitor none \
+# 		-serial stdio
 
 clean:
 	@rm -f partition_system partition_guest virtio_backend prtos_manager virtio_frontend

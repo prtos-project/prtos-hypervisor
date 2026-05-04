@@ -49,7 +49,8 @@ static void __VBOOT init_lvz(void) {
 
     /* Configure GCFG:
      * MATC = ROOT (root-controlled address translation)
-     * TOP = 0 (don't trap guest privilege instructions)
+     * TOP = 0 (use QEMU shadow CSR optimization for performance;
+     *        critical CSRs trap via guest_csr_*_needs_trap lists)
      * TOE = 0 (delegate exceptions to guest)
      * TIT = 0 (delegate timer to guest)
      * GCI = SECURE (trap certain cache instructions)

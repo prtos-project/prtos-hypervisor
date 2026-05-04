@@ -427,7 +427,7 @@ function run_test_linux_4vcpu_1partion_loongarch64() {
         return 1
     fi
 
-    QEMU_LOONGARCH64="${QEMU_LOONGARCH64:-/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64}" \
+    QEMU_LOONGARCH64="${QEMU_LOONGARCH64:-/home/chenweis/loongarch64_workspace/qemu_install/bin/qemu-system-loongarch64}" \
         python3 test_login.py > /tmp/loongarch64_linux_4vcpu_$$.log 2>&1
     local rc=$?
     killall -9 qemu-system-loongarch64 2>/dev/null
@@ -464,7 +464,7 @@ function run_test_mix_os_demo_loongarch64() {
         return 1
     fi
 
-    QEMU_LOONGARCH64="${QEMU_LOONGARCH64:-/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64}" \
+    QEMU_LOONGARCH64="${QEMU_LOONGARCH64:-/home/chenweis/loongarch64_workspace/qemu_install/bin/qemu-system-loongarch64}" \
         python3 -u << 'PYTEST' 2>&1
 import pexpect, os, sys, time
 qemu = os.environ.get('QEMU_LOONGARCH64')
@@ -549,7 +549,7 @@ function run_test_virtio_linux_demo_2p_loongarch64() {
         return 1
     fi
 
-    local qemu_bin="${QEMU_LOONGARCH64:-/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64}"
+    local qemu_bin="${QEMU_LOONGARCH64:-/home/chenweis/loongarch64_workspace/qemu_install/bin/qemu-system-loongarch64}"
     local serial_log="/tmp/loongarch64_virtio_linux_serial_$$.log"
     # Verify both partitions launch and shared memory is configured.
     # Full Linux boot under dual hw-virt trap-and-emulate exceeds practical timeout.

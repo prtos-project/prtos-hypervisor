@@ -15,7 +15,7 @@ subprocess.run(["make", "clean"], capture_output=True)
 subprocess.run(["make"], capture_output=True)
 
 QEMU = os.environ.get("QEMU_LOONGARCH64",
-    "/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64")
+    "/home/chenweis/loongarch64_workspace/qemu_install/bin/qemu-system-loongarch64")
 
 cmd = (f"{QEMU} "
        "-machine virt "

@@ -61,8 +61,8 @@ FRT_OBJS = $(addprefix $(OBJDIR), $(FREERTOS_OBJS) $(FREERTOS_MEMMANG_OBJS) \
 # ============================================================================
 # Linux Build Configuration (Partition 0 - hw-virt)
 # ============================================================================
-LINUX_WORKSPACE=/home/chenweis/hdd/Repo/loongarch64_linux_workspace
-LINUX_VMLINUX=$(LINUX_WORKSPACE)/linux-6.19.9/vmlinux.unstripped
+LINUX_WORKSPACE=/home/chenweis/loongarch64_workspace
+LINUX_VMLINUX=$(LINUX_WORKSPACE)/linux-6.19.9/vmlinux
 
 # Prevent Make implicit rule from rebuilding external vmlinux via host cc
 $(LINUX_VMLINUX): ;

@@ -76,8 +76,8 @@ PARTITIONS=partition.pef
 # ============================================================================
 # Linux Workspace Paths
 # ============================================================================
-LINUX_WORKSPACE=/home/chenweis/hdd/Repo/loongarch64_linux_workspace
-LINUX_VMLINUX=$(LINUX_WORKSPACE)/linux-6.19.9/vmlinux.unstripped
+LINUX_WORKSPACE=/home/chenweis/loongarch64_workspace
+LINUX_VMLINUX=$(LINUX_WORKSPACE)/linux-6.19.9/vmlinux
 
 # Prevent Make implicit rule from rebuilding external vmlinux via host cc
 $(LINUX_VMLINUX): ;
@@ -104,11 +104,15 @@ $(OBJDIR):
 vmlinux.bin: $(LINUX_VMLINUX)
 	$(LNX_OBJCOPY) -O binary $< $@
 
-# Compile boot stub (embeds Linux vmlinux.bin via .incbin)
+# Compile device tree source to binary
+linux_guest.dtb: partition.dts
+	dtc -I dts -O dtb -o $@ $<
+
+# Compile boot stub (embeds Linux vmlinux.bin and DTB via .incbin)
 # Compute entry offset from the unstripped vmlinux so it tracks every rebuild.
 LINUX_KERNEL_ENTRY_OFFSET := $(shell $(CROSS)-nm $(LINUX_VMLINUX) 2>/dev/null | awk '/ T kernel_entry$$/{e=$$1} / T _text$$/{t=$$1} END{ if(e&&t) printf "0x%016s 0x%016s\n", e, t }' | python3 -c 'import sys; e,t=sys.stdin.read().split(); print(hex(int(e,16)-int(t,16)))')
 
-$(OBJDIR)start.o: start.S vmlinux.bin | $(OBJDIR)
+$(OBJDIR)start.o: start.S vmlinux.bin linux_guest.dtb | $(OBJDIR)
 	$(LNX_CC) -c $(LNX_CFLAGS) -DLINUX_KERNEL_ENTRY_OFFSET=$(LINUX_KERNEL_ENTRY_OFFSET) $< -o $@
 
 # Compile PRTOS image header
@@ -139,7 +143,7 @@ include ../run.mk
 clean:
 	@rm -f partition *.pef *.prtos_conf container.bin resident_sw
 	@rm -f resident_sw.bin resident_sw_image
-	@rm -f vmlinux.bin
+	@rm -f vmlinux.bin linux_guest.dtb
 	@rm -rf $(OBJDIR)
 
 .PHONY: all clean run
