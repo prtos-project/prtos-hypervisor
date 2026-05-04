@@ -53,8 +53,8 @@ struct trap_handler {
 #define LOONGARCH_ECODE_IPE   0xE   /* Instruction privilege error */
 #define LOONGARCH_ECODE_FPD   0xF   /* FP disabled */
 #define LOONGARCH_ECODE_FPE   0x12  /* FP exception */
-#define LOONGARCH_ECODE_GSPR  0x1A  /* Guest sensitive privileged resource */
-#define LOONGARCH_ECODE_HVC   0x1B  /* Hypervisor call */
+#define LOONGARCH_ECODE_GSPR  0x16  /* Guest sensitive privileged resource (LoongArch arch: 22) */
+#define LOONGARCH_ECODE_HVC   0x17  /* Hypervisor call (LoongArch arch: 23) */
 
 /* LoongArch LVZ (Virtualization) CSR numbers */
 #define CSR_GTLBC    0x15  /* Guest TLB Control */

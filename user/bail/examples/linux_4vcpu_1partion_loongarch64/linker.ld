@@ -20,6 +20,12 @@ SECTIONS {
         *(.text)
     }
 
+    /* Device tree blob (4KB aligned) */
+    . = ALIGN(0x1000);
+    .dtb : {
+        *(.dtb)
+    }
+
     /* Linux kernel binary (2MB aligned, at PA 0x200000) */
     . = ALIGN(0x200000);
     .linux_image : {

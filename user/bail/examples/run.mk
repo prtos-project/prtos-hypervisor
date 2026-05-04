@@ -98,7 +98,7 @@ run: run.$(ARCH)
 
 # QEMU_LOONGARCH64: path to the QEMU executable for LoongArch64 architecture
 # Pls refer to https://github.com/prtos-project/prtos-hypervisor/wiki/Ubuntu-(24.04)-x86_64-host-to-install-loongarch64-cross-compielr to install qemu for LoongArch64 architecture.
-QEMU_LOONGARCH64=/home/chenweis/loongarch64_workspace/qemu-install/bin/qemu-system-loongarch64
+QEMU_LOONGARCH64=/home/chenweis/loongarch64_workspace/qemu_install/bin/qemu-system-loongarch64
 
 run.loongarch64:
 	@$(MAKE) clean

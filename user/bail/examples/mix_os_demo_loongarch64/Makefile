@@ -61,8 +61,8 @@ FRT_OBJS = $(addprefix $(OBJDIR), $(FREERTOS_OBJS) $(FREERTOS_MEMMANG_OBJS) \
 # ============================================================================
 # Linux Build Configuration (Partition 0 - hw-virt)
 # ============================================================================
-LINUX_WORKSPACE=/home/chenweis/hdd/Repo/loongarch64_linux_workspace
-LINUX_VMLINUX=$(LINUX_WORKSPACE)/linux-6.19.9/vmlinux.unstripped
+LINUX_WORKSPACE=/home/chenweis/loongarch64_workspace
+LINUX_VMLINUX=$(LINUX_WORKSPACE)/linux-6.19.9/vmlinux
 
 # Prevent Make implicit rule from rebuilding external vmlinux via host cc
 $(LINUX_VMLINUX): ;
@@ -105,8 +105,12 @@ partition_freertos: $(OBJDIR) $(FRT_OBJS) linker_freertos.ld
 vmlinux.bin: $(LINUX_VMLINUX)
 	$(LNX_OBJCOPY) -O binary $< $@
 
+# Compute kernel_entry offset from the unstripped vmlinux so it tracks
+# every Linux rebuild (instead of being hardcoded in linux_start.S).
+LINUX_KERNEL_ENTRY_OFFSET := $(shell $(CROSS)-nm $(LINUX_VMLINUX) 2>/dev/null | awk '/ T kernel_entry$$/{e=$$1} / T _text$$/{t=$$1} END{ if(e&&t) printf "0x%016s 0x%016s\n", e, t }' | python3 -c 'import sys; e,t=sys.stdin.read().split(); print(hex(int(e,16)-int(t,16)))')
+
 $(OBJDIR)linux_start.o: linux_start.S vmlinux.bin | $(OBJDIR)
-	$(LNX_CC) -c $(LNX_CFLAGS) $< -o $@
+	$(LNX_CC) -c $(LNX_CFLAGS) -DLINUX_KERNEL_ENTRY_OFFSET=$(LINUX_KERNEL_ENTRY_OFFSET) $< -o $@
 
 $(OBJDIR)hdr_linux.o: hdr_linux.c | $(OBJDIR)
 	$(LNX_CC) -c $(LNX_CFLAGS) $< -o $@

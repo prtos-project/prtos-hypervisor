@@ -194,25 +194,35 @@ make
 ## 运行
 
 ```bash
-make run.riscv64
+make run.loongarch64
 ```
 
-通过 OpenSBI（`-bios default`）+ QEMU `-kernel` 直接加载启动。系统分区的 NS16550 UART 输出到标准输入输出。
+通过 QEMU `-kernel` 直接加载 `resident_sw`（ELF）启动。系统分区的 NS16550 UART（0x1FE001E0）输出到标准输入输出。
 
 ### 手动 QEMU 命令
 
 ```bash
-qemu-system-riscv64 \
+qemu-system-loongarch64 \
     -machine virt \
-    -cpu rv64 \
+    -cpu max \
     -smp 4 \
-    -m 1G \
+    -m 2G \
     -nographic -no-reboot \
-    -bios default \
-    -kernel resident_sw.bin \
+    -kernel resident_sw \
     -monitor none \
     -serial stdio
 ```
+
+> **重要：启动较慢**。当前 LoongArch64 路径在 QEMU 上仅以 **TCG**（无 KVM/LVZ 硬件加速，依赖 LVZ 桩 shim）方式运行，参考墙上时间：
+>
+> | 时间   | 现象 |
+> |--------|------|
+> | ~0s    | QEMU 启动 |
+> | ~30s   | `[RSW] PRTOS header signatures OK` |
+> | ~75s   | Linux 内核开始打印（System 分区） |
+> | ~210s  | `Welcome to Buildroot / buildroot login:` 提示出现 |
+>
+> 在看到 `[RSW] PRTOS header signatures OK` 之后请**继续等待大约 3 分钟**，不要以为系统挂死。
 
 ## 演示流程
 
@@ -220,7 +230,7 @@ qemu-system-riscv64 \
 
 ### 步骤 1：启动 QEMU
 ```bash
-make run.riscv64
+make run.loongarch64
 ```
 
 ### 步骤 2：启动系统分区（UART/标准输入输出）
@@ -242,7 +252,15 @@ telnet 127.0.0.1 4321
 ```
 客户分区通过 `S99virtio_guest` 自动启动 `virtio_frontend`。前端等待后端初始化共享内存（轮询魔术值最多 300 秒），然后创建 `/dev/nbd0`（块设备）和 `/dev/hvc0`（控制台）。init 脚本等待 `/dev/hvc0` 并在其上启动 `getty`。后端的 TCP 桥接（端口 4321）通过共享内存将 telnet 连接到 `/dev/hvc0`。
 
-> **注意**：RISC-V QEMU virt 仅有一个 NS16550 UART。客户控制台需通过系统分区的 shell 使用 virtio-console TCP 桥接访问。
+> **⚠️ LoongArch64 特定限制**：在 LoongArch64 上，QEMU TCG 的 LVZ shim **不隔离分区间的客户 CSR 和定时器**（TCFG/TVAL），因此两个 Linux 实例不能并发运行（会互相覆盖定时器状态并导致 QEMU triple-fault）。为了让系统分区可靠启动到登录提示符，客户分区的启动桥被故意设计为**不进入 Linux**（永远停留在 `_secondary_wait`）。这意味着：
+>
+> - `virtio_backend` 仍在系统分区监听 TCP 4321，`telnet 127.0.0.1 4321` 会**连接成功**。
+> - 但客户分区未运行 Linux/`virtio_frontend`/`getty`，所以 telnet 连接上之后**看不到客户登录提示符**。
+> - 完整实现需要为 QEMU LoongArch 目标增加真正的 LVZ（PVM/PIE、GSPR、定时器虚拟化、完整客户 CSR 集）——参见仓库记忆 `loongarch64-lvz-shim.md` “What real LVZ TCG would need” 小节。
+>
+> AArch64 / RISC-V 64 / AMD64 版本本演示不受此限制，telnet 可以正常进入客户分区。
+
+> **注意**：LoongArch64 QEMU virt 仅有一个 NS16550 UART（0x1FE001E0）直通给系统分区。客户控制台需通过系统分区的 shell 使用 virtio-console TCP 桥接（`telnet 127.0.0.1 4321`）访问。
 
 ### 步骤 4：测试 Virtio 设备（客户分区）
 

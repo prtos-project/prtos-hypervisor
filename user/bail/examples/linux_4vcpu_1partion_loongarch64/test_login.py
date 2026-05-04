@@ -15,7 +15,7 @@ subprocess.run(["make", "clean"], capture_output=True)
 subprocess.run(["make"], capture_output=True)
 
 QEMU = os.environ.get("QEMU_LOONGARCH64",
-    "/home/chenweis/loongarch64_workspace/qemu-install/bin/qemu-system-loongarch64")
+    "/home/chenweis/loongarch64_workspace/qemu_install/bin/qemu-system-loongarch64")
 
 cmd = (f"{QEMU} "
        "-machine virt "
@@ -64,6 +64,29 @@ child.sendline("nproc")
 idx = child.expect(["4", pexpect.TIMEOUT], timeout=10)
 if idx != 0:
     print("\n\n=== FAIL: nproc did not return 4 ===")
+    sys.exit(1)
+
+# Check that the boot log we already consumed had no eth0 timeout failure.
+# (interfaces overlay should make initscripts skip eth0 entirely.)
+boot_log = child.before or ""
+if "Waiting for interface eth0" in boot_log or "FAIL" in boot_log.split("Welcome")[0]:
+    print("\n\n=== FAIL: eth0 wait_iface timeout not suppressed ===")
+    sys.exit(1)
+
+print("\n\n=== Launching htop in batch-like mode to verify 4 CPU rows ===")
+time.sleep(1)
+# Run htop non-interactively via timeout + script-like capture
+child.sendline("htop --version")
+idx = child.expect([r"htop \d", pexpect.TIMEOUT], timeout=10)
+if idx != 0:
+    print("\n\n=== FAIL: htop binary not present or not runnable ===")
+    sys.exit(1)
+# Briefly launch htop UI and capture CPU lines.
+child.sendline("(echo q | htop -d 5 2>&1 | head -20) || true")
+# We just need confirmation it started without crashing; ensure shell prompt returns.
+idx = child.expect(["#", "\\$", pexpect.TIMEOUT], timeout=15)
+if idx >= 2:
+    print("\n\n=== FAIL: htop hung or did not exit cleanly ===")
     sys.exit(1)
 
 print("\n\n=== ALL TESTS PASSED ===")

@@ -231,9 +231,11 @@ _trap_save_csrs:
     ld.d    $t0, $sp, REG_PRMD
     csrwr   $t0, CSR_PRMD
 
-    /* Check if returning to guest (PRMD.PPLV != 0)
-     * NOTE: csrwr is a SWAP — $t0 now holds the OLD CSR value, not the
-     * trap-frame value.  Re-load from the frame for the check. */
+    /* Check if returning to guest.  PRMD.PPLV != 0 catches PLV3 para-virt
+     * guests, but a full LVZ guest (e.g. Linux kernel) may be at PLV0, so
+     * also check the LVZ flag set in SAVE5 by _trap_from_lvz_guest. */
+    csrrd   $t0, CSR_SAVE5
+    bnez    $t0, _trap_restore_guest
     ld.d    $t0, $sp, REG_PRMD
     andi    $t0, $t0, 0x3
     bnez    $t0, _trap_restore_guest

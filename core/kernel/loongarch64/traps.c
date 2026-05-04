@@ -971,13 +971,6 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
     prtos_u64_t ecode = (estat >> LOONGARCH_ESTAT_ECODE_SHIFT) & LOONGARCH_ESTAT_ECODE_MASK;
     prtos_u64_t is_bits = estat & LOONGARCH_ESTAT_IS_MASK;
 
-    /* DEBUG: trace first traps from guest (PLV3) - minimal */
-    {
-        prtos_u64_t pplv = regs->prmd & 0x3;
-        if (pplv != 0) {
-        }
-    }
-
     /* Save regs pointer for virtual IRQ delivery (fix_stack) */
     manage_hwi_state();
     prtos_current_guest_regs_percpu[GET_CPU_ID()] = regs;
@@ -1028,6 +1021,13 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
                 kthread_t *k = info->sched.current_kthread;
                 if (k && k->ctrl.g) {
                     check_guest_timer(&k->ctrl.g->karch, regs);
+                    /* If the virtual timer fired (or any other pending
+                     * IRQ is now unmasked) deliver it to the guest now,
+                     * so we don't have to wait for the next CSR/ertn
+                     * trap. Without this, an LVZ guest that runs in a
+                     * tight loop never sees its TI interrupt and time
+                     * appears frozen. */
+                    check_guest_pending_irqs(&k->ctrl.g->karch, regs);
                 }
             }
 
@@ -1531,12 +1531,14 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
                 pend_ctxt.irq_nr = 0;
                 raise_pend_irqs(&pend_ctxt);
             }
-            /* Also check hw-virt guest virtual timer and pending virtual IRQs
-             * (only for non-LVZ guests; LVZ handles timer natively) */
+            /* Also check hw-virt guest virtual timer and pending virtual IRQs.
+             * In the LoongArch64 LVZ shim there is no real guest-mode trap,
+             * so even partitions marked lvz_enabled rely on virtual TI
+             * delivery via check_guest_timer/check_guest_pending_irqs. */
             {
                 local_processor_t *info = GET_LOCAL_PROCESSOR();
                 kthread_t *k = info->sched.current_kthread;
-                if (k && k->ctrl.g && !k->ctrl.g->karch.lvz_enabled) {
+                if (k && k->ctrl.g) {
                     check_guest_timer(&k->ctrl.g->karch, regs);
                     check_guest_pending_irqs(&k->ctrl.g->karch, regs);
                 }
