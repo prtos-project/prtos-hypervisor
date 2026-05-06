@@ -119,7 +119,7 @@ void setup_kthread_arch(kthread_t *k) {
     /* Initialize guest CSR state for hw-virt partitions */
     if (k->ctrl.g) {
         struct kthread_arch *ka = &k->ctrl.g->karch;
-        ka->guest_crmd = 0;      /* PLV0, IE=0, DA mode */
+        ka->guest_crmd = 0x8;   /* PLV0, IE=0, DA=1, PG=0 (Direct Addressing mode) */
         ka->guest_prmd = 0;
         ka->guest_euen = 0;
         ka->guest_misc = 0;

@@ -107,6 +107,7 @@ struct kthread_arch {
     prtos_u64_t guest_timer_active;
     prtos_u64_t guest_tcfg_deadline; /* Stable counter value when timer expires */
     prtos_u32_t guest_in_tlb_refill; /* Guest is handling a TLB refill exception */
+    prtos_u64_t last_tlb_refill_badv; /* BADV of last TLB refill delivered to guest */
 
     /* IPI emulation */
     prtos_u64_t ipi_pending;

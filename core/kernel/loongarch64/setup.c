@@ -31,7 +31,7 @@ static void __VBOOT detect_lvz(void) {
     }
 }
 
-static void __VBOOT init_lvz(void) {
+void __VBOOT init_lvz(void) {
     if (!prtos_lvz_available) return;
 
     /* Initialize LVZ CSRs: GCFG, GSTAT, GINTC, GTLBC */
@@ -47,13 +47,15 @@ static void __VBOOT init_lvz(void) {
         __asm__ __volatile__("csrwr %0, 0x15" : "+r"(gtlbc));
     }
 
-    /* Configure GCFG:
-     * MATC = ROOT (root-controlled address translation)
-     * TOP = 0 (use QEMU shadow CSR optimization for performance;
-     *        critical CSRs trap via guest_csr_*_needs_trap lists)
-     * TOE = 0 (delegate exceptions to guest)
-     * TIT = 0 (delegate timer to guest)
-     * GCI = SECURE (trap certain cache instructions)
+    /* Configure GCFG (QEMU bit definitions):
+     * MATC = ROOT (bits 0-1: root-controlled address translation)
+     * TIT = 1 (bit 9: trap guest timer interrupt to host)
+     *
+     * TOP=0: CSR accesses go inline to shadow (fast).
+     *   QEMU still traps TCFG/TICLR/EENTRY/EUEN writes.
+     * TOE=0: Guest handles its own exceptions (page faults etc).
+     *   QEMU delegates exceptions directly to guest EENTRY.
+     * TORU=0: Guest handles its own TLB refills.
      */
     {
         prtos_u64_t gcfg = 0;
@@ -61,6 +63,7 @@ static void __VBOOT init_lvz(void) {
         __asm__ __volatile__("csrrd %0, 0x51" : "=r"(env));
         if (env & CSR_GCFG_MATP_ROOT)
             gcfg |= CSR_GCFG_MATC_ROOT;
+        gcfg |= (1ULL << 9);   /* TIT: Trap on Timer Interrupt */
         __asm__ __volatile__("csrwr %0, 0x51" : "+r"(gcfg));
     }
 
@@ -83,6 +86,9 @@ static void __VBOOT init_lvz(void) {
 void __VBOOT setup_arch_local(prtos_s32_t cpu_id) {
     SET_CPU_ID(cpu_id);
     SET_CPU_HWID(cpu_id);
+    /* Secondary CPUs also need LVZ CSRs configured (GCFG.TIT etc.) */
+    if (cpu_id != 0)
+        init_lvz();
 }
 
 void __VBOOT early_setup_arch_common(void) {

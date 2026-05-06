@@ -142,14 +142,47 @@ void start_up_guest(prtos_address_t entry) {
     if (k->ctrl.g->karch.lvz_enabled && KID2VCPUID(k->ctrl.g->id) != 0) {
         prtos_u64_t mbuf_addr = 0x1020;
         prtos_u64_t entry = 0;
+        kprintf("[PRTOS] vCPU%d: waiting for IOCSR MBUF0 on pCPU%d\n",
+                KID2VCPUID(k->ctrl.g->id), GET_CPU_ID());
         /* Clear stale value left by PRTOS's own secondary-CPU wake-up
          * (which used the same IOCSR mailbox to bring this pCPU out of
          * reset) before waiting for Linux's smpboot wakeup. */
         __asm__ __volatile__("iocsrwr.d $r0, %0" : : "r"(mbuf_addr));
-        while (entry == 0) {
-            __asm__ __volatile__("iocsrrd.d %0, %1"
-                                 : "=r"(entry) : "r"(mbuf_addr));
+        {
+            prtos_u64_t poll_count = 0;
+            while (entry == 0) {
+                __asm__ __volatile__("iocsrrd.d %0, %1"
+                                     : "=r"(entry) : "r"(mbuf_addr));
+                poll_count++;
+                if (poll_count == 1000000 || poll_count == 10000000 || poll_count == 100000000) {
+                    kprintf("[PRTOS] vCPU%d: poll_count=%llu entry=0x%llx\n",
+                            KID2VCPUID(k->ctrl.g->id), (unsigned long long)poll_count,
+                            (unsigned long long)entry);
+                }
+            }
+            kprintf("[PRTOS] vCPU%d: MBUF0 poll exited after %llu iterations, entry=0x%llx\n",
+                    KID2VCPUID(k->ctrl.g->id), (unsigned long long)poll_count,
+                    (unsigned long long)entry);
         }
+        /* The poll ran with interrupts disabled; the scheduler timer
+         * (a one-shot ktimer armed before the poll started) has long
+         * since expired.  Clear the stale pending TI, call
+         * timer_handler() to consume expired timers and re-traverse
+         * queues, then trigger a schedule() so get_ready_kthread()
+         * re-arms the scheduler ktimer for the next slot boundary.
+         * Without this, ERTN enables IE but no timer is programmed,
+         * leaving this CPU without scheduler ticks forever. */
+        {
+            prtos_u64_t _clr = 1;
+            __asm__ __volatile__("csrwr %0, 0x44" : "+r"(_clr));
+            extern timer_handler_t loongarch_timer_handler;
+            if (loongarch_timer_handler)
+                loongarch_timer_handler();
+            /* Now schedule so the scheduler ktimer gets re-armed */
+            schedule();
+        }
+        kprintf("[PRTOS] vCPU%d: got MBUF0=0x%llx\n",
+                KID2VCPUID(k->ctrl.g->id), entry);
         /* Linux writes a physical address; the partition expects it as
          * a DMW1-prefixed cached virtual address so the immediate jump
          * lands in cached memory while the guest still has PRTOS's
@@ -157,6 +190,57 @@ void start_up_guest(prtos_address_t entry) {
         entry = (entry & 0x0FFFFFFFFFFFFFFFULL) | (0x9ULL << 60);
         k->ctrl.g->karch.hsm_entry = entry;
         k->ctrl.g->karch.hsm_opaque = 0;
+        kprintf("[PRTOS] vCPU%d: entering guest at 0x%llx, GID=%d\n",
+                KID2VCPUID(k->ctrl.g->id), entry, k->ctrl.g->karch.guest_gid);
+
+        /* Initialize secondary vCPU guest CSRs from vCPU0's saved state.
+         * With TOP=0, vCPU0's DMW/PGDH/PGDL/EENTRY/TLBRENTRY etc. are
+         * written inline by the guest without trapping. PRTOS syncs them
+         * on each VM exit via sync_inline_csrs_from_shadow(). Copy those
+         * values to the secondary vCPU's guest shadow CSRs so the guest's
+         * secondary boot code has DMW and exception vectors ready. */
+        {
+            partition_t *p = get_partition(k);
+            struct kthread_arch *ka0 = &p->kthread[0]->ctrl.g->karch;
+#define _GCSRWR(num, val) do { \
+    prtos_u64_t _v = (val); \
+    __asm__ __volatile__( \
+        ".word (0x01060000 | (" #num " << 10) | 12)\n\t" \
+        : : "r"(_v) : "memory"); \
+} while(0)
+            /* Use the helper in traps.c via a function call instead */
+            extern void lvz_init_secondary_guest_csrs(struct kthread_arch *ka0);
+            kprintf("[PRTOS] vCPU%d: ka0 tlbrentry=0x%llx pgdh=0x%llx pwcl=0x%llx eentry=0x%llx\n",
+                    KID2VCPUID(k->ctrl.g->id),
+                    (unsigned long long)ka0->guest_tlbrentry,
+                    (unsigned long long)ka0->guest_pgdh,
+                    (unsigned long long)ka0->guest_pwcl,
+                    (unsigned long long)ka0->guest_eentry);
+            lvz_init_secondary_guest_csrs(ka0);
+#undef _GCSRWR
+        }
+
+        /* Force-arm a PERIODIC timer to ensure we get TIs in guest.
+         * NOTE: No kprintf between timer arm and JMP_PARTITION_HSM!
+         * Use a long initial period (100ms = 10M ticks) to survive QEMU's
+         * TB translation overhead on first guest entry. The scheduler will
+         * re-arm with the correct period once it handles the first tick. */
+        {
+            /* Clear any pending TI first */
+            prtos_u64_t clr = 1;
+            __asm__ __volatile__("csrwr %0, 0x44" : "+r"(clr)); /* TICLR */
+            /* Disable then re-enable timer */
+            prtos_u64_t zero = 0;
+            __asm__ __volatile__("csrwr %0, 0x41" : "+r"(zero));
+            /* EN=1, PERIODIC=1, interval=250000 InitVal = 10ms (250000*40ns) */
+            prtos_u64_t htcfg = 3UL | (250000UL << 2);
+            __asm__ __volatile__("csrwr %0, 0x41" : "+r"(htcfg));
+            /* Enable TI in ECFG */
+            prtos_u64_t ecfg;
+            __asm__ __volatile__("csrrd %0, 0x4" : "=r"(ecfg));
+            ecfg |= (1UL << 11); /* TI enable */
+            __asm__ __volatile__("csrwr %0, 0x4" : "+r"(ecfg));
+        }
         JMP_PARTITION_HSM(k);
         /* unreachable */
     }

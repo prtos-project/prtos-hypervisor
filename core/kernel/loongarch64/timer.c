@@ -38,6 +38,12 @@ static prtos_time_t loongarch_get_time_usec(void) {
 static void loongarch_set_hw_timer(prtos_time_t delta) {
     prtos_u64_t ticks = delta * 100;  /* usec to timer ticks (100MHz) */
     if (ticks < 1000) ticks = 1000;
+    {
+        static int _sht_dbg = 0;
+        int _cpu = ({prtos_u64_t v; __asm__("csrrd %0, 0x31":"=r"(v)); (int)v;});
+        if (_cpu == 1 && ++_sht_dbg <= 10)
+            kprintf("[SHT] cpu1 #%d delta=%lld ticks=%llu\n", _sht_dbg, (long long)delta, (unsigned long long)ticks);
+    }
     /* LoongArch TCFG: TVAL is reloaded from InitVal only when En transitions
      * from 0 to 1.  If the timer is already running (En=1), we must first
      * disable it so the next write triggers a proper 0→1 transition. */

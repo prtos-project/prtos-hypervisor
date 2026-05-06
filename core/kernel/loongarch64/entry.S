@@ -84,9 +84,10 @@ _trap_entry:
     /* Save t0 to SAVE2 (scratch), preserving SAVE0 (host sp) */
     csrwr   $t0, CSR_SAVE2      /* Save t0 temporarily in SAVE2 */
 
-    /* Check LVZ guest exit first: GSTAT.PVM (bit 1) */
-    csrrd   $t0, CSR_GSTAT       /* 0x50 */
-    andi    $t0, $t0, 0x2        /* PVM bit */
+    /* Check LVZ guest exit: SAVE5 flag (set before ERTN to guest).
+     * We check SAVE5 instead of GSTAT.PVM because QEMU clears PVM
+     * on VM exit before vectoring to the host trap entry. */
+    csrrd   $t0, CSR_SAVE5       /* 0x35 */
     bnez    $t0, _trap_from_lvz_guest
 
     /* Check PLV3 para-virt guest: PRMD.PPLV */
@@ -99,8 +100,12 @@ _trap_entry:
     b       _trap_save_regs
 
 _trap_from_lvz_guest:
-    /* LVZ guest exit: clear PVM, clear GTLBC.TGID, set LVZ flag */
-    /* Clear GSTAT.PVM */
+    /* LVZ guest exit.
+     * SAVE5=1 was set before ERTN to guest; keep it set so
+     * is_trap_from_guest() and the restore path can detect this.
+     * Nested traps cannot occur (IE=0 throughout C handler). */
+
+    /* Clear GSTAT.PVM (may already be 0 if QEMU cleared it) */
     li.w    $t0, 0x2
     csrxchg $zero, $t0, CSR_GSTAT
 
@@ -108,10 +113,6 @@ _trap_from_lvz_guest:
     csrrd   $t0, CSR_GTLBC
     bstrins.w $t0, $zero, 23, 16
     csrwr   $t0, CSR_GTLBC
-
-    /* Set LVZ flag in SAVE5 */
-    li.w    $t0, 1
-    csrwr   $t0, CSR_SAVE5
 
     /* Swap to host stack from SAVE0 */
     move    $t0, $sp             /* t0 = guest sp */
@@ -278,12 +279,11 @@ _trap_restore_host:
     ertn
 
 _trap_restore_guest:
-    /* Check if LVZ return (SAVE5 flag) */
+    /* Check if LVZ return (SAVE5 flag in trap frame) */
     csrrd   $t0, CSR_SAVE5
     beqz    $t0, _plv3_guest_return
 
     /* LVZ guest re-entry path */
-    csrwr   $zero, CSR_SAVE5     /* Clear LVZ flag */
 
     /* Override ERA from regs frame */
     ld.d    $t0, $sp, REG_ERA
@@ -588,3 +588,4 @@ leave_hypervisor_to_guest:
     ld.d    $sp,  $sp, REG_SP
 
     ertn
+
