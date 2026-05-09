@@ -111,6 +111,7 @@ struct kthread_arch {
 
     /* IPI emulation */
     prtos_u64_t ipi_pending;
+    prtos_u64_t guest_ipi_status;
 
     /* HWI interrupt injection tracking (bits 7:0 = HWI7..HWI0 injected via GINTC) */
     prtos_u64_t hwi_injected;

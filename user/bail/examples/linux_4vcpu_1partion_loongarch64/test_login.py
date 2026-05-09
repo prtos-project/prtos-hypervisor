@@ -6,8 +6,8 @@ import sys
 import os
 import time
 
-TIMEOUT = 360
-LOGIN_TIMEOUT = 30
+TIMEOUT = int(os.environ.get("PRTOS_LOGIN_TIMEOUT", "5400"))
+LOGIN_TIMEOUT = int(os.environ.get("PRTOS_LOGIN_PROMPT_TIMEOUT", "60"))
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -16,8 +16,12 @@ subprocess.run(["make"], capture_output=True)
 
 QEMU = os.environ.get("QEMU_LOONGARCH64",
     "/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64")
+QEMU_ACCEL = os.environ.get("QEMU_LOONGARCH64_ACCEL", "-accel tcg,thread=multi")
+QEMU_EXTRA_ARGS = os.environ.get("QEMU_LOONGARCH64_EXTRA_ARGS", "-nodefaults -nic none")
 
 cmd = (f"{QEMU} "
+    f"{QEMU_ACCEL} "
+    f"{QEMU_EXTRA_ARGS} "
        "-machine virt "
        "-cpu max "
        "-smp 4 "

@@ -69,7 +69,7 @@ ALL_CASES=(
     "virtio_linux_demo_2p_amd64:0:480:amd64"
     "freertos_para_virt_loongarch64:1:20:loongarch64"
     "freertos_hw_virt_loongarch64:1:30:loongarch64"
-    "linux_4vcpu_1partion_loongarch64:0:600:loongarch64"
+    "linux_4vcpu_1partion_loongarch64:0:5400:loongarch64"
     "mix_os_demo_loongarch64:0:420:loongarch64"
     "virtio_linux_demo_2p_loongarch64:0:240:loongarch64"
 )

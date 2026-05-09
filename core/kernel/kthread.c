@@ -142,8 +142,6 @@ void start_up_guest(prtos_address_t entry) {
     if (k->ctrl.g->karch.lvz_enabled && KID2VCPUID(k->ctrl.g->id) != 0) {
         prtos_u64_t mbuf_addr = 0x1020;
         prtos_u64_t entry = 0;
-        kprintf("[PRTOS] vCPU%d: waiting for IOCSR MBUF0 on pCPU%d\n",
-                KID2VCPUID(k->ctrl.g->id), GET_CPU_ID());
         /* Clear stale value left by PRTOS's own secondary-CPU wake-up
          * (which used the same IOCSR mailbox to bring this pCPU out of
          * reset) before waiting for Linux's smpboot wakeup. */
@@ -154,15 +152,7 @@ void start_up_guest(prtos_address_t entry) {
                 __asm__ __volatile__("iocsrrd.d %0, %1"
                                      : "=r"(entry) : "r"(mbuf_addr));
                 poll_count++;
-                if (poll_count == 1000000 || poll_count == 10000000 || poll_count == 100000000) {
-                    kprintf("[PRTOS] vCPU%d: poll_count=%llu entry=0x%llx\n",
-                            KID2VCPUID(k->ctrl.g->id), (unsigned long long)poll_count,
-                            (unsigned long long)entry);
-                }
             }
-            kprintf("[PRTOS] vCPU%d: MBUF0 poll exited after %llu iterations, entry=0x%llx\n",
-                    KID2VCPUID(k->ctrl.g->id), (unsigned long long)poll_count,
-                    (unsigned long long)entry);
         }
         /* The poll ran with interrupts disabled; the scheduler timer
          * (a one-shot ktimer armed before the poll started) has long
@@ -181,8 +171,6 @@ void start_up_guest(prtos_address_t entry) {
             /* Now schedule so the scheduler ktimer gets re-armed */
             schedule();
         }
-        kprintf("[PRTOS] vCPU%d: got MBUF0=0x%llx\n",
-                KID2VCPUID(k->ctrl.g->id), entry);
         /* Linux writes a physical address; the partition expects it as
          * a DMW1-prefixed cached virtual address so the immediate jump
          * lands in cached memory while the guest still has PRTOS's
@@ -190,8 +178,6 @@ void start_up_guest(prtos_address_t entry) {
         entry = (entry & 0x0FFFFFFFFFFFFFFFULL) | (0x9ULL << 60);
         k->ctrl.g->karch.hsm_entry = entry;
         k->ctrl.g->karch.hsm_opaque = 0;
-        kprintf("[PRTOS] vCPU%d: entering guest at 0x%llx, GID=%d\n",
-                KID2VCPUID(k->ctrl.g->id), entry, k->ctrl.g->karch.guest_gid);
 
         /* Initialize secondary vCPU guest CSRs from vCPU0's saved state.
          * With TOP=0, vCPU0's DMW/PGDH/PGDL/EENTRY/TLBRENTRY etc. are
@@ -210,12 +196,6 @@ void start_up_guest(prtos_address_t entry) {
 } while(0)
             /* Use the helper in traps.c via a function call instead */
             extern void lvz_init_secondary_guest_csrs(struct kthread_arch *ka0);
-            kprintf("[PRTOS] vCPU%d: ka0 tlbrentry=0x%llx pgdh=0x%llx pwcl=0x%llx eentry=0x%llx\n",
-                    KID2VCPUID(k->ctrl.g->id),
-                    (unsigned long long)ka0->guest_tlbrentry,
-                    (unsigned long long)ka0->guest_pgdh,
-                    (unsigned long long)ka0->guest_pwcl,
-                    (unsigned long long)ka0->guest_eentry);
             lvz_init_secondary_guest_csrs(ka0);
 #undef _GCSRWR
         }
