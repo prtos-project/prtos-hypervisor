@@ -140,18 +140,12 @@ void start_up_guest(prtos_address_t entry) {
      * those secondaries must remain halted until that hypercall fires.
      * Skip the IOCSR mailbox wait for them. */
     if (k->ctrl.g->karch.lvz_enabled && KID2VCPUID(k->ctrl.g->id) != 0) {
-        prtos_u64_t mbuf_addr = 0x1020;
+        extern prtos_u64_t prtos_mbuf0[];
         prtos_u64_t entry = 0;
-        /* Clear stale value left by PRTOS's own secondary-CPU wake-up
-         * (which used the same IOCSR mailbox to bring this pCPU out of
-         * reset) before waiting for Linux's smpboot wakeup. */
-        __asm__ __volatile__("iocsrwr.d $r0, %0" : : "r"(mbuf_addr));
+        /* Poll global per-CPU mbuf0 (updated by MBUF_SEND emulation in traps.c) */
         {
-            prtos_u64_t poll_count = 0;
             while (entry == 0) {
-                __asm__ __volatile__("iocsrrd.d %0, %1"
-                                     : "=r"(entry) : "r"(mbuf_addr));
-                poll_count++;
+                entry = prtos_mbuf0[GET_CPU_ID()];
             }
         }
         /* The poll ran with interrupts disabled; the scheduler timer

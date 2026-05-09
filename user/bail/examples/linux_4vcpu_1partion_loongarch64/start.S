@@ -64,7 +64,7 @@ _boot:
 	/* Secondary vCPU bootstrap: poll IOCSR MBUF0 until Linux writes
 	 * the smpboot_entry physical address, then convert to a DMW0
 	 * cached virtual address (PA | 0x9000_0000_0000_0000) and jump.
-	 * Use 'idle' between polls to avoid busy-spinning GSPR traps. */
+	 * Spin without 'idle' to avoid vCPU halt in QEMU LVZ. */
 _secondary_wait:
 	/* Set up DMW for secondary CPUs too (needed when they jump to kernel) */
 	li.d	$t0, 0x8000000000000001
@@ -73,10 +73,8 @@ _secondary_wait:
 	csrwr	$t0, 0x181
 
 	li.d	$t0, 0x1020
-	iocsrwr.d $zero, $t0
 1:	iocsrrd.d $t1, $t0
 	bnez	$t1, 2f
-	idle	0
 	b	1b
 2:
 	/* Set bits 63:60 = 0x9 (DMW1 cached prefix) so the PA becomes a

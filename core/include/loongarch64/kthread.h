@@ -119,6 +119,9 @@ struct kthread_arch {
     /* Secondary vCPU boot (hw-virt multi-vCPU partitions) */
     prtos_u64_t hsm_entry;      /* Entry point for secondary vCPU */
     prtos_u64_t hsm_opaque;     /* Opaque value passed to secondary vCPU */
+
+    /* Per-vCPU IOCSR mailbox (MBUF0) for SMP boot */
+    prtos_u64_t mbuf0;
 };
 
 #endif

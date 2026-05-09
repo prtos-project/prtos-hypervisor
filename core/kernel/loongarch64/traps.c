@@ -20,6 +20,10 @@ extern void do_hyp_trap(cpu_ctxt_t *ctxt);
 extern prtos_s32_t raise_pend_irqs(cpu_ctxt_t *ctxt);
 extern prtos_u32_t prtos_lvz_available;
 
+/* Per-CPU MBUF0 mailbox for SMP vCPU wakeup.
+ * Written by MBUF_SEND emulation (from vCPU0), read by polling loop in kthread.c. */
+prtos_u64_t prtos_mbuf0[CONFIG_NO_CPUS];
+
 struct cpu_user_regs *prtos_current_guest_regs_percpu[CONFIG_NO_CPUS];
 
 /* Forward declaration of hypercall handler */
@@ -269,6 +273,42 @@ static int handle_iocsr_passthrough(struct cpu_user_regs *regs, prtos_u32_t insn
                 ka->guest_estat &= ~(1UL << LOONGARCH_INT_IPI);
                 clear_guest_vip_bit(0);
             }
+        } else if (addr == 0x1048 && k && k->ctrl.g) {
+            /* MBUF_SEND: deliver mailbox message to target vCPU's MBUF0. */
+            prtos_u32_t target_cpu = (val >> 16) & 0x3FF;
+            prtos_u32_t box_offset = (val >> 2) & 0x7;
+
+            if (box_offset == 1) {
+                /* High 32 bits (box hi=1): data in bits [63:32] */
+                k->ctrl.g->karch.mbuf0 = (k->ctrl.g->karch.mbuf0 & 0xFFFFFFFFULL) | (val & 0xFFFFFFFF00000000ULL);
+            } else {
+                /* Low 32 bits (box lo=0): data in bits [63:32] */
+                k->ctrl.g->karch.mbuf0 = (k->ctrl.g->karch.mbuf0 & 0xFFFFFFFF00000000ULL) | ((val & 0xFFFFFFFF00000000ULL) >> 32);
+                /* Now deliver to target vCPU's global mbuf0 */
+                if (target_cpu < CONFIG_NO_CPUS) {
+                    prtos_mbuf0[target_cpu] = k->ctrl.g->karch.mbuf0;
+                }
+            }
+        } else if (addr == 0x1020 && k && k->ctrl.g) {
+            /* MBUF0 write: store to per-vCPU mailbox */
+            k->ctrl.g->karch.mbuf0 = val;
+        } else if (addr == 0x1040 && k && k->ctrl.g) {
+            /* IPI_SEND: deliver virtual IPI to target vCPU.
+             * Format: bits[25:16]=target_cpu, bits[4:0]=action.
+             * Inject IPI into target vCPU's guest ESTAT. */
+            prtos_u32_t target_cpu = (val >> 16) & 0x3FF;
+            if (target_cpu < CONFIG_NO_CPUS) {
+                extern local_processor_t local_processor_info[];
+                local_processor_t *tgt_info = &local_processor_info[target_cpu];
+                kthread_t *tgt_k = tgt_info->sched.current_kthread;
+                if (tgt_k && tgt_k->ctrl.g &&
+                    tgt_k->ctrl.g->id == k->ctrl.g->id) {
+                    struct kthread_arch *tgt_ka = &tgt_k->ctrl.g->karch;
+                    tgt_ka->guest_ipi_status |= (1U << (val & 0x1F));
+                    tgt_ka->guest_estat |= (1UL << LOONGARCH_INT_IPI);
+                    set_guest_vip_bit(0);
+                }
+            }
         } else {
             iocsr_passthrough_write(addr, val, width);
         }
@@ -279,6 +319,9 @@ static int handle_iocsr_passthrough(struct cpu_user_regs *regs, prtos_u32_t insn
 
         if (addr == 0x1000 && k && k->ctrl.g) {
             val = k->ctrl.g->karch.guest_ipi_status;
+        } else if (addr == 0x1020 && k && k->ctrl.g) {
+            /* MBUF0 read: return per-vCPU mailbox value */
+            val = prtos_mbuf0[GET_CPU_ID()];
         } else {
             val = iocsr_passthrough_read(addr, width);
         }
@@ -535,11 +578,12 @@ static int guest_csr_write(struct kthread_arch *ka, prtos_u32_t csr_num,
             prtos_u64_t interval = (val & TCFG_VAL) >> 2;
             ka->guest_tcfg_deadline = read_stable_counter() + interval;
             ka->guest_timer_active = 1;
-            /* Program host timer so helper_csrwr_tcfg sets
-             * guest_timer_offset for helper_check_timer_irq.
-             * Also needed to wake halted CPUs from idle. */
+            /* Program host timer: must disable first so the 0→1
+             * transition reloads TVAL from InitVal. */
+            prtos_u64_t zero = 0;
+            __asm__ __volatile__("csrwr %0, 0x41" : "+r"(zero));  /* disable */
             prtos_u64_t htcfg = val;
-            __asm__ __volatile__("csrwr %0, 0x41" : "+r"(htcfg));
+            __asm__ __volatile__("csrwr %0, 0x41" : "+r"(htcfg));  /* re-enable */
         } else {
             ka->guest_timer_active = 0;
         }

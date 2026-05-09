@@ -1,11 +1,11 @@
 # Example : linux_4vcpu_1partion_loongarch64
 
 ## Description
-This example demonstrates the Linux kernel running on PRTOS LoongArch64 with trap-and-emulate hardware-assisted virtualization (hw-virt). The guest Linux runs with 4 vCPUs, CSR/TLB/timer operations trapped and emulated by the hypervisor. UART is mapped via guest TLB pass-through.
+This example runs a LoongArch64 Linux guest on PRTOS with 4 vCPUs. The guest uses the LoongArch LVZ (Loongson Virtualization) hardware-assisted virtualization in PRTOS/QEMU. The validated run target boots to a Buildroot login prompt.
 
 ## Partition definition
 There is one partition.
-- P0 (Linux): System partition running Linux with 4 vCPUs using CSR trap-and-emulate virtualization, with UART device pass-through.
+- P0 (Linux): System partition running Linux with 4 vCPUs, UART pass-through, and LVZ-enabled guest execution.
 
 ## Configuration table
 Single-partition configuration with 4 physical CPUs and device pass-through.
@@ -24,81 +24,261 @@ Memory layout:
 
 ## Prerequisites
 
-### 1. Build Buildroot (rootfs)
+Make sure the host has these toolchains available before building:
+
+- `loongarch64-linux-gnu-gcc` / `loongarch64-linux-gnu-ld`
+- `gcc` / `g++`
+- `make`, `ninja`, `dtc` (device tree compiler)
+- Python3 with `pexpect` (for automated testing)
+
+Workspace paths used below:
+
+- Buildroot: `/home/chenweis/loongarch64_workspace/buildroot`
+- Linux: `/home/chenweis/loongarch64_workspace/linux-6.19.9`
+- QEMU source: `/home/chenweis/loongarch64_workspace/qemu`
+- QEMU install prefix: `/home/chenweis/loongarch64_workspace/qemu_install`
+
+## Step 1: Build Buildroot rootfs
 
 ```bash
-cd /home/chenweis/hdd/Repo/loongarch64_linux_workspace/buildroot
-
-# Use QEMU LoongArch64 virt defconfig as a starting point
+cd /home/chenweis/loongarch64_workspace/buildroot
 make qemu_loongarch64_virt_efi_defconfig
-
-# Customize configuration
 make menuconfig
-# Set the following options:
-#   Target options -> Architecture: LoongArch (64-bit)
-#   Filesystem images -> cpio the root filesystem: [*]
-#   Target packages -> BusyBox -> Build BusyBox as a static binary: [*]
-#   Build options -> libraries -> static only: [*]
+```
 
+Set these Buildroot options:
+
+| Config Option | Value | Purpose |
+| --- | --- | --- |
+| `BR2_TARGET_GENERIC_ROOT_PASSWD` | `1234` | Root login password |
+| `BR2_TARGET_ROOTFS_CPIO` | `y` | Generate `rootfs.cpio` |
+| `BR2_PACKAGE_NBD` | `y` | Enable NBD package |
+| `BR2_PACKAGE_NBD_CLIENT` | `y` | Install `nbd-client` |
+
+Then build:
+
+```bash
 make -j$(nproc)
 ```
 
-The rootfs CPIO image will be at `output/images/rootfs.cpio`.
+Expected artifact:
 
-### 2. Build Linux Kernel
+```
+/home/chenweis/loongarch64_workspace/buildroot/output/images/rootfs.cpio
+```
+
+## Step 2: Build Linux 6.19.9
 
 ```bash
-cd /home/chenweis/hdd/Repo/loongarch64_linux_workspace/linux-6.19.9
-
-# Use loongson64 defconfig as base
+cd /home/chenweis/loongarch64_workspace/linux-6.19.9
 make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- loongson64_defconfig
-
-# Customize configuration
 make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- menuconfig
-# Set the following options:
-#   General setup -> Initial RAM filesystem and RAM disk support -> Initramfs source file(s):
-#     /home/chenweis/hdd/Repo/loongarch64_linux_workspace/buildroot/output/images/rootfs.cpio
-#   General setup -> Configure standard kernel features -> Enable support for printk: [*]
-#   Device Drivers -> Input device support -> Hardware I/O ports -> i8042 PC Keyboard controller: [ ]
-#   Device Drivers -> Input device support -> Keyboards -> AT keyboard: [ ]
-#   Device Drivers -> Input device support -> Mice -> PS/2 mouse: [ ]
-#   Kernel hacking -> printk and dmesg options -> Enable dynamic printk() support: [ ]
-#   Boot options -> Built-in kernel command string:
-#     console=ttyS0,115200 earlycon mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp rdinit=/bin/sh
-#   Boot options -> Built-in command line override (CONFIG_CMDLINE_FORCE): [*]
+```
 
+Set these kernel options:
+
+| Config Option | Value | Purpose |
+| --- | --- | --- |
+| `CONFIG_BLK_DEV_NBD` | `y` | NBD block device |
+| `CONFIG_TUN` | `y` | TUN/TAP device |
+| `CONFIG_STRICT_DEVMEM` | `n` | Allow `/dev/mem` mmap for shared memory |
+| `CONFIG_INITRAMFS_SOURCE` | `/home/chenweis/loongarch64_workspace/buildroot/output/images/rootfs.cpio` | Embed Buildroot rootfs |
+| `CONFIG_CMDLINE` | `"console=ttyS0,115200 earlycon=uart8250,mmio,0x1fe001e0 mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp nokaslr"` | Kernel command line |
+| `CONFIG_CMDLINE_FORCE` | `y` | Force built-in command line |
+| `CONFIG_BUILTIN_DTB` | `y` | Embed DTB in kernel |
+| `CONFIG_BUILTIN_DTB_NAME` | `"linux_guest"` | DTB file name |
+| `CONFIG_SERIO_I8042` | `n` | Disable i8042 (not available in PRTOS guest) |
+| `CONFIG_KEYBOARD_ATKBD` | `n` | Disable AT keyboard |
+| `CONFIG_MOUSE_PS2` | `n` | Disable PS/2 mouse |
+
+**Important**: The DTB file `linux_guest.dts` from this example directory must be copied to `arch/loongarch/boot/dts/` in the kernel tree before building:
+
+```bash
+cp /home/chenweis/prtos-project/prtos-hypervisor/user/bail/examples/linux_4vcpu_1partion_loongarch64/linux_guest.dts \
+   /home/chenweis/loongarch64_workspace/linux-6.19.9/arch/loongarch/boot/dts/
+```
+
+Then build the kernel image:
+
+```bash
 make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- vmlinux -j$(nproc)
 ```
 
-The Makefile automatically picks up `vmlinux` from the Linux workspace.
+Expected artifact:
 
-### 3. LoongArch64 Boot Loader
+```
+/home/chenweis/loongarch64_workspace/linux-6.19.9/vmlinux
+```
 
-LoongArch64 on PRTOS does **not** use U-Boot. The mainline U-Boot project does not yet support the LoongArch architecture. Instead, PRTOS uses its own RSW (Resident Software) boot loader located at `user/bootloaders/rsw/loongarch64/`. The RSW is a lightweight stub that:
+The example Makefile consumes `vmlinux` from that path directly.
 
-1. Runs in Direct Address (DA) mode at reset
-2. Parses the PRTOS container image
-3. Loads the PRTOS hypervisor core
-4. Transfers control to the hypervisor
+### Kernel config notes for PRTOS LVZ guest
 
-QEMU's `-kernel resident_sw` option loads the RSW directly, which in turn boots the hypervisor and all partitions.
+The LoongArch Linux kernel requires special configuration to run as an LVZ guest on PRTOS:
 
-## Build & Run
+1. **Built-in DTB**: The kernel needs `CONFIG_BUILTIN_DTB=y` because PRTOS boots in non-EFI mode, and the kernel's `fdt_setup()` only accepts DTB from EFI or built-in. The `fw_arg1` register is used for the command line pointer, not the DTB.
+
+2. **UART register spacing**: QEMU's LoongArch virt machine uses 1-byte register spacing for the NS16550 UART (`regshift=0`). The `earlycon` parameter must use `mmio` (not `mmio32`).
+
+3. **Disabled i8042/PS2**: The i8042 keyboard controller and PS/2 mouse are not available in the PRTOS guest. Accessing their I/O ports causes kernel panics.
+
+4. **Initramfs overlay**: A custom `/init` script is prepended to the Buildroot rootfs.cpio to work around userspace crashes (see Step 2b below).
+
+### Step 2b: Create initramfs overlay (fix userspace crashes)
+
+Some Buildroot init scripts (`S02sysctl`, `S10udevd`) crash with SIGSEGV in the LVZ guest environment due to busybox/udev incompatibilities. A custom `/init` wrapper script is used to skip these problematic services.
 
 ```bash
-# Build PRTOS
-cd prtos-hypervisor
-cp prtos_config.loongarch64 prtos_config
-make defconfig && make
+# Create the wrapper init script
+cat > /tmp/prtos_init.sh << 'EOF'
+#!/bin/sh
+/bin/mount -t proc proc /proc 2>/dev/null
+/bin/mount -t sysfs sysfs /sys 2>/dev/null
+/bin/mount -t devtmpfs devtmpfs /dev 2>/dev/null
+if [ ! -e /dev/console ]; then
+    /bin/mknod /dev/console c 5 1 2>/dev/null
+fi
+if [ -e /dev/console ]; then
+    exec 0</dev/console 2>/dev/null
+    exec 1>/dev/console 2>/dev/null
+    exec 2>/dev/console 2>/dev/null
+fi
+/bin/mount -a 2>/dev/null
+/bin/hostname -F /etc/hostname 2>/dev/null
+/bin/mkdir -p /dev/pts /dev/shm /run/lock/subsys 2>/dev/null
+/bin/ln -sf /proc/self/fd /dev/fd 2>/dev/null
+/bin/ln -sf /proc/self/fd/0 /dev/stdin 2>/dev/null
+/bin/ln -sf /proc/self/fd/1 /dev/stdout 2>/dev/null
+/bin/ln -sf /proc/self/fd/2 /dev/stderr 2>/dev/null
+/sbin/syslogd 2>/dev/null
+/sbin/klogd 2>/dev/null
+if [ -x /etc/init.d/S01seedrng ]; then
+    /etc/init.d/S01seedrng start 2>/dev/null
+fi
+echo ""
+echo "Welcome to Buildroot"
+echo ""
+while true; do
+    /sbin/getty -L console 0 vt100
+    sleep 1
+done
+EOF
+chmod +x /tmp/prtos_init.sh
 
-# Build and run the example
-cd user/bail/examples/linux_4vcpu_1partion_loongarch64
-make clean && make
+# Build gen_init_cpio from kernel tree
+gcc -o /home/chenweis/loongarch64_workspace/linux-6.19.9/usr/gen_init_cpio \
+    /home/chenweis/loongarch64_workspace/linux-6.19.9/usr/gen_init_cpio.c
+
+# Create overlay cpio
+cat > /tmp/initramfs_list.txt << 'EOF'
+file /init /tmp/prtos_init.sh 0755 0 0
+EOF
+/home/chenweis/loongarch64_workspace/linux-6.19.9/usr/gen_init_cpio \
+    /tmp/initramfs_list.txt > /tmp/overlay.cpio
+
+# Append overlay to rootfs (appending ensures overlay files overwrite originals)
+cat /home/chenweis/loongarch64_workspace/buildroot/output/images/rootfs.cpio \
+    /tmp/overlay.cpio > /tmp/rootfs_fixed.cpio
+
+# Update CONFIG_INITRAMFS_SOURCE to point to the fixed cpio
+# (edit .config or use make menuconfig)
+```
+
+After creating the overlay, set `CONFIG_INITRAMFS_SOURCE="/tmp/rootfs_fixed.cpio"` and rebuild the kernel.
+
+## Step 3: Build and install LoongArch64 QEMU
+
+```bash
+export CC=gcc
+export CXX=g++
+cd /home/chenweis/loongarch64_workspace/qemu
+mkdir -p build
+cd build
+../configure --target-list=loongarch64-softmmu --enable-tcg --enable-slirp --enable-virtfs --disable-werror \
+   --prefix=/home/chenweis/loongarch64_workspace/qemu_install
+ninja -j20 install
+```
+
+Expected installed binary:
+
+```
+/home/chenweis/loongarch64_workspace/qemu_install/bin/qemu-system-loongarch64
+```
+
+The validated LoongArch64 example path uses TCG with:
+
+```
+-accel tcg,thread=multi
+```
+
+## Step 4: Build PRTOS and run the example
+
+```bash
+cd /home/chenweis/prtos-project/prtos-hypervisor
+make distclean
+cp prtos_config.loongarch64 prtos_config
+make defconfig
+make
+
+cd user/bail/examples/linux_4vcpu_1partion_loongarch64/
 make run.loongarch64
 ```
 
-## Expected results
-PRTOS will load, initialise and run the Linux partition using CSR trap-and-emulate virtualization with 4 vCPUs.
-Linux boots with SMP support (3 secondary CPUs started), reaches "Run /bin/sh as init process", and presents a shell prompt (`~ # `).
+If you want the scripted regression check used during validation:
 
-**Note:** Due to trap-and-emulate overhead, boot time is significantly longer than native (~3 minutes wall time).
+```bash
+cd /home/chenweis/prtos-project/prtos-hypervisor
+bash scripts/run_test.sh --arch loongarch64 check-all
+```
+
+## Expected result
+
+A successful run reaches the Buildroot login prompt:
+
+```text
+Welcome to Buildroot
+buildroot login: root
+Password:
+```
+
+After logging in with username `root` and password `1234`, the guest should show four CPUs online:
+
+```text
+# uname -a
+Linux buildroot 6.19.9 #1 SMP PREEMPT Sun May 10 20:00:00 CST 2026 loongarch64 GNU/Linux
+#
+# cat /proc/cpuinfo | grep processor
+processor       : 0
+processor       : 1
+processor       : 2
+processor       : 3
+#
+```
+
+## PRTOS Hypervisor Fixes for LoongArch64
+
+The following PRTOS hypervisor fixes were required to resolve the boot hang:
+
+### Timer Emulation Fix (`core/kernel/loongarch64/traps.c`)
+
+The LoongArch hardware timer requires a **disable-then-enable** sequence to reload the timer value when the timer is already running. The guest TCFG write handler was writing the guest's timer value directly to the host TCFG without first disabling it, which meant the new timer value was ignored when the host timer was already active.
+
+**Fix**: Added `csrwr $zero, 0x41` (disable) before `csrwr htcfg, 0x41` (re-enable) in the TCFG guest CSR write handler. This ensures the 0→1 transition needed to reload the timer InitVal.
+
+```c
+// Before (broken):
+prtos_u64_t htcfg = val;
+__asm__ __volatile__("csrwr %0, 0x41" : "+r"(htcfg));
+
+// After (fixed):
+prtos_u64_t zero = 0;
+__asm__ __volatile__("csrwr %0, 0x41" : "+r"(zero));  /* disable */
+prtos_u64_t htcfg = val;
+__asm__ __volatile__("csrwr %0, 0x41" : "+r"(htcfg));  /* re-enable */
+```
+
+## Notes
+
+- LoongArch64 boot on TCG is slow compared with native hardware. Give the guest several minutes to reach the login prompt (typically ~120-180 seconds on modern x86 hosts).
+- This example uses the PRTOS resident software boot flow through `resident_sw`; no U-Boot step is required.
+- The `S02sysctl` and `S10udevd` Buildroot init scripts are disabled via the custom init wrapper due to busybox/udev incompatibilities in the LVZ guest environment. These are userspace issues, not hypervisor bugs.

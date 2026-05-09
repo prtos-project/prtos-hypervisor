@@ -16,6 +16,27 @@
 			reg = <0x00>;
 			phandle = <0x01>;
 		};
+
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "loongarch,loongson-64bit";
+			reg = <0x01>;
+			phandle = <0x02>;
+		};
+
+		cpu@2 {
+			device_type = "cpu";
+			compatible = "loongarch,loongson-64bit";
+			reg = <0x02>;
+			phandle = <0x03>;
+		};
+
+		cpu@3 {
+			device_type = "cpu";
+			compatible = "loongarch,loongson-64bit";
+			reg = <0x03>;
+			phandle = <0x04>;
+		};
 	};
 
 	memory@80000000 {
