@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test Virtio Linux Demo (RISC-V 64): 2 SMP Linux Partitions.
+Test Virtio Linux Demo (LoongArch64): 2 SMP Linux Partitions.
 
 Architecture:
   Partition 0 (System): Linux + Virtio Backend (2 vCPU, pCPU 0-1, console=NS16550 UART)
@@ -23,9 +23,10 @@ import fcntl
 
 DEMO_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(DEMO_DIR)
+TIMEOUT = int(os.environ.get("PRTOS_LOGIN_TIMEOUT", "1200"))
 
 # Build only if needed
-if not os.path.exists("resident_sw.bin"):
+if not os.path.exists("resident_sw"):
     subprocess.run(["make", "clean"], capture_output=True)
     ret = subprocess.run(["make"], capture_output=True)
     if ret.returncode != 0:
@@ -33,20 +34,24 @@ if not os.path.exists("resident_sw.bin"):
         print(ret.stdout.decode(errors='replace'))
         print(ret.stderr.decode(errors='replace'))
         sys.exit(1)
-    subprocess.run(["riscv64-linux-gnu-objcopy", "-O", "binary",
-                    "-R", ".note", "-R", ".note.gnu.build-id", "-R", ".comment", "-S",
-                    "resident_sw", "resident_sw.bin"], capture_output=True)
 
 # Start QEMU
-cmd = ("qemu-system-riscv64 "
+QEMU = os.environ.get("QEMU_LOONGARCH64",
+    "/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64")
+QEMU_ACCEL = os.environ.get("QEMU_LOONGARCH64_ACCEL", "-accel tcg,thread=multi")
+QEMU_EXTRA_ARGS = os.environ.get("QEMU_LOONGARCH64_EXTRA_ARGS", "-nodefaults -nic none")
+
+cmd = (f"{QEMU} "
+       f"{QEMU_ACCEL} "
+       f"{QEMU_EXTRA_ARGS} "
        "-machine virt "
-       "-cpu rv64 "
-       "-smp 4 -m 1G "
+       "-cpu max "
+       "-smp 4 -m 2G "
        "-nographic -no-reboot "
-       "-bios default "
-       "-kernel resident_sw.bin "
+       "-kernel resident_sw "
        "-monitor none "
-       "-serial stdio")
+       "-chardev stdio,id=s0,signal=off "
+       "-serial chardev:s0")
 
 print("=== Starting QEMU ===")
 proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE,
@@ -88,7 +93,7 @@ def wait_for(pattern, timeout=300):
     return False
 
 # Wait for login prompt (System outputs to NS16550 UART)
-if not wait_for("buildroot login:", timeout=500):
+if not wait_for("buildroot login:", timeout=TIMEOUT):
     print("\n=== FAIL: No login prompt detected ===")
     text = buf.decode("latin-1", errors="replace")
     print(f"Last 500 chars: {repr(text[-500:])}")
@@ -100,12 +105,12 @@ print("\n=== Login prompt detected ===")
 
 # Login
 time.sleep(1)
-send("root\n")
+send("root\r")
 time.sleep(2)
 read_output(timeout=2)
 text = buf.decode("latin-1", errors="replace")
 if "password" in text.lower():
-    send("1234\n")
+    send("1234\r")
     time.sleep(2)
     read_output(timeout=2)
 
@@ -124,7 +129,7 @@ time.sleep(0.5)
 buf = b""
 send("uname -a\n")
 time.sleep(2)
-read_output(timeout=3)
+read_output(timeout=30)
 text = buf.decode("latin-1", errors="replace")
 if "linux" not in text.lower():
     print("\n=== FAIL: uname did not return Linux ===")

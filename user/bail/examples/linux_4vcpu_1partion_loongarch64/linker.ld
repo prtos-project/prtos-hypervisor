@@ -7,7 +7,7 @@
 ENTRY(_boot)
 
 SECTIONS {
-    . = 0x80000000;
+. = 0x80000000;
 
     /* PRTOS image header (must be first for prtoseformat) */
     .prtos_image_hdr : {

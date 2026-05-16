@@ -41,7 +41,7 @@
 
 	memory@80000000 {
 		device_type = "memory";
-                reg = <0x00 0x80000000 0x00 0x20000000>;
+		reg = <0x00 0x80000000 0x00 0x20000000>;
 	};
 
 	cpuic: interrupt-controller {
@@ -71,11 +71,11 @@
 	};
 
 	chosen {
-		bootargs = "console=ttyS0,115200 earlycon=uart8250,mmio32,0x1fe001e0 mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp nokaslr";
+		bootargs = "console=ttyS0,115200 earlycon=uart8250,mmio32,0x1fe001e0 mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp nokaslr nohz=off highres=off acpi=off pci=off";
 	};
 
 	serial@1fe001e0 {
-		compatible = "ns16550a";
+		compatible = "loongson,ls2k0500-uart", "ns16550a";
 		reg = <0x00 0x1fe001e0 0x00 0x100>;
 		clock-frequency = <100000000>;
 		interrupt-parent = <&pch_pic>;

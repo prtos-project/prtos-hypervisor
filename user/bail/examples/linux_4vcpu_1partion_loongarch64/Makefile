@@ -5,7 +5,8 @@
 #   - Linux vmlinux.bin (flat binary, embedded via .incbin in start.S)
 #
 # The Linux kernel must be pre-built with:
-#   CONFIG_INITRAMFS_SOURCE pointing to buildroot's rootfs.cpio
+#   CONFIG_INITRAMFS_SOURCE pointing to Buildroot's
+#   output/images/rootfs_uncompressed.cpio
 #   CONFIG_CMDLINE_FORCE=y with appropriate console/mem parameters
 #
 # Usage:
@@ -19,9 +20,9 @@
 #
 # This partition embeds a prebuilt Linux 6.19.9 vmlinux that is itself
 # produced from sources outside this repo, under:
-#   $(LINUX_WORKSPACE) = //home/chenweis/loongarch64_workspace
+#   $(LINUX_WORKSPACE) = //home/chenweis/hdd/Repo/loongarch64_linux_workspace
 #
-# The guest is built in two stages: (A) a Buildroot rootfs.cpio, then
+# The guest is built in two stages: (A) a Buildroot rootfs_uncompressed.cpio, then
 # (B) a Linux kernel that embeds that cpio as its initramfs.
 #
 # ----------------------------------------------------------------------------
@@ -39,23 +40,20 @@
 #   # Output: output/images/rootfs_uncompressed.cpio (uncompressed cpio,
 #   # required because the Linux kernel embeds it directly).
 #
-# If a full Buildroot rebuild is unavailable (e.g. missing gnu toolchain),
-# you can patch the existing cpio in place: extract it, replace files, and
-# repack with `find . | LC_ALL=C sort | cpio -o -H newc --owner 0:0`.
-#
 # ----------------------------------------------------------------------------
 # (B) Build the Linux kernel (LoongArch64) that embeds the rootfs
 # ----------------------------------------------------------------------------
 #   cd $(LINUX_WORKSPACE)/linux-6.19.9
-#   # .config must contain (already the case in this workspace):
-#   #   CONFIG_INITRAMFS_SOURCE="<path-to-rootfs-dir-or-cpio> <extras.txt>"
+#   # .config should contain:
+#   #   CONFIG_INITRAMFS_SOURCE="$(LINUX_WORKSPACE)/buildroot/output/images/rootfs_uncompressed.cpio"
 #   #   CONFIG_INITRAMFS_COMPRESSION_NONE=y
+#   #   CONFIG_BLK_DEV_NBD=y
+#   #   CONFIG_TUN=y
 #   #   CONFIG_CMDLINE_FORCE=y, CONFIG_CMDLINE="console=ttyS0,115200 ..."
-#   # Force initramfs regeneration so any rootfs change is picked up:
-#   rm -f usr/initramfs_data.cpio* usr/initramfs_inc_data
+#   ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- make olddefconfig
 #   ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- make -j$(nproc) vmlinux
-#   # Produces vmlinux and vmlinux.unstripped; this Makefile reads the latter
-#   # via $(LINUX_VMLINUX) and turns it into a flat binary embedded in start.S.
+#   # Produces vmlinux and vmlinux.unstripped; this Makefile reads vmlinux
+#   # and turns it into a flat binary embedded in start.S.
 #
 # After (A) or (B) change, rebuild this partition with:
 #   make clean && make
@@ -76,7 +74,7 @@ PARTITIONS=partition.pef
 # ============================================================================
 # Linux Workspace Paths
 # ============================================================================
-LINUX_WORKSPACE=//home/chenweis/loongarch64_workspace
+LINUX_WORKSPACE=//home/chenweis/hdd/Repo/loongarch64_linux_workspace
 LINUX_VMLINUX=$(LINUX_WORKSPACE)/linux-6.19.9/vmlinux
 
 # Prevent Make implicit rule from rebuilding external vmlinux via host cc

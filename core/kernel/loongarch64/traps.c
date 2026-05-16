@@ -12,6 +12,7 @@
 #include <ktimer.h>
 #include <processor.h>
 #include <sched.h>
+#include <smp.h>
 #include <stdc.h>
 #include <hypercalls.h>
 
@@ -253,6 +254,13 @@ static void iocsr_passthrough_write(prtos_u32_t addr, prtos_u64_t val, prtos_u32
 
 static void manage_hwi_state(void);
 
+static void kick_cpu_with_ipi_action(prtos_u32_t target_cpu,
+                                     prtos_u32_t action) {
+    prtos_u32_t ipi_send = (target_cpu << 16) | (action & 0x1F);
+
+    __asm__ __volatile__("iocsrwr.w %0, %1" : : "r"(ipi_send), "r"(0x1040));
+}
+
 static int handle_iocsr_passthrough(struct cpu_user_regs *regs, prtos_u32_t insn) {
     prtos_u32_t width = (insn >> 10) & 0x3; /* bits [11:10] */
     prtos_u32_t rj = (insn >> 5) & 0x1F;   /* address register */
@@ -306,7 +314,11 @@ static int handle_iocsr_passthrough(struct cpu_user_regs *regs, prtos_u32_t insn
                     struct kthread_arch *tgt_ka = &tgt_k->ctrl.g->karch;
                     tgt_ka->guest_ipi_status |= (1U << (val & 0x1F));
                     tgt_ka->guest_estat |= (1UL << LOONGARCH_INT_IPI);
-                    set_guest_vip_bit(0);
+                    if (target_cpu == GET_CPU_ID()) {
+                        set_guest_vip_bit(0);
+                    } else {
+                        kick_cpu_with_ipi_action(target_cpu, val & 0x1F);
+                    }
                 }
             }
         } else {
@@ -578,12 +590,6 @@ static int guest_csr_write(struct kthread_arch *ka, prtos_u32_t csr_num,
             prtos_u64_t interval = (val & TCFG_VAL) >> 2;
             ka->guest_tcfg_deadline = read_stable_counter() + interval;
             ka->guest_timer_active = 1;
-            /* Program host timer: must disable first so the 0→1
-             * transition reloads TVAL from InitVal. */
-            prtos_u64_t zero = 0;
-            __asm__ __volatile__("csrwr %0, 0x41" : "+r"(zero));  /* disable */
-            prtos_u64_t htcfg = val;
-            __asm__ __volatile__("csrwr %0, 0x41" : "+r"(htcfg));  /* re-enable */
         } else {
             ka->guest_timer_active = 0;
         }
@@ -594,6 +600,7 @@ static int guest_csr_write(struct kthread_arch *ka, prtos_u32_t csr_num,
         if (val & 1) {
             ka->guest_estat &= ~(1UL << 11); /* Clear TI bit */
             clear_guest_vip_bit(1);
+            GCSRWR(0x44, val);
         }
         break;
     case VCSR_LLBCTL:   ka->guest_llbctl = val; break;
@@ -690,6 +697,31 @@ static void check_guest_pending_irqs(struct kthread_arch *ka,
 }
 
 /* Check if guest virtual timer has expired */
+static void inject_guest_timer_tick(struct kthread_arch *ka) {
+    if (ka->guest_estat & (1UL << 11)) return;
+
+    ka->guest_estat |= (1UL << 11);
+    set_guest_vip_bit(1);
+
+    if (ka->guest_tcfg & TCFG_PERIODIC) {
+        prtos_u64_t interval = (ka->guest_tcfg & TCFG_VAL) >> 2;
+        prtos_u64_t now = read_stable_counter();
+
+        if (!interval) {
+            ka->guest_timer_active = 0;
+            return;
+        }
+        if (ka->guest_tcfg_deadline <= now) {
+            while (ka->guest_tcfg_deadline <= now)
+                ka->guest_tcfg_deadline += interval;
+        } else {
+            ka->guest_tcfg_deadline += interval;
+        }
+    } else {
+        ka->guest_timer_active = 0;
+    }
+}
+
 static void check_guest_timer(struct kthread_arch *ka,
                                struct cpu_user_regs *regs) {
     if (!ka->guest_timer_active) return;
@@ -700,24 +732,7 @@ static void check_guest_timer(struct kthread_arch *ka,
     prtos_u64_t now = read_stable_counter();
     if (now < ka->guest_tcfg_deadline) return;
 
-    /* Timer expired: set TI bit in guest ESTAT */
-    ka->guest_estat |= (1UL << 11);
-    set_guest_vip_bit(1);
-
-    /* Keep host timer running for idle wakeup. Timer delivery on active
-     * CPUs is handled by helper_check_timer_irq at TB boundaries.
-     * The host timer is still needed to wake halted (idle) CPUs. */
-    if (ka->guest_tcfg & TCFG_PERIODIC) {
-        prtos_u64_t interval = (ka->guest_tcfg & TCFG_VAL) >> 2;
-        if (!interval) {
-            ka->guest_timer_active = 0;
-            return;
-        }
-        while (ka->guest_tcfg_deadline <= now)
-            ka->guest_tcfg_deadline += interval;
-    } else {
-        ka->guest_timer_active = 0;
-    }
+    inject_guest_timer_tick(ka);
 }
 
 /* Sync inline-writable CSRs from QEMU shadow (GCSRRD) into ka->guest_*.
@@ -803,8 +818,9 @@ static void deliver_guest_tlb_refill(struct kthread_arch *ka,
                                       prtos_u64_t badv) {
     /* With TOP=0, guest may write TLBRENTRY directly to shadow CSR without
      * trapping, so ka->guest_tlbrentry can be stale. Always re-read. */
-    if (ka->lvz_enabled)
+    if (ka->lvz_enabled) {
         ka->guest_tlbrentry = GCSRRD(0x88);
+    }
     if (!ka->guest_tlbrentry) return;
     /* Sync CSRs that the guest may have written inline */
     sync_inline_csrs_from_shadow(ka);
@@ -1412,11 +1428,10 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
                     struct kthread_arch *ka = &k->ctrl.g->karch;
 
                     if (from_guest && ka->lvz_enabled && prtos_lvz_available) {
-                        /* A host TI taken while the guest was running is not
-                         * necessarily a guest timer expiry; the hypervisor also
-                         * uses the same hardware timer for scheduling. Sync the
-                         * guest shadow TCFG, then only inject TI when the guest
-                         * deadline we track has actually expired. */
+                        /* A timer VM-exit while the guest was running is the
+                         * reliable wakeup point for virtual time under TCG.
+                         * Sync the guest shadow TCFG, then inject one guest
+                         * timer tick if the guest timer is armed. */
                         prtos_u64_t gstat;
                         __asm__ __volatile__("csrrd %0, 0x50" : "=r"(gstat));
                         prtos_u64_t gid = (gstat >> 16) & 0xFF;
@@ -1432,7 +1447,8 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
                             } else {
                                 ka->guest_timer_active = 0;
                             }
-                            check_guest_timer(ka, regs);
+                            if (ka->guest_timer_active)
+                                inject_guest_timer_tick(ka);
                         }
                     } else if (!ka->lvz_enabled) {
                         check_guest_timer(ka, regs);
@@ -1892,9 +1908,6 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
                 handle_iocsr_passthrough(regs, badi);
                 manage_hwi_state();
             } else if ((badi >> 15) == 0x00C91) {
-                /* Idle instruction: advance PC past it. Boot will be slow
-                 * due to idle loop trap overhead in single-thread TCG, but
-                 * this is the only safe approach that doesn't corrupt state. */
                 regs->era += 4;
             } else {
                 /* Reuse CSR emulation for other GSPR traps */
