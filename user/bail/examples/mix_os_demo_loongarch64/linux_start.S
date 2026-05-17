@@ -18,6 +18,14 @@
 	.section .text
 	.globl _boot
 _boot:
+	/* Determine which vCPU we are by reading CSR_CPUID (0x20).
+	 * Boot CPU (id 0) jumps to kernel_entry; secondaries spin on
+	 * the IOCSR mailbox MBUF0 (0x1020), which Linux's
+	 * loongson_boot_secondary() writes with the address of
+	 * smpboot_entry (PA, requires DMW0 prefix to enter). */
+	csrrd	$t2, 0x20
+	bnez	$t2, _secondary_wait
+
 	/* Write 'M' to UART (NS16550 at 0x1FE001E0) for verification */
 	li.d	$t0, 0x1FE001E0
 1:	ld.bu	$t1, $t0, 5	/* Read LSR (offset 5) */
@@ -31,12 +39,29 @@ _boot:
 	li.d	$a1, 0		/* fw_arg1 = 0 (cmdline forced in config) */
 	li.d	$a2, 0		/* fw_arg2 = 0 (no EFI system table) */
 
-	/* Jump to Linux kernel_entry (embedded via .incbin at 0x200000 offset) */
+	/* Jump to Linux kernel_entry (embedded via .incbin).
+	 * Offset (kernel_entry - _text) is supplied by the Makefile via
+	 * -DLINUX_KERNEL_ENTRY_OFFSET=0x... so it auto-tracks the kernel
+	 * build. */
+#ifndef LINUX_KERNEL_ENTRY_OFFSET
+#define LINUX_KERNEL_ENTRY_OFFSET 0x1628000
+#endif
 	la.local $t0, _linux_image_start
-	/* Entry offset = kernel_entry - _text = 0x1622000 */
-	li.d	$t1, 0x1622000
+	li.d	$t1, LINUX_KERNEL_ENTRY_OFFSET
 	add.d	$t0, $t0, $t1
 	jr	$t0
+
+	/* Secondary vCPU bootstrap: poll IOCSR MBUF0 until Linux writes
+	 * the smpboot_entry physical address, then convert to a DMW1
+	 * cached virtual address (PA | 0x9000_0000_0000_0000) and jump. */
+_secondary_wait:
+	li.d	$t0, 0x1020
+	iocsrwr.d $zero, $t0
+1:	iocsrrd.d $t1, $t0
+	beqz	$t1, 1b
+	li.d	$t2, 0x9
+	bstrins.d $t1, $t2, 63, 60
+	jr	$t1
 
 	.section .linux_image, "ax", @progbits
 	.balign 0x200000	/* 2MB aligned: Linux kernel at GPA 0x80200000 */

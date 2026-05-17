@@ -98,13 +98,18 @@ run: run.$(ARCH)
 
 # QEMU_LOONGARCH64: path to the QEMU executable for LoongArch64 architecture
 # Pls refer to https://github.com/prtos-project/prtos-hypervisor/wiki/Ubuntu-(24.04)-x86_64-host-to-install-loongarch64-cross-compielr to install qemu for LoongArch64 architecture.
-QEMU_LOONGARCH64=/home/chenweis/loongarch64_workspace/qemu-install/bin/qemu-system-loongarch64
+QEMU_LOONGARCH64=/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64
+QEMU_LOONGARCH64_ACCEL?=-accel tcg,thread=multi
+QEMU_LOONGARCH64_EXTRA_ARGS?=-nodefaults -nic none
+QEMU_LOONGARCH64_TIMEOUT?=1200
 
 run.loongarch64:
 	@$(MAKE) clean
 	@$(MAKE) resident_sw
-	@echo "=== Starting QEMU (Use Ctrl+C to exit) ==="
-	@$(QEMU_LOONGARCH64) \
+	@echo "=== Starting QEMU (timeout: $(QEMU_LOONGARCH64_TIMEOUT)s; use Ctrl+C to exit early) ==="
+	@timeout --foreground $(QEMU_LOONGARCH64_TIMEOUT) $(QEMU_LOONGARCH64) \
+		$(QEMU_LOONGARCH64_ACCEL) \
+		$(QEMU_LOONGARCH64_EXTRA_ARGS) \
 		-machine virt \
 		-cpu max \
 		-smp 4 \
@@ -112,4 +117,5 @@ run.loongarch64:
 		-nographic -no-reboot \
 		-kernel resident_sw \
 		-monitor none \
-		-serial stdio
+		-chardev stdio,id=s0,signal=off \
+		-serial chardev:s0

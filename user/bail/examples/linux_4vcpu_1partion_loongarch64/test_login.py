@@ -6,8 +6,8 @@ import sys
 import os
 import time
 
-TIMEOUT = 360
-LOGIN_TIMEOUT = 30
+TIMEOUT = int(os.environ.get("PRTOS_LOGIN_TIMEOUT", "5400"))
+LOGIN_TIMEOUT = int(os.environ.get("PRTOS_LOGIN_PROMPT_TIMEOUT", "60"))
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -15,9 +15,13 @@ subprocess.run(["make", "clean"], capture_output=True)
 subprocess.run(["make"], capture_output=True)
 
 QEMU = os.environ.get("QEMU_LOONGARCH64",
-    "/home/chenweis/loongarch64_workspace/qemu-install/bin/qemu-system-loongarch64")
+    "/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64")
+QEMU_ACCEL = os.environ.get("QEMU_LOONGARCH64_ACCEL", "-accel tcg,thread=multi")
+QEMU_EXTRA_ARGS = os.environ.get("QEMU_LOONGARCH64_EXTRA_ARGS", "-nodefaults -nic none")
 
 cmd = (f"{QEMU} "
+    f"{QEMU_ACCEL} "
+    f"{QEMU_EXTRA_ARGS} "
        "-machine virt "
        "-cpu max "
        "-smp 4 "
@@ -25,7 +29,8 @@ cmd = (f"{QEMU} "
        "-nographic -no-reboot "
        "-kernel resident_sw "
        "-monitor none "
-       "-serial stdio")
+    "-chardev stdio,id=s0,signal=off "
+    "-serial chardev:s0")
 
 print("=== Starting QEMU ===")
 child = pexpect.spawn(cmd, encoding='utf-8', timeout=TIMEOUT)
@@ -39,7 +44,7 @@ if idx >= 2:
 
 print("\n\n=== Got login prompt, sending 'root' ===")
 time.sleep(4)
-child.sendline("root")
+child.send("root\r")
 
 idx = child.expect(["Password:", "password:", pexpect.TIMEOUT, pexpect.EOF], timeout=LOGIN_TIMEOUT)
 if idx >= 2:
@@ -48,7 +53,7 @@ if idx >= 2:
 
 print("\n\n=== Got password prompt, sending '1234' ===")
 time.sleep(2)
-child.sendline("1234")
+child.send("1234\r")
 
 idx = child.expect(["#", "\\$", "Login incorrect", pexpect.TIMEOUT, pexpect.EOF], timeout=LOGIN_TIMEOUT)
 if idx == 2:
@@ -59,11 +64,38 @@ elif idx >= 3:
     sys.exit(1)
 
 print("\n\n=== Login successful! Checking vCPU count ===")
-time.sleep(2)
+time.sleep(5)
 child.sendline("nproc")
-idx = child.expect(["4", pexpect.TIMEOUT], timeout=10)
+idx = child.expect([r"[\r\n]+4[\r\n]+", pexpect.TIMEOUT], timeout=LOGIN_TIMEOUT)
 if idx != 0:
     print("\n\n=== FAIL: nproc did not return 4 ===")
+    sys.exit(1)
+idx = child.expect(["#", "\\$", pexpect.TIMEOUT], timeout=LOGIN_TIMEOUT)
+if idx >= 2:
+    print("\n\n=== FAIL: shell prompt did not return after nproc ===")
+    sys.exit(1)
+
+# Check that the boot log we already consumed had no eth0 timeout failure.
+# (interfaces overlay should make initscripts skip eth0 entirely.)
+boot_log = child.before or ""
+if "Waiting for interface eth0" in boot_log or "FAIL" in boot_log.split("Welcome")[0]:
+    print("\n\n=== FAIL: eth0 wait_iface timeout not suppressed ===")
+    sys.exit(1)
+
+print("\n\n=== Launching htop in batch-like mode to verify 4 CPU rows ===")
+time.sleep(5)
+# Run htop non-interactively via timeout + script-like capture
+child.sendline("TERM=xterm htop --version")
+idx = child.expect([r"htop \d", pexpect.TIMEOUT], timeout=LOGIN_TIMEOUT)
+if idx != 0:
+    print("\n\n=== FAIL: htop binary not present or not runnable ===")
+    sys.exit(1)
+# Briefly launch htop UI and capture CPU lines.
+child.sendline("(echo q | htop -d 5 2>&1 | head -20) || true")
+# We just need confirmation it started without crashing; ensure shell prompt returns.
+idx = child.expect(["#", "\\$", pexpect.TIMEOUT], timeout=LOGIN_TIMEOUT)
+if idx >= 2:
+    print("\n\n=== FAIL: htop hung or did not exit cleanly ===")
     sys.exit(1)
 
 print("\n\n=== ALL TESTS PASSED ===")

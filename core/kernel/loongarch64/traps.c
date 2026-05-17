@@ -12,6 +12,7 @@
 #include <ktimer.h>
 #include <processor.h>
 #include <sched.h>
+#include <smp.h>
 #include <stdc.h>
 #include <hypercalls.h>
 
@@ -19,6 +20,10 @@ extern void do_hyp_irq(cpu_ctxt_t *ctxt);
 extern void do_hyp_trap(cpu_ctxt_t *ctxt);
 extern prtos_s32_t raise_pend_irqs(cpu_ctxt_t *ctxt);
 extern prtos_u32_t prtos_lvz_available;
+
+/* Per-CPU MBUF0 mailbox for SMP vCPU wakeup.
+ * Written by MBUF_SEND emulation (from vCPU0), read by polling loop in kthread.c. */
+prtos_u64_t prtos_mbuf0[CONFIG_NO_CPUS];
 
 struct cpu_user_regs *prtos_current_guest_regs_percpu[CONFIG_NO_CPUS];
 
@@ -36,6 +41,24 @@ static inline prtos_u64_t read_stable_counter(void) {
     prtos_u64_t val;
     __asm__ __volatile__("rdtime.d %0, $zero" : "=r"(val));
     return val;
+}
+static inline prtos_u64_t read_gintc(void) {
+    prtos_u64_t val;
+    __asm__ __volatile__("csrrd %0, 0x52" : "=r"(val));
+    return val;
+}
+static inline void write_gintc(prtos_u64_t val) {
+    __asm__ __volatile__("csrwr %0, 0x52" : : "r"(val));
+}
+static inline void set_guest_vip_bit(prtos_u32_t vip_bit) {
+    prtos_u64_t gintc = read_gintc();
+    gintc |= (1ULL << vip_bit);
+    write_gintc(gintc);
+}
+static inline void clear_guest_vip_bit(prtos_u32_t vip_bit) {
+    prtos_u64_t gintc = read_gintc();
+    gintc &= ~(1ULL << vip_bit);
+    write_gintc(gintc);
 }
 
 /* CSR numbers used by guests */
@@ -94,6 +117,7 @@ static inline prtos_u64_t read_stable_counter(void) {
 /* TCFG bits */
 #define TCFG_EN        (1UL << 0)
 #define TCFG_PERIODIC  (1UL << 1)
+#define TCFG_VAL       (~0x3UL)
 
 /* LoongArch instruction encoding */
 #define INSN_CSR_OPCODE  0x04000000
@@ -113,6 +137,51 @@ static inline prtos_u64_t read_stable_counter(void) {
 #define INSN_IBAR        0x38728000
 #define INSN_CPUCFG_MASK 0xFFFFFC00
 #define INSN_CPUCFG      0x00006C00
+
+/*
+ * tlbfill_with_guest_gid - Fill TLB entry tagged with the guest's GID.
+ * Must be called from host context where GTLBC.TGID has been cleared to 0.
+ * Temporarily sets TGID to the guest's GID, does tlbfill, then restores.
+ */
+static inline void tlbfill_with_guest_gid(prtos_u64_t tlbehi, prtos_u64_t elo0,
+                                           prtos_u64_t elo1, prtos_u64_t tlbidx,
+                                           prtos_u32_t guest_gid) {
+    prtos_u64_t gtlbc;
+    __asm__ __volatile__("csrrd %0, 0x15" : "=r"(gtlbc));
+    prtos_u64_t saved = gtlbc;
+    gtlbc = (gtlbc & ~(0xFFUL << 16)) | ((prtos_u64_t)guest_gid << 16);
+    __asm__ __volatile__("csrwr %0, 0x15" : "+r"(gtlbc));
+
+    __asm__ __volatile__(
+        "csrwr %0, 0x11\n\t"
+        "csrwr %1, 0x12\n\t"
+        "csrwr %2, 0x13\n\t"
+        "csrwr %3, 0x10\n\t"
+        "tlbfill\n\t"
+        :
+        : "r"(tlbehi), "r"(elo0), "r"(elo1), "r"(tlbidx)
+        : "memory"
+    );
+
+    __asm__ __volatile__("csrwr %0, 0x15" : "+r"(saved));
+}
+
+/*
+ * translate_gpa_to_hpa - Translate guest physical address to host physical address.
+ * Uses the per-CPU TLB refill table which maps 1MB GPA pages to HPA.
+ * Returns the HPA, or 0 if the GPA is not mapped.
+ */
+static inline prtos_u64_t translate_gpa_to_hpa(prtos_u64_t gpa, prtos_s32_t cpu_id) {
+    extern prtos_u64_t tlb_refill_table[][4096];
+    prtos_s32_t page_idx = (prtos_s32_t)(gpa >> 20);
+    if (page_idx < 0 || page_idx >= 4096) return 0;
+    prtos_u64_t elo = tlb_refill_table[cpu_id][page_idx];
+    if (!elo) return 0;
+    /* Extract HPA from TLBELO: PPN is the page-aligned physical address */
+    prtos_u64_t hpa_base = elo & ~0xFFFULL; /* Clear flag bits */
+    prtos_u64_t offset = gpa & 0xFFFFF; /* Offset within 1MB page */
+    return hpa_base + offset;
+}
 
 /* Read PRCFG values from real hardware */
 void init_guest_prcfg(struct kthread_arch *ka) {
@@ -184,29 +253,90 @@ static void iocsr_passthrough_write(prtos_u32_t addr, prtos_u64_t val, prtos_u32
 }
 
 static void manage_hwi_state(void);
+
+static void kick_cpu_with_ipi_action(prtos_u32_t target_cpu,
+                                     prtos_u32_t action) {
+    prtos_u32_t ipi_send = (target_cpu << 16) | (action & 0x1F);
+
+    __asm__ __volatile__("iocsrwr.w %0, %1" : : "r"(ipi_send), "r"(0x1040));
+}
+
 static int handle_iocsr_passthrough(struct cpu_user_regs *regs, prtos_u32_t insn) {
-    {
-        static int iocsr_once = 0;
-        if (!iocsr_once) {
-            iocsr_once = 1;
-        }
-    }
-    {
-    }
     prtos_u32_t width = (insn >> 10) & 0x3; /* bits [11:10] */
     prtos_u32_t rj = (insn >> 5) & 0x1F;   /* address register */
     prtos_u32_t rd = insn & 0x1F;           /* data register */
     prtos_u32_t addr = (prtos_u32_t)guest_reg_read(regs, rj);
     prtos_u32_t iocsr_op2 = (insn >> 10) & 0x3FFFFF;
     prtos_u32_t is_write = (iocsr_op2 >= 0x019204 && iocsr_op2 <= 0x019207); /* iocsrwr */
+    local_processor_t *info = GET_LOCAL_PROCESSOR();
+    kthread_t *k = info->sched.current_kthread;
 
     if (is_write) {
         prtos_u64_t val = guest_reg_read(regs, rd);
-        iocsr_passthrough_write(addr, val, width);
+        if (addr == 0x100C && k && k->ctrl.g) {
+            struct kthread_arch *ka = &k->ctrl.g->karch;
+
+            ka->guest_ipi_status &= ~val;
+            if (!ka->guest_ipi_status) {
+                ka->guest_estat &= ~(1UL << LOONGARCH_INT_IPI);
+                clear_guest_vip_bit(0);
+            }
+        } else if (addr == 0x1048 && k && k->ctrl.g) {
+            /* MBUF_SEND: deliver mailbox message to target vCPU's MBUF0. */
+            prtos_u32_t target_cpu = (val >> 16) & 0x3FF;
+            prtos_u32_t box_offset = (val >> 2) & 0x7;
+
+            if (box_offset == 1) {
+                /* High 32 bits (box hi=1): data in bits [63:32] */
+                k->ctrl.g->karch.mbuf0 = (k->ctrl.g->karch.mbuf0 & 0xFFFFFFFFULL) | (val & 0xFFFFFFFF00000000ULL);
+            } else {
+                /* Low 32 bits (box lo=0): data in bits [63:32] */
+                k->ctrl.g->karch.mbuf0 = (k->ctrl.g->karch.mbuf0 & 0xFFFFFFFF00000000ULL) | ((val & 0xFFFFFFFF00000000ULL) >> 32);
+                /* Now deliver to target vCPU's global mbuf0 */
+                if (target_cpu < CONFIG_NO_CPUS) {
+                    prtos_mbuf0[target_cpu] = k->ctrl.g->karch.mbuf0;
+                }
+            }
+        } else if (addr == 0x1020 && k && k->ctrl.g) {
+            /* MBUF0 write: store to per-vCPU mailbox */
+            k->ctrl.g->karch.mbuf0 = val;
+        } else if (addr == 0x1040 && k && k->ctrl.g) {
+            /* IPI_SEND: deliver virtual IPI to target vCPU.
+             * Format: bits[25:16]=target_cpu, bits[4:0]=action.
+             * Inject IPI into target vCPU's guest ESTAT. */
+            prtos_u32_t target_cpu = (val >> 16) & 0x3FF;
+            if (target_cpu < CONFIG_NO_CPUS) {
+                extern local_processor_t local_processor_info[];
+                local_processor_t *tgt_info = &local_processor_info[target_cpu];
+                kthread_t *tgt_k = tgt_info->sched.current_kthread;
+                if (tgt_k && tgt_k->ctrl.g &&
+                    tgt_k->ctrl.g->id == k->ctrl.g->id) {
+                    struct kthread_arch *tgt_ka = &tgt_k->ctrl.g->karch;
+                    tgt_ka->guest_ipi_status |= (1U << (val & 0x1F));
+                    tgt_ka->guest_estat |= (1UL << LOONGARCH_INT_IPI);
+                    if (target_cpu == GET_CPU_ID()) {
+                        set_guest_vip_bit(0);
+                    } else {
+                        kick_cpu_with_ipi_action(target_cpu, val & 0x1F);
+                    }
+                }
+            }
+        } else {
+            iocsr_passthrough_write(addr, val, width);
+        }
         /* After IOCSR write (potential EIOINTC ISR clear), try re-enabling HWI */
         manage_hwi_state();
     } else {
-        prtos_u64_t val = iocsr_passthrough_read(addr, width);
+        prtos_u64_t val;
+
+        if (addr == 0x1000 && k && k->ctrl.g) {
+            val = k->ctrl.g->karch.guest_ipi_status;
+        } else if (addr == 0x1020 && k && k->ctrl.g) {
+            /* MBUF0 read: return per-vCPU mailbox value */
+            val = prtos_mbuf0[GET_CPU_ID()];
+        } else {
+            val = iocsr_passthrough_read(addr, width);
+        }
         guest_reg_write(regs, rd, val);
     }
     regs->era += 4;
@@ -250,7 +380,58 @@ static void manage_hwi_state(void) {
     }
 }
 
-/* Read a guest virtual CSR */
+/* Detect if the current trap came from a guest (either PLV3 para-virt or LVZ hw-virt).
+ * PLV3 guests: PRMD.PPLV != 0.
+ * LVZ guests: run at PLV0 but have SAVE5 flag set by _trap_from_lvz_guest. */
+static inline int is_trap_from_guest(struct cpu_user_regs *regs) {
+    if ((regs->prmd & 0x3) != 0) return 1; /* PLV3 para-virt guest */
+    /* Check LVZ flag in SAVE5 */
+    prtos_u64_t lvz_flag;
+    __asm__ __volatile__("csrrd %0, 0x35" : "=r"(lvz_flag));
+    return lvz_flag != 0;
+}
+
+/* GCSRRD helper: read guest CSR via GCSRRD instruction.
+ * Encoding: 0x05000000 | (csr << 10) | (0 << 5) | rd
+ * We put result in $t0 (r12) then move to output. */
+#define GCSRRD(csr_num) ({                                                  \
+    prtos_u64_t _v;                                                         \
+    __asm__ __volatile__(                                                    \
+        ".word %1\n\t"                                                      \
+        "move %0, $t0\n\t"                                                  \
+        : "=r"(_v) : "i"(0x0500000C | ((csr_num) << 10)) : "$t0");         \
+    _v;                                                                     \
+})
+
+/* GCSRWR helper: write value to guest CSR via GCSRWR instruction.
+ * Encoding: 0x05000000 | (csr << 10) | (rj << 5) | rd
+ * For GCSRWR: rj=1 (flag for write mode), rd = source/dest register.
+ * We load value into $t0 (r12) then execute GCSRWR. $t0 receives old value. */
+#define GCSRWR(csr_num, val) do {                                           \
+    register prtos_u64_t _wv __asm__("$t0") = (val);                        \
+    __asm__ __volatile__(                                                    \
+        ".word %0\n\t"                                                      \
+        : : "i"(0x0500002C | ((csr_num) << 10)), "r"(_wv) : "memory");     \
+} while (0)
+
+/* Initialize guest shadow CSRs for a secondary vCPU from vCPU0's state.
+ * Called from kthread.c before JMP_PARTITION_HSM. */
+void lvz_init_secondary_guest_csrs(struct kthread_arch *ka0) {
+    GCSRWR(0x180, ka0->guest_dmw[0]);
+    GCSRWR(0x181, ka0->guest_dmw[1]);
+    GCSRWR(0x182, ka0->guest_dmw[2]);
+    GCSRWR(0x183, ka0->guest_dmw[3]);
+    GCSRWR(0x19, ka0->guest_pgdl);
+    GCSRWR(0x1A, ka0->guest_pgdh);
+    GCSRWR(0x0C, ka0->guest_eentry);
+    GCSRWR(0x88, ka0->guest_tlbrentry);
+    GCSRWR(0x1C, ka0->guest_pwcl);
+    GCSRWR(0x1D, ka0->guest_pwch);
+    GCSRWR(0x1E, ka0->guest_stlbps);
+    GCSRWR(0x00, ka0->guest_crmd & ~(1UL << 2)); /* IE=0 */
+    GCSRWR(0x04, ka0->guest_ecfg);
+    GCSRWR(0x02, ka0->guest_euen);
+}
 static prtos_u64_t guest_csr_read(struct kthread_arch *ka, prtos_u32_t csr_num,
                                    struct cpu_user_regs *regs) {
     switch (csr_num) {
@@ -272,8 +453,18 @@ static prtos_u64_t guest_csr_read(struct kthread_arch *ka, prtos_u32_t csr_num,
     case VCSR_PGDL:     return ka->guest_pgdl;
     case VCSR_PGDH:     return ka->guest_pgdh;
     case VCSR_PGD: {
-        /* PGD is read-only: returns PGDL or PGDH based on BADV bit 63 */
-        if (ka->guest_badv & (1ULL << 63))
+        /* Match QEMU helper_csrrd_pgd(): select the root from the live
+         * guest shadow TLBRERA/TLBRBADV/BADV/PGDL/PGDH state, because all of
+         * those values may be updated outside ka's cached copy when TOP=0.
+         */
+        prtos_u64_t tlbrera = GCSRRD(0x8A);
+        prtos_u64_t check_addr = (tlbrera & 1ULL) ? GCSRRD(0x89) : GCSRRD(0x07);
+        ka->guest_tlbrera = tlbrera;
+        ka->guest_tlbrbadv = (tlbrera & 1ULL) ? check_addr : ka->guest_tlbrbadv;
+        ka->guest_badv = (tlbrera & 1ULL) ? ka->guest_badv : check_addr;
+        ka->guest_pgdl = GCSRRD(0x19);
+        ka->guest_pgdh = GCSRRD(0x1A);
+        if (check_addr & (1ULL << 63))
             return ka->guest_pgdh;
         return ka->guest_pgdl;
     }
@@ -328,15 +519,28 @@ static int guest_csr_write(struct kthread_arch *ka, prtos_u32_t csr_num,
     int check_irq = 0;
     switch (csr_num) {
     case VCSR_CRMD: {
-        prtos_u64_t old_ie = ka->guest_crmd & CRMD_IE;
+        /* With TOP=0, the guest can modify shadow CRMD (e.g. via ERTN)
+         * without trapping. Read actual shadow to detect IE transitions. */
+        prtos_u64_t actual_old = GCSRRD(0x00);
+        prtos_u64_t old_ie = actual_old & CRMD_IE;
         ka->guest_crmd = val;
-        prtos_u64_t new_ie = ka->guest_crmd & CRMD_IE;
-        if (!old_ie && new_ie) check_irq = 1;
+        prtos_u64_t new_ie = val & CRMD_IE;
+        if (new_ie) check_irq = 1; /* Always check when IE=1 in new value */
+        /* Sync guest CRMD to QEMU's guest shadow via GCSRWR so that
+         * get_physical_address() uses the correct DA/PG bits for
+         * address translation on the next guest memory access. */
+        GCSRWR(0x00, val);
         break;
     }
-    case VCSR_PRMD:     ka->guest_prmd = val; break;
+    case VCSR_PRMD: {
+        ka->guest_prmd = val;
+        GCSRWR(0x01, val);
+        break;
+    }
     case VCSR_EUEN: {
         ka->guest_euen = val;
+        /* Sync to QEMU guest shadow so inline reads see updated value */
+        GCSRWR(0x02, val);
         /* Also update hardware EUEN to match guest's desired state.
          * This enables lazy FP/LASX context management by the guest kernel. */
         prtos_u64_t hw_euen;
@@ -347,52 +551,43 @@ static int guest_csr_write(struct kthread_arch *ka, prtos_u32_t csr_num,
         break;
     }
     case VCSR_MISC:     ka->guest_misc = val; break;
-    case VCSR_ECFG:     ka->guest_ecfg = val; check_irq = 1; break;
+    case VCSR_ECFG:     ka->guest_ecfg = val; GCSRWR(0x04, val); check_irq = 1; break;
     case VCSR_ESTAT: {
         /* ESTAT: IS[1:0] (SWI) are writable, IS[12:2] and Ecode are read-only */
         ka->guest_estat = (ka->guest_estat & ~0x3UL) | (val & 0x3UL);
+        GCSRWR(0x05, ka->guest_estat);
         check_irq = 1;
         break;
     }
-    case VCSR_ERA:      ka->guest_era = val; break;
+    case VCSR_ERA:      ka->guest_era = val; GCSRWR(0x06, val); break;
     case VCSR_BADV:     ka->guest_badv = val; break;
     case VCSR_BADI:     ka->guest_badi = val; break;
     case VCSR_EENTRY: {
         ka->guest_eentry = val;
+        GCSRWR(0x0C, val);
         local_processor_t *info = GET_LOCAL_PROCESSOR();
         kthread_t *k = info->sched.current_kthread;
         if (k && k->ctrl.g)
             k->ctrl.g->part_ctrl_table->arch.trap_entry = val;
         break;
     }
-    case VCSR_TLBIDX:   ka->guest_tlbidx = val; break;
-    case VCSR_TLBEHI:   ka->guest_tlbehi = val; break;
-    case VCSR_TLBELO0:
-        {
-        }
-        ka->guest_tlbelo0 = val; break;
-    case VCSR_TLBELO1:
-        {
-        }
-        ka->guest_tlbelo1 = val; break;
-    case VCSR_ASID:     ka->guest_asid = val; break;
-    case VCSR_PGDL:     ka->guest_pgdl = val; break;
-    case VCSR_PGDH:     ka->guest_pgdh = val; break;
-    case VCSR_PWCL:     ka->guest_pwcl = val; break;
-    case VCSR_PWCH:     ka->guest_pwch = val; break;
-    case VCSR_STLBPS:
-        {
-        }
-        ka->guest_stlbps = val; break;
+    case VCSR_TLBIDX:   ka->guest_tlbidx = val; GCSRWR(0x10, val); break;
+    case VCSR_TLBEHI:   ka->guest_tlbehi = val; GCSRWR(0x11, val); break;
+    case VCSR_TLBELO0:  ka->guest_tlbelo0 = val; GCSRWR(0x12, val); break;
+    case VCSR_TLBELO1:  ka->guest_tlbelo1 = val; GCSRWR(0x13, val); break;
+    case VCSR_ASID:     ka->guest_asid = val; GCSRWR(0x18, val); break;
+    case VCSR_PGDL:     ka->guest_pgdl = val; GCSRWR(0x19, val); break;
+    case VCSR_PGDH:     ka->guest_pgdh = val; GCSRWR(0x1A, val); break;
+    case VCSR_PWCL:     ka->guest_pwcl = val; GCSRWR(0x1C, val); break;
+    case VCSR_PWCH:     ka->guest_pwch = val; GCSRWR(0x1D, val); break;
+    case VCSR_STLBPS:   ka->guest_stlbps = val; GCSRWR(0x1E, val); break;
     case VCSR_RVACFG:   ka->guest_rvacfg = val; break;
     case VCSR_TID:      ka->guest_tid = val; break;
     case VCSR_TCFG: {
         ka->guest_tcfg = val;
+        GCSRWR(0x41, val); /* Sync to QEMU shadow for inline reads */
         if (val & TCFG_EN) {
-            /* Scale interval up to reduce interrupt frequency.
-             * Each VIRQ delivery + handler has high overhead in
-             * para-virt trap-and-emulate mode. */
-            prtos_u64_t interval = (val >> 2) * 1;
+            prtos_u64_t interval = (val & TCFG_VAL) >> 2;
             ka->guest_tcfg_deadline = read_stable_counter() + interval;
             ka->guest_timer_active = 1;
         } else {
@@ -404,23 +599,25 @@ static int guest_csr_write(struct kthread_arch *ka, prtos_u32_t csr_num,
     case VCSR_TICLR:
         if (val & 1) {
             ka->guest_estat &= ~(1UL << 11); /* Clear TI bit */
+            clear_guest_vip_bit(1);
+            GCSRWR(0x44, val);
         }
         break;
     case VCSR_LLBCTL:   ka->guest_llbctl = val; break;
     case VCSR_IMPCTL1:  ka->guest_impctl1 = val; break;
     case VCSR_IMPCTL2:  ka->guest_impctl2 = val; break;
-    case VCSR_TLBRENTRY: ka->guest_tlbrentry = val; break;
-    case VCSR_TLBRBADV:  ka->guest_tlbrbadv = val; break;
-    case VCSR_TLBRERA:   ka->guest_tlbrera = val; break;
-    case VCSR_TLBRSAVE:  ka->guest_tlbrsave = val; break;
-    case VCSR_TLBRELO0:  ka->guest_tlbrelo0 = val; break;
-    case VCSR_TLBRELO1:  ka->guest_tlbrelo1 = val; break;
-    case VCSR_TLBREHI:   ka->guest_tlbrehi = val; break;
-    case VCSR_TLBRPRMD:  ka->guest_tlbrprmd = val; break;
-    case VCSR_DMW0:     ka->guest_dmw[0] = val; break;
-    case VCSR_DMW1:     ka->guest_dmw[1] = val; break;
-    case VCSR_DMW2:     ka->guest_dmw[2] = val; break;
-    case VCSR_DMW3:     ka->guest_dmw[3] = val; break;
+    case VCSR_TLBRENTRY: ka->guest_tlbrentry = val; GCSRWR(0x88, val); break;
+    case VCSR_TLBRBADV:  ka->guest_tlbrbadv = val; GCSRWR(0x89, val); break;
+    case VCSR_TLBRERA:   ka->guest_tlbrera = val; GCSRWR(0x8A, val); break;
+    case VCSR_TLBRSAVE:  ka->guest_tlbrsave = val; GCSRWR(0x8B, val); break;
+    case VCSR_TLBRELO0:  ka->guest_tlbrelo0 = val; GCSRWR(0x8C, val); break;
+    case VCSR_TLBRELO1:  ka->guest_tlbrelo1 = val; GCSRWR(0x8D, val); break;
+    case VCSR_TLBREHI:   ka->guest_tlbrehi = val; GCSRWR(0x8E, val); break;
+    case VCSR_TLBRPRMD:  ka->guest_tlbrprmd = val; GCSRWR(0x8F, val); break;
+    case VCSR_DMW0:     ka->guest_dmw[0] = val; GCSRWR(0x180, val); break;
+    case VCSR_DMW1:     ka->guest_dmw[1] = val; GCSRWR(0x181, val); break;
+    case VCSR_DMW2:     ka->guest_dmw[2] = val; GCSRWR(0x182, val); break;
+    case VCSR_DMW3:     ka->guest_dmw[3] = val; GCSRWR(0x183, val); break;
     default:
         /* SAVE0-SAVE15 */
         if (csr_num >= VCSR_SAVE_BASE && csr_num <= VCSR_SAVE_BASE + 15)
@@ -434,10 +631,11 @@ static int guest_csr_write(struct kthread_arch *ka, prtos_u32_t csr_num,
  * Emulates the hardware exception entry sequence. */
 static void deliver_virtual_irq(struct kthread_arch *ka,
                                  struct cpu_user_regs *regs) {
+    /* With TOP=0, guest may write EENTRY directly to shadow CSR without
+     * trapping, so ka->guest_eentry can be stale. Always re-read. */
+    if (ka->lvz_enabled)
+        ka->guest_eentry = GCSRRD(0x0C);
     if (!ka->guest_eentry) return;
-
-    {
-    }
 
     /* Save guest state (emulate hardware exception entry) */
     ka->guest_prmd = (ka->guest_crmd & CRMD_PLV_MASK) |        /* PPLV */
@@ -448,6 +646,12 @@ static void deliver_virtual_irq(struct kthread_arch *ka,
 
     /* Set ESTAT Ecode = INT (0x0) - interrupt */
     ka->guest_estat = (ka->guest_estat & 0x1FFFUL) | (0UL << 16);
+
+    /* Sync modified CSRs to QEMU shadow so guest reads get correct values */
+    GCSRWR(0x01, ka->guest_prmd);   /* PRMD */
+    GCSRWR(0x06, ka->guest_era);    /* ERA */
+    GCSRWR(0x00, ka->guest_crmd);   /* CRMD */
+    GCSRWR(0x05, ka->guest_estat);  /* ESTAT */
 
     /* LoongArch vectored interrupts: with VS>0, each IS bit gets its own
      * vector at eentry + (EXCCODE_INT_START + hwirq) * vec_size.
@@ -469,11 +673,23 @@ static void deliver_virtual_irq(struct kthread_arch *ka,
 /* Check and deliver pending virtual interrupts */
 static void check_guest_pending_irqs(struct kthread_arch *ka,
                                       struct cpu_user_regs *regs) {
-    {
-        if (ka->guest_estat & 0x8) {
-        }
+    /* Read actual guest CSRs from shadow - with inline writes, the guest can
+     * modify CRMD/ECFG without trapping to the hypervisor,
+     * so our cached ka->guest_* may be stale. */
+    prtos_u64_t crmd = GCSRRD(0x00);
+    ka->guest_crmd = crmd;
+    if (!(crmd & CRMD_IE)) {
+        return;
     }
-    if (!(ka->guest_crmd & CRMD_IE)) return;
+    ka->guest_ecfg = GCSRRD(0x04);
+    /* ESTAT: sync SWI and TI from shadow.
+     * TI remains hypervisor-injected, but guest TICLR may now be handled inline
+     * by QEMU through GINTC/ESTAT shadow state, so we need to observe the clear
+     * here. Keep IPI/HWI host-managed because they are acknowledged through
+     * IOCSR/hardware state. */
+    prtos_u64_t shadow_estat = GCSRRD(0x05);
+    ka->guest_estat = (ka->guest_estat & ~(0x3UL | (1UL << 11))) |
+                      (shadow_estat & (0x3UL | (1UL << 11)));
     prtos_u64_t pending = ka->guest_estat & ka->guest_ecfg & 0x1FFFUL;
     if (pending) {
         deliver_virtual_irq(ka, regs);
@@ -481,32 +697,83 @@ static void check_guest_pending_irqs(struct kthread_arch *ka,
 }
 
 /* Check if guest virtual timer has expired */
-static void check_guest_timer(struct kthread_arch *ka,
-                               struct cpu_user_regs *regs) {
-    if (!ka->guest_timer_active) return;
-    prtos_u64_t now = read_stable_counter();
-    if (now < ka->guest_tcfg_deadline) return;
+static void inject_guest_timer_tick(struct kthread_arch *ka) {
+    if (ka->guest_estat & (1UL << 11)) return;
 
-    /* Timer expired: set TI bit in guest ESTAT */
     ka->guest_estat |= (1UL << 11);
+    set_guest_vip_bit(1);
 
-    /* Handle periodic mode: advance deadline to NEXT future interval.
-     * Multiple intervals may have elapsed during CSR emulation overhead,
-     * so we skip ahead rather than firing once per elapsed interval. */
     if (ka->guest_tcfg & TCFG_PERIODIC) {
-        prtos_u64_t interval = (ka->guest_tcfg >> 2) * 1;
-        while (ka->guest_tcfg_deadline <= now)
+        prtos_u64_t interval = (ka->guest_tcfg & TCFG_VAL) >> 2;
+        prtos_u64_t now = read_stable_counter();
+
+        if (!interval) {
+            ka->guest_timer_active = 0;
+            return;
+        }
+        if (ka->guest_tcfg_deadline <= now) {
+            while (ka->guest_tcfg_deadline <= now)
+                ka->guest_tcfg_deadline += interval;
+        } else {
             ka->guest_tcfg_deadline += interval;
+        }
     } else {
         ka->guest_timer_active = 0;
     }
+}
+
+static void check_guest_timer(struct kthread_arch *ka,
+                               struct cpu_user_regs *regs) {
+    if (!ka->guest_timer_active) return;
+    ka->guest_estat = (ka->guest_estat & ~(1UL << 11)) |
+                      (GCSRRD(0x05) & (1UL << 11));
+    /* Don't fire again if TI is already pending (prevents cascading) */
+    if (ka->guest_estat & (1UL << 11)) return;
+    prtos_u64_t now = read_stable_counter();
+    if (now < ka->guest_tcfg_deadline) return;
+
+    inject_guest_timer_tick(ka);
+}
+
+/* Sync inline-writable CSRs from QEMU shadow (GCSRRD) into ka->guest_*.
+ * Must be called before reading ka->guest_crmd/prmd/era/ecfg/estat because
+ * the guest may have written them inline (no trap to hypervisor).
+ * With TOP=0, also syncs EENTRY, TLBRENTRY and other CSRs that can be
+ * written by the guest without trapping. */
+static void sync_inline_csrs_from_shadow(struct kthread_arch *ka) {
+    ka->guest_crmd  = GCSRRD(0x00);
+    ka->guest_prmd  = GCSRRD(0x01);
+    ka->guest_euen  = GCSRRD(0x02);
+    ka->guest_ecfg  = GCSRRD(0x04);
+    ka->guest_estat = GCSRRD(0x05);
+    ka->guest_era   = GCSRRD(0x06);
+    ka->guest_badv  = GCSRRD(0x07);
+    /* TOP=0: these CSRs can be written inline by the guest */
+    ka->guest_eentry    = GCSRRD(0x0C);
+    ka->guest_tlbrentry = GCSRRD(0x88);
+    ka->guest_pgdl      = GCSRRD(0x19);
+    ka->guest_pgdh      = GCSRRD(0x1A);
+    ka->guest_pwcl      = GCSRRD(0x1C);
+    ka->guest_pwch      = GCSRRD(0x1D);
+    ka->guest_stlbps    = GCSRRD(0x1E);
+    ka->guest_dmw[0]    = GCSRRD(0x180);
+    ka->guest_dmw[1]    = GCSRRD(0x181);
+    ka->guest_dmw[2]    = GCSRRD(0x182);
+    ka->guest_dmw[3]    = GCSRRD(0x183);
 }
 
 /* Deliver a virtual synchronous exception to the guest */
 static void deliver_guest_exception(struct kthread_arch *ka,
                                      struct cpu_user_regs *regs,
                                      prtos_u32_t ecode, prtos_u32_t esubcode) {
+    /* With TOP=0, guest may write EENTRY directly to shadow CSR without
+     * trapping, so ka->guest_eentry can be stale. Always re-read. */
+    if (ka->lvz_enabled)
+        ka->guest_eentry = GCSRRD(0x0C);
     if (!ka->guest_eentry) return;
+
+    /* Sync CSRs that the guest may have written inline (no trap) */
+    sync_inline_csrs_from_shadow(ka);
 
     /* Save guest state */
     ka->guest_prmd = (ka->guest_crmd & CRMD_PLV_MASK) |
@@ -521,10 +788,22 @@ static void deliver_guest_exception(struct kthread_arch *ka,
                       ((prtos_u64_t)esubcode << 22);
 
     /* For TLB-related exceptions (PIL/PIS/PIF/PME/PNR/PNX), update TLBEHI.VPPN
-     * from BADV, as hardware does automatically */
+     * from BADV, as hardware does automatically.
+     * Use regs->badv (host trap frame) because sync_inline_csrs_from_shadow
+     * above may have overwritten ka->guest_badv with a stale shadow value. */
     if (ecode >= 1 && ecode <= 6) {
+        ka->guest_badv = regs->badv;
         ka->guest_tlbehi = ka->guest_badv & ~((1ULL << 13) - 1);
+        GCSRWR(0x11, ka->guest_tlbehi);
+        /* Sync BADV so guest can read the faulting VA */
+        GCSRWR(0x07, ka->guest_badv);
     }
+
+    /* Sync modified CSRs to QEMU shadow */
+    GCSRWR(0x01, ka->guest_prmd);
+    GCSRWR(0x06, ka->guest_era);
+    GCSRWR(0x00, ka->guest_crmd);
+    GCSRWR(0x05, ka->guest_estat);
 
     /* Compute exception vector offset */
     prtos_u64_t vs = (ka->guest_ecfg >> 16) & 0x7;
@@ -537,7 +816,14 @@ static void deliver_guest_exception(struct kthread_arch *ka,
 static void deliver_guest_tlb_refill(struct kthread_arch *ka,
                                       struct cpu_user_regs *regs,
                                       prtos_u64_t badv) {
+    /* With TOP=0, guest may write TLBRENTRY directly to shadow CSR without
+     * trapping, so ka->guest_tlbrentry can be stale. Always re-read. */
+    if (ka->lvz_enabled) {
+        ka->guest_tlbrentry = GCSRRD(0x88);
+    }
     if (!ka->guest_tlbrentry) return;
+    /* Sync CSRs that the guest may have written inline */
+    sync_inline_csrs_from_shadow(ka);
     /* Save to TLB refill exception CSRs */
     ka->guest_tlbrera = (regs->era >> 2) << 2; /* PC aligned, ISTLBR set below */
     ka->guest_tlbrera |= (1ULL << 0); /* ISTLBR = 1 */
@@ -551,8 +837,15 @@ static void deliver_guest_tlb_refill(struct kthread_arch *ka,
     /* Set guest CRMD to TLB refill mode: PLV=0, IE=0, DA=1, PG=0 */
     ka->guest_crmd &= ~CRMD_IE;
     ka->guest_crmd &= ~CRMD_PLV_MASK;
-    /* Mark DA=1, PG=0 in guest (bits 3,4) */
-    ka->guest_crmd = (ka->guest_crmd & ~0x18UL) | (1UL << 3); /* DA=1, PG=0 */
+    /* Per LoongArch spec: TLB refill sets DA=0, PG=1 (bits 3,4) */
+    ka->guest_crmd = (ka->guest_crmd & ~0x18UL) | (1UL << 4); /* DA=0, PG=1 */
+
+    /* Sync all modified CSRs to QEMU shadow */
+    GCSRWR(0x8A, ka->guest_tlbrera);
+    GCSRWR(0x89, ka->guest_tlbrbadv);
+    GCSRWR(0x8E, ka->guest_tlbrehi);
+    GCSRWR(0x8F, ka->guest_tlbrprmd);
+    GCSRWR(0x00, ka->guest_crmd);
 
     ka->guest_in_tlb_refill = 1;
     {
@@ -587,29 +880,29 @@ static prtos_u64_t translate_guest_tlbelo(prtos_u64_t guest_elo, prtos_s32_t cpu
     return new_ppn | guest_flags | high_flags;
 }
 
-/* Emulate tlbfill/tlbwr: translate guest TLB entry and fill real TLB */
+/* Emulate tlbfill/tlbwr: translate guest TLB entry and fill real TLB.
+ * TLB CSR writes go inline to QEMU guest shadow (env->guest.CSR_*).
+ * Read them back via GCSRRD so we get the current guest values. */
+
 static void emulate_tlb_fill(struct kthread_arch *ka, int use_index) {
     prtos_s32_t cpu_id = GET_CPU_ID();
     prtos_u64_t guest_hi, guest_elo0, guest_elo1, ps;
 
-    if (ka->guest_in_tlb_refill) {
-        /* TLB refill mode: use TLBR* registers.
-         * Compute TLBEHI from BADV to avoid PS contamination in TLBREHI,
-         * since TLBREHI bits[29:24] = PS overlaps with VPPN. */
+    if (ka->guest_in_tlb_refill || (ka->guest_tlbrera & 1)) {
         guest_hi = ka->guest_tlbrbadv & ~((1ULL << 13) - 1);
         guest_elo0 = ka->guest_tlbrelo0;
         guest_elo1 = ka->guest_tlbrelo1;
         ps = (ka->guest_tlbrehi >> 24) & 0x3F;
     } else {
-        /* Normal mode: use regular TLB registers */
+        /* Normal mode: use regular TLB registers (synced from shadow) */
         guest_hi = ka->guest_tlbehi;
         guest_elo0 = ka->guest_tlbelo0;
         guest_elo1 = ka->guest_tlbelo1;
         ps = (ka->guest_tlbidx >> 24) & 0x3F;
         /* When TLBIDX.NE=1 (tlbsrch found nothing), tlbwr behaves like
          * tlbfill and uses STLBPS for page size, not TLBIDX.PS */
-        if (use_index && (ka->guest_tlbidx & (1ULL << 31)) && ka->guest_stlbps) {
-            ps = ka->guest_stlbps & 0x3F;
+        if (use_index && (ka->guest_tlbidx & (1ULL << 31))) {
+            if (ka->guest_stlbps) ps = ka->guest_stlbps & 0x3F;
         }
     }
 
@@ -635,16 +928,16 @@ static void emulate_tlb_fill(struct kthread_arch *ka, int use_index) {
         : : "r"(guest_hi) : "memory"
     );
 
-    __asm__ __volatile__(
-        "csrwr %0, 0x11\n\t"  /* TLBEHI */
-        "csrwr %1, 0x12\n\t"  /* TLBELO0 */
-        "csrwr %2, 0x13\n\t"  /* TLBELO1 */
-        "csrwr %3, 0x10\n\t"  /* TLBIDX */
-        "tlbfill\n\t"
-        :
-        : "r"(guest_hi), "r"(host_elo0), "r"(host_elo1), "r"(real_idx)
-        : "memory"
-    );
+    /* Set GTLBC.TGID to guest's GID so tlbfill tags the entry correctly.
+     * Without this, entries are tagged GID=0 (host) and invisible to guest. */
+    {
+        __asm__ __volatile__(
+            "invtlb 0x6, $zero, %0\n\t"
+            : : "r"(guest_hi) : "memory"
+        );
+        tlbfill_with_guest_gid(guest_hi, host_elo0, host_elo1, real_idx,
+                               ka->guest_gid);
+    }
 }
 
 /* Emulate invtlb instruction */
@@ -658,6 +951,42 @@ static void emulate_invtlb(prtos_u32_t op, prtos_u64_t asid_val, prtos_u64_t va_
     );
 }
 
+/* Sync guest CSRs from QEMU guest shadow (env->guest.*) into ka->guest_*.
+ * Called before emulating TLB/pagetable operations that were previously
+ * trapped but now go inline to the guest shadow for performance. */
+static void sync_guest_csrs_from_shadow(struct kthread_arch *ka) {
+    /* TLB CSRs */
+    ka->guest_tlbehi  = GCSRRD(0x11);
+    ka->guest_tlbelo0 = GCSRRD(0x12);
+    ka->guest_tlbelo1 = GCSRRD(0x13);
+    ka->guest_tlbidx  = GCSRRD(0x10);
+    ka->guest_asid    = GCSRRD(0x18);
+    ka->guest_stlbps  = GCSRRD(0x1E);
+    /* Page table walking CSRs */
+    ka->guest_pgdl    = GCSRRD(0x19);
+    ka->guest_pgdh    = GCSRRD(0x1A);
+    ka->guest_pwcl    = GCSRRD(0x1C);
+    ka->guest_pwch    = GCSRRD(0x1D);
+    /* TLB refill CSRs */
+    ka->guest_tlbrentry = GCSRRD(0x88);
+    ka->guest_tlbrbadv  = GCSRRD(0x89);
+    ka->guest_tlbrera   = GCSRRD(0x8A);
+    ka->guest_tlbrsave  = GCSRRD(0x8B);
+    ka->guest_tlbrelo0  = GCSRRD(0x8C);
+    ka->guest_tlbrelo1  = GCSRRD(0x8D);
+    ka->guest_tlbrehi   = GCSRRD(0x8E);
+    ka->guest_tlbrprmd  = GCSRRD(0x8F);
+    /* BADV */
+    ka->guest_badv      = GCSRRD(0x07);
+}
+
+/* Sync modified guest CSRs back to QEMU guest shadow after emulation */
+static void sync_guest_csrs_to_shadow(struct kthread_arch *ka) {
+    GCSRWR(0x8C, ka->guest_tlbrelo0);
+    GCSRWR(0x8D, ka->guest_tlbrelo1);
+    GCSRWR(0x8E, ka->guest_tlbrehi);
+}
+
 /* Emulate a CSR instruction or ertn.  Returns 1 if handled. */
 static int emulate_privileged_insn(struct cpu_user_regs *regs) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
@@ -666,16 +995,21 @@ static int emulate_privileged_insn(struct cpu_user_regs *regs) {
 
     struct kthread_arch *ka = &k->ctrl.g->karch;
 
+    /* Sync inline-writable CSRs from shadow on every GSPR entry.
+     * With TOP=0, the guest writes many CSRs inline; our cached
+     * ka->guest_* values can be stale. */
+    if (ka->lvz_enabled)
+        sync_inline_csrs_from_shadow(ka);
+
     /* Read the faulting instruction from BADI CSR (set by hardware on exception).
      * This avoids reading from ERA memory which may be in user-space TLB range. */
     prtos_u32_t insn;
     __asm__ __volatile__("csrrd %0, 0x8" : "=r"(insn)); /* CSR_BADI */
-    {
-        prtos_u32_t emu_op10 = (insn >> 10) & 0x3FFFFF;
-    }
 
     /* Check for ERTN instruction */
     if (insn == INSN_ERTN) {
+        /* Sync inline CSRs before using ka->guest_crmd/prmd/era */
+        sync_inline_csrs_from_shadow(ka);
         if (ka->guest_in_tlb_refill ||
             (ka->guest_tlbrera & 1)) {
             /* Return from TLB refill exception */
@@ -686,15 +1020,22 @@ static int emulate_privileged_insn(struct cpu_user_regs *regs) {
             regs->era = (ka->guest_tlbrera >> 2) << 2; /* Clear ISTLBR bit */
             ka->guest_tlbrera &= ~1ULL; /* Clear ISTLBR */
             ka->guest_in_tlb_refill = 0;
+            GCSRWR(0x00, ka->guest_crmd);
+            GCSRWR(0x8A, ka->guest_tlbrera);
         } else {
             /* Normal ertn: restore CRMD from PRMD and jump to ERA */
             ka->guest_crmd = (ka->guest_crmd & ~(CRMD_PLV_MASK | CRMD_IE)) |
                              (ka->guest_prmd & CRMD_PLV_MASK) |
                              ((ka->guest_prmd & (1UL << 2)) ? CRMD_IE : 0);
             regs->era = ka->guest_era;
+            GCSRWR(0x00, ka->guest_crmd);
         }
-        /* Check for pending interrupts after restoring IE */
-        check_guest_timer(ka, regs);
+        /* Check for pending interrupts after restoring IE.
+         * Do NOT check timer here - timer delivery only happens via
+         * Now that GCSRWR works correctly (QEMU alias fix), the guest's
+         * TICLR write properly clears TI, preventing cascading delivery.
+         * Only check pending IRQs here (not timer) - timer is handled
+         * exclusively by the host timer interrupt handler. */
         check_guest_pending_irqs(ka, regs);
         return 1;
     }
@@ -721,7 +1062,6 @@ static int emulate_privileged_insn(struct cpu_user_regs *regs) {
             int check = guest_csr_write(ka, csr_num, new_val, regs);
             guest_reg_write(regs, rd, old_val);
             if (check) {
-                check_guest_timer(ka, regs);
                 check_guest_pending_irqs(ka, regs);
             }
         } else {
@@ -733,7 +1073,6 @@ static int emulate_privileged_insn(struct cpu_user_regs *regs) {
             int check = guest_csr_write(ka, csr_num, new_val, regs);
             guest_reg_write(regs, rd, old_val);
             if (check) {
-                check_guest_timer(ka, regs);
                 check_guest_pending_irqs(ka, regs);
             }
         }
@@ -752,19 +1091,23 @@ static int emulate_privileged_insn(struct cpu_user_regs *regs) {
         return 1;
     }
 
-    /* TLB instructions */
+    /* TLB instructions - sync guest CSRs from shadow before processing */
+    if (insn == INSN_TLBFILL || insn == INSN_TLBWR || insn == INSN_TLBSRCH ||
+        insn == INSN_TLBRD || (insn >> 22) == INSN_LDDIR_LDPTE_KEY) {
+        sync_guest_csrs_from_shadow(ka);
+    }
+
     if (insn == INSN_TLBFILL) {
         {
             {
                 prtos_u64_t hi, elo0, elo1, ps;
-                if (ka->guest_in_tlb_refill) {
+                if (ka->guest_in_tlb_refill || (ka->guest_tlbrera & 1)) {
                     hi = ka->guest_tlbrehi; elo0 = ka->guest_tlbrelo0;
                     elo1 = ka->guest_tlbrelo1; ps = (ka->guest_tlbrehi >> 24) & 0x3F;
                 } else {
                     hi = ka->guest_tlbehi; elo0 = ka->guest_tlbelo0;
                     elo1 = ka->guest_tlbelo1; ps = (ka->guest_tlbidx >> 24) & 0x3F;
                 }
-                /* Only print for user-space addresses (badv not in DMW range) */
             }
         }
         emulate_tlb_fill(ka, 0);
@@ -835,7 +1178,8 @@ static int emulate_privileged_insn(struct cpu_user_regs *regs) {
         prtos_u32_t rd = insn & 0x1F;
         prtos_u32_t is_ldpte = (insn >> 18) & 0x1;
         prtos_u64_t base = guest_reg_read(regs, rj);
-        prtos_u64_t badv = ka->guest_in_tlb_refill ? ka->guest_tlbrbadv : ka->guest_badv;
+        prtos_u64_t badv = (ka->guest_in_tlb_refill || (ka->guest_tlbrera & 1))
+                           ? ka->guest_tlbrbadv : ka->guest_badv;
 
         /* PTE entry width: 0=64bit(shift=3), 1=128bit(shift=6), etc. */
         prtos_u32_t ptewidth = (ka->guest_pwcl >> 30) & 0x3;
@@ -844,6 +1188,9 @@ static int emulate_privileged_insn(struct cpu_user_regs *regs) {
         /* Mask base to physical address (48-bit PA space) */
         prtos_u64_t phys_mask = (1ULL << 48) - 1;
         base = base & phys_mask;
+
+        /* Translate GPA base to HPA for host-side page table access */
+        prtos_s32_t lddir_cpu_id = GET_CPU_ID();
 
         if (!is_ldpte) {
             /* LDDIR: load page directory entry */
@@ -864,43 +1211,95 @@ static int emulate_privileged_insn(struct cpu_user_regs *regs) {
             }
             if (dir_width > 0) {
                 prtos_u64_t idx = (badv >> dir_base) & ((1ULL << dir_width) - 1);
-                prtos_u64_t phys = base | (idx << shift);
-                /* Access via DMW1 (cacheable coherent) */
-                prtos_u64_t va = 0x9000000000000000ULL | phys;
-                prtos_u64_t pde = *(volatile prtos_u64_t *)va;
-                pde = pde & phys_mask;
-                {
+                prtos_u64_t gpa = base | (idx << shift);
+                /* Translate GPA → HPA, then access via uncached DMW. */
+                prtos_u64_t hpa = translate_gpa_to_hpa(gpa, lddir_cpu_id);
+                if (!hpa) {
+                    static int lddir_fail_cnt = 0;
+                    if (++lddir_fail_cnt <= 5)
+                        kprintf("[LDDIR] cpu=%d gpa=0x%llx base=0x%llx badv=0x%llx lvl=%d FAIL\n",
+                                lddir_cpu_id, gpa, base, badv, level_or_seq);
+                    guest_reg_write(regs, rd, 0);
+                } else {
+                    prtos_u64_t va = 0x8000000000000000ULL | hpa;
+                    prtos_u64_t pde = *(volatile prtos_u64_t *)va;
+                    pde = pde & phys_mask;
+                    /* HUGE page check: if entry has HUGE bit (bit 6) set,
+                     * it's a leaf entry (not a directory pointer).
+                     * Set LEVEL field (bits 14:13) if not already set. */
+                    if (pde & (1ULL << 6)) {
+                        prtos_u64_t entry_level = (pde >> 13) & 0x3;
+                        if (!entry_level) {
+                            pde = (pde & ~(3ULL << 13)) |
+                                  ((prtos_u64_t)level_or_seq << 13);
+                        }
+                    }
+                    guest_reg_write(regs, rd, pde);
                 }
-                guest_reg_write(regs, rd, pde);
             } else {
-                guest_reg_write(regs, rd, 0);
+                /* Dir width=0: level not used, pass base through unchanged */
+                guest_reg_write(regs, rd, base);
             }
         } else {
             /* LDPTE: load PTE into TLBRELO0 (seq=0) or TLBRELO1 (seq=1) */
             prtos_u64_t pt_base = (ka->guest_pwcl >> 0) & 0x1F;   /* PTbase */
             prtos_u64_t pt_width = (ka->guest_pwcl >> 5) & 0x1F;  /* PTwidth */
             prtos_u32_t odd = level_or_seq;
-            if (pt_width > 0) {
+            prtos_u64_t pte = 0;
+            prtos_u64_t ps = pt_base;
+
+            if (base & (1ULL << 6)) {
+                /* HUGE page: base IS the PTE, not an address to read from.
+                 * LEVEL is at bits 14:13, HGLOBAL at bit 12. */
+                prtos_u64_t level_val = (base >> 13) & 0x3;
+                prtos_u64_t hdir_base = 0, hdir_width = 0;
+                switch (level_val) {
+                case 1: hdir_base = (ka->guest_pwcl >> 10) & 0x1F;
+                        hdir_width = (ka->guest_pwcl >> 15) & 0x1F; break;
+                case 2: hdir_base = (ka->guest_pwcl >> 20) & 0x1F;
+                        hdir_width = (ka->guest_pwcl >> 25) & 0x1F; break;
+                case 3: hdir_base = (ka->guest_pwch >> 0) & 0x3F;
+                        hdir_width = (ka->guest_pwch >> 6) & 0x3F; break;
+                default: hdir_base = (ka->guest_pwch >> 12) & 0x3F;
+                         hdir_width = (ka->guest_pwch >> 18) & 0x3F; break;
+                }
+                ps = hdir_base + hdir_width - 1;
+                /* Clear HUGE (bit6), LEVEL (bits14:13) */
+                pte = base & ~((1ULL << 6) | (3ULL << 13));
+                /* Move HGLOBAL (bit12) to G (bit6) */
+                if (pte & (1ULL << 12)) {
+                    pte = (pte & ~(1ULL << 12)) | (1ULL << 6);
+                }
+                /* For odd half of huge page: add (1 << ps) to PPN */
+                if (odd) {
+                    pte += (1ULL << ps);
+                }
+                pte = pte & phys_mask;
+            } else if (pt_width > 0) {
+                /* Normal PTE: read from page table */
                 prtos_u64_t ptindex = (badv >> pt_base) & ((1ULL << pt_width) - 1);
                 ptindex = ptindex & ~1ULL;  /* Clear bit 0 for pair alignment */
                 prtos_u64_t ptoffset0 = ptindex << shift;
                 prtos_u64_t ptoffset1 = (ptindex + 1) << shift;
-                prtos_u64_t phys = base | (odd ? ptoffset1 : ptoffset0);
-                /* Access via DMW1 (cacheable coherent) */
-                prtos_u64_t va = 0x9000000000000000ULL | phys;
-                prtos_u64_t pte = *(volatile prtos_u64_t *)va;
-                pte = pte & phys_mask;
-                {
+                prtos_u64_t gpa = base | (odd ? ptoffset1 : ptoffset0);
+                prtos_u64_t hpa = translate_gpa_to_hpa(gpa, lddir_cpu_id);
+                if (hpa) {
+                    prtos_u64_t va = 0x8000000000000000ULL | hpa;
+                    pte = *(volatile prtos_u64_t *)va;
+                    pte = pte & phys_mask;
                 }
-                if (odd) {
-                    ka->guest_tlbrelo1 = pte;
-                } else {
-                    ka->guest_tlbrelo0 = pte;
-                }
-                /* Set TLBREHI.PS = ptbase (bits[29:24]) */
-                ka->guest_tlbrehi = (ka->guest_tlbrehi & ~(0x3FULL << 24)) |
-                                    ((pt_base & 0x3FULL) << 24);
             }
+
+            if (odd) {
+                ka->guest_tlbrelo1 = pte;
+            } else {
+                ka->guest_tlbrelo0 = pte;
+            }
+            /* Set TLBREHI.PS */
+            ka->guest_tlbrehi = (ka->guest_tlbrehi & ~(0x3FULL << 24)) |
+                                ((ps & 0x3FULL) << 24);
+            /* Sync modified refill CSRs back to QEMU guest shadow */
+            sync_guest_csrs_to_shadow(ka);
         }
         regs->era += 4;
         return 1;
@@ -943,7 +1342,6 @@ static int emulate_privileged_insn(struct cpu_user_regs *regs) {
     /* IDLE instruction: 0000 01100100 10001 imm15 */
     if ((insn >> 15) == 0x00C91) {
         regs->era += 4;
-        /* Yield to scheduler */
         return 1;
     }
 
@@ -970,14 +1368,6 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
     prtos_u64_t estat = regs->estat;
     prtos_u64_t ecode = (estat >> LOONGARCH_ESTAT_ECODE_SHIFT) & LOONGARCH_ESTAT_ECODE_MASK;
     prtos_u64_t is_bits = estat & LOONGARCH_ESTAT_IS_MASK;
-
-    /* DEBUG: trace first traps from guest (PLV3) - minimal */
-    {
-        prtos_u64_t pplv = regs->prmd & 0x3;
-        if (pplv != 0) {
-        }
-    }
-
     /* Save regs pointer for virtual IRQ delivery (fix_stack) */
     manage_hwi_state();
     prtos_current_guest_regs_percpu[GET_CPU_ID()] = regs;
@@ -1001,13 +1391,16 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
                 : : "r"(ipi_status) : "$t0"
             );
 
-            /* Handle IPI for guest VSSIP injection */
+            /* Inject IPI into guest ESTAT so guest kernel sees it */
             {
                 local_processor_t *info = GET_LOCAL_PROCESSOR();
                 kthread_t *k = info->sched.current_kthread;
-                if (k && k->ctrl.g && k->ctrl.g->karch.ipi_pending) {
-                    k->ctrl.g->karch.ipi_pending = 0;
-                    /* Inject virtual IPI to guest via fix_stack mechanism */
+                if (k && k->ctrl.g) {
+                    struct kthread_arch *ka = &k->ctrl.g->karch;
+                    ka->guest_ipi_status |= ipi_status;
+                    ka->guest_estat |= (1UL << LOONGARCH_INT_IPI);
+                    set_guest_vip_bit(0);
+                    check_guest_pending_irqs(ka, regs);
                 }
             }
             {
@@ -1022,12 +1415,45 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
             prtos_u64_t val = 1;
             __asm__ __volatile__("csrwr %0, 0x44" : "+r"(val));  /* TICLR */
 
+            /* Determine if this timer interrupt came from guest mode.
+             * In LVZ: guest timer fires → VMEXIT → host sees TI.
+             * Host timer fires during host execution → no VMEXIT. */
+            int from_guest = is_trap_from_guest(regs);
+
             /* Check guest virtual timer */
             {
                 local_processor_t *info = GET_LOCAL_PROCESSOR();
                 kthread_t *k = info->sched.current_kthread;
                 if (k && k->ctrl.g) {
-                    check_guest_timer(&k->ctrl.g->karch, regs);
+                    struct kthread_arch *ka = &k->ctrl.g->karch;
+
+                    if (from_guest && ka->lvz_enabled && prtos_lvz_available) {
+                        /* A timer VM-exit while the guest was running is the
+                         * reliable wakeup point for virtual time under TCG.
+                         * Sync the guest shadow TCFG, then inject one guest
+                         * timer tick if the guest timer is armed. */
+                        prtos_u64_t gstat;
+                        __asm__ __volatile__("csrrd %0, 0x50" : "=r"(gstat));
+                        prtos_u64_t gid = (gstat >> 16) & 0xFF;
+                        if (gid > 0) {
+                            prtos_u64_t guest_tcfg = GCSRRD(0x41);
+                            if (guest_tcfg & TCFG_EN) {
+                                ka->guest_tcfg = guest_tcfg;
+                                if (!ka->guest_timer_active) {
+                                    ka->guest_tcfg_deadline = read_stable_counter() +
+                                                              ((guest_tcfg & TCFG_VAL) >> 2);
+                                }
+                                ka->guest_timer_active = 1;
+                            } else {
+                                ka->guest_timer_active = 0;
+                            }
+                            if (ka->guest_timer_active)
+                                inject_guest_timer_tick(ka);
+                        }
+                    } else if (!ka->lvz_enabled) {
+                        check_guest_timer(ka, regs);
+                    }
+                    check_guest_pending_irqs(ka, regs);
                 }
             }
 
@@ -1066,6 +1492,7 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
                     struct kthread_arch *hwi_ka = &hwi_k->ctrl.g->karch;
                     hwi_ka->guest_estat |= hwi_bits;
                     hwi_ka->hwi_injected |= hwi_bits;
+                    check_guest_pending_irqs(hwi_ka, regs);
                 }
             }
         }
@@ -1177,16 +1604,8 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
                         /* Use DMW virtual address as TLBEHI (not GPA) */
                         prtos_u64_t pair_base = (badv & ~((1ULL << 21) - 1));
                         prtos_u64_t tlbidx = (20ULL << 24);
-                        __asm__ __volatile__(
-                            "csrwr %0, 0x11\n\t"
-                            "csrwr %1, 0x12\n\t"
-                            "csrwr %2, 0x13\n\t"
-                            "csrwr %3, 0x10\n\t"
-                            "tlbfill\n\t"
-                            :
-                            : "r"(pair_base), "r"(elo0), "r"(elo1), "r"(tlbidx)
-                            : "memory"
-                        );
+                        tlbfill_with_guest_gid(pair_base, elo0, elo1, tlbidx,
+                                               pf_ka->guest_gid);
                         break;
                     }
                 }
@@ -1208,30 +1627,28 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
 
                         prtos_u64_t pair_base = (prtos_u64_t)(even_idx) << 20;
                         prtos_u64_t tlbidx = (20ULL << 24);
-                        __asm__ __volatile__(
-                            "csrwr %0, 0x11\n\t"
-                            "csrwr %1, 0x12\n\t"
-                            "csrwr %2, 0x13\n\t"
-                            "csrwr %3, 0x10\n\t"
-                            "tlbfill\n\t"
-                            :
-                            : "r"(pair_base), "r"(elo0), "r"(elo1), "r"(tlbidx)
-                            : "memory"
-                        );
+                        tlbfill_with_guest_gid(pair_base, elo0, elo1, tlbidx,
+                                               pf_ka->guest_gid);
                         break;
                     }
                 }
 
-                /* Guest virtual address: deliver page fault exception to guest */
+                /* Guest virtual address (non-DMW, non-direct-GPA).
+                 * With TORU=0, guest handles TLB refills itself. If we get
+                 * PIL/PIS/PIF here, the guest already tried a TLB refill
+                 * which resulted in V=0 (page not mapped). Deliver the page
+                 * fault exception directly so the guest's do_page_fault
+                 * handler can allocate/map the page.
+                 */
                 if (pf_ka->guest_eentry) {
                     pf_ka->guest_badv = badv;
-                    {
-                    }
-                    /* Invalidate V=0 TLB stub from _refill_deny */
+                    /* Invalidate V=0 TLB entry so guest can retry after
+                     * its fault handler sets up the page table */
                     __asm__ __volatile__(
                         "invtlb 0x6, $zero, %0\n\t"
                         : : "r"(badv) : "memory"
                     );
+
                     deliver_guest_exception(pf_ka, regs, ecode, 0);
                     break;
                 }
@@ -1296,15 +1713,14 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
                     prtos_u64_t tlbidx = (20ULL << 24); /* PS=1MB */
                     __asm__ __volatile__(
                         "invtlb 0x6, $zero, %0\n\t"
-                        "csrwr %0, 0x11\n\t"
-                        "csrwr %1, 0x12\n\t"
-                        "csrwr %2, 0x13\n\t"
-                        "csrwr %3, 0x10\n\t"
-                        "tlbfill\n\t"
-                        :
-                        : "r"(tlbehi), "r"(elo0), "r"(elo1), "r"(tlbidx)
-                        : "memory"
+                        : : "r"(tlbehi) : "memory"
                     );
+                    {
+                        local_processor_t *pme_gid_info = GET_LOCAL_PROCESSOR();
+                        kthread_t *pme_gid_k = pme_gid_info->sched.current_kthread;
+                        prtos_u32_t pme_gid = pme_gid_k->ctrl.g->karch.guest_gid;
+                        tlbfill_with_guest_gid(tlbehi, elo0, elo1, tlbidx, pme_gid);
+                    }
                 }
                 break;
             }
@@ -1338,14 +1754,15 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
         }
         case LOONGARCH_ECODE_ADEF: { /* Address error ADEF/ADEM */
             prtos_u64_t esubcode = (estat >> 22) & 0x1FF;
-            prtos_u64_t pplv = regs->prmd & 0x3;
-            if (pplv != 0) {
+            if (is_trap_from_guest(regs)) {
                 local_processor_t *adem_info = GET_LOCAL_PROCESSOR();
                 kthread_t *adem_k = adem_info->sched.current_kthread;
                 if (adem_k && adem_k->ctrl.g && adem_k->ctrl.g->karch.guest_eentry) {
                     struct kthread_arch *adem_ka = &adem_k->ctrl.g->karch;
-                    adem_ka->guest_badv = regs->badv;
-                    deliver_guest_tlb_refill(adem_ka, regs, regs->badv);
+                    prtos_u64_t fault_addr = (esubcode == 0) ? regs->era : regs->badv;
+                    sync_guest_csrs_from_shadow(adem_ka);
+                    adem_ka->guest_badv = fault_addr;
+                    deliver_guest_tlb_refill(adem_ka, regs, fault_addr);
                 }
             } else {
                 halt_system();
@@ -1353,7 +1770,7 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
             break;
         }
         case LOONGARCH_ECODE_ALE: { /* Alignment error */
-            if ((regs->prmd & 0x3) != 0) {
+            if (is_trap_from_guest(regs)) {
                 local_processor_t *info = GET_LOCAL_PROCESSOR();
                 kthread_t *k = info->sched.current_kthread;
                 if (k && k->ctrl.g) {
@@ -1370,7 +1787,7 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
             break;
         }
         case LOONGARCH_ECODE_INE: { /* Instruction not exist */
-            if ((regs->prmd & 0x3) != 0) {
+            if (is_trap_from_guest(regs)) {
                 local_processor_t *info = GET_LOCAL_PROCESSOR();
                 kthread_t *k = info->sched.current_kthread;
                 if (k && k->ctrl.g) {
@@ -1383,7 +1800,7 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
             break;
         }
         case 0xC: { /* BRK - Breakpoint (used by WARN/BUG) */
-            if ((regs->prmd & 0x3) != 0) {
+            if (is_trap_from_guest(regs)) {
                 local_processor_t *info = GET_LOCAL_PROCESSOR();
                 kthread_t *k = info->sched.current_kthread;
                 if (k && k->ctrl.g) {
@@ -1446,7 +1863,7 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
              * manage lazy FP/LASX context save/restore.
              * Also enable the hardware extension so the guest can use it
              * after its exception handler enables the virtual EUEN. */
-            if ((regs->prmd & 0x3) != 0) {
+            if (is_trap_from_guest(regs)) {
                 prtos_u64_t euen;
                 __asm__ __volatile__("csrrd %0, 0x2" : "=r"(euen));
                 euen |= 0x7; /* FPE + SXE + ASXE - enable all in hardware */
@@ -1468,8 +1885,14 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
         }
         case LOONGARCH_ECODE_GSPR: { /* Guest sensitive privileged resource */
             /* LVZ: handle CPUCFG, IOCSR, idle instructions */
-            prtos_u32_t badi = *(volatile prtos_u32_t *)regs->era;
+            /* Use CSR_BADI (0x8) which QEMU fills with the faulting instruction
+             * during exception delivery. Reading from regs->era directly would
+             * fail because it's a guest-mode address not accessible from host. */
+            prtos_u32_t badi;
+            __asm__ __volatile__("csrrd %0, 0x8" : "=r"(badi));
             prtos_u32_t opcode = badi >> 24;
+
+            (void)opcode;
 
             if (opcode == 0x00 && ((badi >> 10) & 0x3FFF) == 0x1B) {
                 /* CPUCFG: emulate with real values but mask features */
@@ -1485,7 +1908,6 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
                 handle_iocsr_passthrough(regs, badi);
                 manage_hwi_state();
             } else if ((badi >> 15) == 0x00C91) {
-                /* Idle instruction: just advance PC */
                 regs->era += 4;
             } else {
                 /* Reuse CSR emulation for other GSPR traps */
@@ -1531,12 +1953,13 @@ void loongarch64_trap_handler(struct cpu_user_regs *regs) {
                 pend_ctxt.irq_nr = 0;
                 raise_pend_irqs(&pend_ctxt);
             }
-            /* Also check hw-virt guest virtual timer and pending virtual IRQs
-             * (only for non-LVZ guests; LVZ handles timer natively) */
+            /* Check guest timer and pending virtual IRQs when returning
+             * to guest. The cascade guard in check_guest_timer ensures TI
+             * is only set when the previous one was acknowledged. */
             {
                 local_processor_t *info = GET_LOCAL_PROCESSOR();
                 kthread_t *k = info->sched.current_kthread;
-                if (k && k->ctrl.g && !k->ctrl.g->karch.lvz_enabled) {
+                if (k && k->ctrl.g) {
                     check_guest_timer(&k->ctrl.g->karch, regs);
                     check_guest_pending_irqs(&k->ctrl.g->karch, regs);
                 }

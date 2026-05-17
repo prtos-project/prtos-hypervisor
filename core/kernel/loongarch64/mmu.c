@@ -42,10 +42,11 @@
 #define TLBELO_PLV3  (3ULL << 2)   /* PLV=3, accessible from all levels */
 #define TLBELO_CC    (1ULL << 4)   /* Cached Coherent (MAT=1) */
 #define TLBELO_G     (1ULL << 6)   /* Global (ignore ASID) */
+#define TLBELO_P     (1ULL << 7)   /* Present (HW PTW: required when CSR_PWCH.HPTW_EN=1) */
 
-#define TLBELO_FLAGS_PART (TLBELO_V | TLBELO_D | TLBELO_PLV3 | TLBELO_CC | TLBELO_G)
+#define TLBELO_FLAGS_PART (TLBELO_V | TLBELO_D | TLBELO_PLV3 | TLBELO_CC | TLBELO_G | TLBELO_P)
 /* Read-only flags for hypervisor memory accessible from PLV3 (no D bit) */
-#define TLBELO_FLAGS_HYP_RO (TLBELO_V | TLBELO_PLV3 | TLBELO_CC | TLBELO_G)
+#define TLBELO_FLAGS_HYP_RO (TLBELO_V | TLBELO_PLV3 | TLBELO_CC | TLBELO_G | TLBELO_P)
 
 /* TLBIDX PS field is bits [29:24] */
 #define TLBIDX_PS(ps) ((prtos_u64_t)(ps) << 24)
@@ -90,7 +91,7 @@ static void update_tlb_refill_table(kthread_t *k) {
     }
 
 /* TLBELO flags for partition pages: uncacheable (MAT=0 SUC) */
-#define TLBELO_FLAGS_PART_UC (TLBELO_V | TLBELO_D | TLBELO_PLV3 | TLBELO_G)
+#define TLBELO_FLAGS_PART_UC (TLBELO_V | TLBELO_D | TLBELO_PLV3 | TLBELO_G | TLBELO_P)
 
     /* Map partition's physical memory areas */
     for (area = 0; area < cfg->num_of_physical_memory_areas; area++) {

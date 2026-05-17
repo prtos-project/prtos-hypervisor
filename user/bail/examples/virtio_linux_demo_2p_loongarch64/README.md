@@ -22,7 +22,7 @@ Memory layout:
 ### 1. Build Buildroot (rootfs)
 
 ```bash
-cd /home/chenweis/hdd/Repo/loongarch64_linux_workspace/buildroot
+cd /home/chenweis/loongarch64_workspace/buildroot
 make qemu_loongarch64_virt_efi_defconfig
 make menuconfig
 # Set the following options:
@@ -36,7 +36,7 @@ The rootfs CPIO image will be at `output/images/rootfs.cpio`.
 ### 2. Build Linux Kernel
 
 ```bash
-cd /home/chenweis/hdd/Repo/loongarch64_linux_workspace/linux-6.19.9
+cd /home/chenweis/loongarch64_workspace/linux-6.19.9
 
 make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- loongson64_defconfig
 make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- menuconfig

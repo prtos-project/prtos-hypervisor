@@ -8,8 +8,8 @@
         <ProcessorTable>
             <Processor id="0">
                 <CyclicPlanTable>
-                    <Plan id="0" majorFrame="2ms">
-                        <Slot id="0" start="0ms" duration="1ms" partitionId="0" />
+                    <Plan id="0" majorFrame="1000ms">
+                        <Slot id="0" start="0ms" duration="1000ms" partitionId="0" />
                     </Plan>
                 </CyclicPlanTable>
             </Processor>
