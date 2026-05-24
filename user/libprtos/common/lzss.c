@@ -237,12 +237,13 @@ prtos_s32_t lzss_uncompress(prtos_u32_t in_size, prtos_u32_t out_size, c_func_t 
             if ((i = read_byte(&read_count, in_size, read, read_data)) == -1) break;
             if ((j = read_byte(&read_count, in_size, read, read_data)) == -1) break;
             i |= ((j & 0xf0) << 4);
+            i &= (N - 1); /* explicit bounds check on back-reference offset */
             j = (j & 0x0f) + THRESHOLD;
             for (k = 0; k <= j; k++) {
                 c = text_buf[(i + k) & (N - 1)];
                 write_byte(c, &write_count, out_size, write, write_data);
-                text_buf[r++] = c;
-                r &= (N - 1);
+                text_buf[r] = c;
+                r = (r + 1) & (N - 1); /* apply mask before next use */
             }
         }
     }
