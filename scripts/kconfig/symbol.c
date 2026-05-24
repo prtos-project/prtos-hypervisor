@@ -169,9 +169,9 @@ static void sym_validate_range(struct symbol *sym) {
         if (val <= val2) return;
     }
     if (sym->type == S_INT)
-        sprintf(str, "%d", val2);
+        snprintf(str, sizeof(str), "%d", val2);
     else
-        sprintf(str, "0x%x", val2);
+        snprintf(str, sizeof(str), "0x%x", val2);
     sym->curr.val = strdup(str);
 }
 
@@ -556,7 +556,7 @@ bool sym_set_string_value(struct symbol *sym, const char *newval) {
     else
         return true;
 
-    strcpy(val, newval);
+    memcpy(val, newval, strlen(newval) + 1);
     free((void *)oldval);
     sym_clear_all_valid();
 
