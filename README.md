@@ -259,7 +259,7 @@ See `user/bail/examples/virtio_linux_demo_2p_riscv64/README.md` for full documen
 sudo apt-get install -y gcc-loongarch64-linux-gnu qemu-system-loongarch64
 ```
 
-> **Note**: LoongArch64 uses trap-and-emulate para-virtualization. The guest Linux kernel runs at PLV3, with all privileged CSR/TLB/timer operations trapped and emulated by the PRTOS hypervisor.
+> **Note**: LoongArch64 uses LVZ (Loongson Virtualization) hardware-assisted virtualization. Guest partitions run in LVZ guest mode with VM exits for privileged operations. Para-virtualization is also supported for lightweight real-time partitions.
 
 ##### 4.1.6.2 Building Buildroot (rootfs)
 
@@ -337,7 +337,10 @@ The output is as follows:
 
 ```
 Welcome to Buildroot
-(none) login:
+buildroot login: root
+Password:
+# uname -a
+Linux buildroot 6.19.9 ... loongarch64 GNU/Linux
 ```
 
 ##### 4.1.6.6 Compiling and Running PRTOS `virtio_linux_demo_2p_loongarch64` (Dual SMP Linux + Virtio)

@@ -14,7 +14,7 @@ PRTOS follows the open-source spirit, drawing technical inspiration from [Xtratu
 
 ### 2.1 Platform Coverage
 
-In terms of platform adaptation, PRTOS deeply leverages hardware-assisted virtualization extensions on ARMv8 (AArch64), AMD64 (x86_64), and RISC-V (RV64). Additionally, PRTOS provides comprehensive Para-virtualization support for 32-bit x86, the LoongArch64 platform, and the three major 64-bit platforms above, covering the mainstream processor architectures in the embedded domain and offering exceptional deployment flexibility for diverse industrial scenarios.
+In terms of platform adaptation, PRTOS deeply leverages hardware-assisted virtualization extensions on ARMv8 (AArch64), AMD64 (x86_64), RISC-V (RV64), and LoongArch64 (LVZ). Additionally, PRTOS provides comprehensive Para-virtualization support for 32-bit x86 and all four 64-bit platforms above, covering the mainstream processor architectures in the embedded domain and offering exceptional deployment flexibility for diverse industrial scenarios.
 
 | Platform | Virtualization Mode | Hardware Extensions | Address Translation |
 |---|---|---|---|
@@ -22,7 +22,7 @@ In terms of platform adaptation, PRTOS deeply leverages hardware-assisted virtua
 | AArch64 (ARMv8) | HW-Virt + Para-Virt | EL2/vGIC/Stage-2 | Stage-2 (VTTBR_EL2) |
 | AMD64 (x86_64) | HW-Virt + Para-Virt | Intel VT-x/VMX/EPT | EPT |
 | RISC-V 64 (RV64) | HW-Virt + Para-Virt | H-extension/SBI HSM | G-stage (hgatp/Sv39x4) |
-| LoongArch64 | Para-virtualization (trap-and-emulate) | PLV0/PLV3, CSR/TLB trap | Guest-managed page tables |
+| LoongArch64 | HW-Virt + Para-Virt | LVZ (GCFG/GTLBC/GID) | GID-based TLB isolation |
 
 ### 2.2 Architecture Abstraction Layer Design
 
@@ -37,7 +37,7 @@ This organization ensures that cross-architecture feature evolution does not lea
 
 ## 3. Virtualization Technology Roadmap
 
-PRTOS provides three operating modes on ARMv8 / RISC-V / AMD64 / LoongArch64 platforms. LoongArch64 currently supports para-virtualization only (trap-and-emulate at PLV3), while the other three 64-bit platforms support hardware-assisted full virtualization, para-virtualization, and hybrid mode:
+PRTOS provides three operating modes on all four 64-bit platforms (ARMv8 / RISC-V / AMD64 / LoongArch64): hardware-assisted full virtualization, para-virtualization, and hybrid mode:
 
 ### 3.1 Hardware-Assisted Full Virtualization
 
@@ -58,7 +58,7 @@ Architecture-specific hardware virtualization implementations:
 - **AArch64**: Leverages EL2 privilege level, Stage-2 page tables, and vGICv3 virtual interrupt controller. `core/kernel/aarch64/mmu.c` implements Stage-2 address translation, `core/kernel/aarch64/vgic.c` provides complete vGIC emulation, and `core/kernel/aarch64/psci.c` handles CPU start/stop and multi-core control.
 - **AMD64**: Based on Intel VT-x (VMX) technology, using VMCS to control guest execution and EPT for second-level address translation. `core/kernel/amd64/vmx.c` contains the complete logic for VMX initialization, VMCS configuration, EPT management, VM-exit handling, and virtual device emulation.
 - **RISC-V 64**: Based on the H-extension virtualization extensions, using the `hgatp` register to configure G-stage (Sv39x4) address translation. `core/kernel/riscv64/prtos_sbi.c` implements SBI HSM, RFENCE, TIME, and other extension emulation.
-- **LoongArch64**: Uses trap-and-emulate para-virtualization. The guest Linux kernel runs at PLV3 (the lowest privilege level), and all privileged CSR/TLB/timer operations trap into the hypervisor for emulation. `core/kernel/loongarch64/entry.S` provides the unified trap entry, `core/kernel/loongarch64/traps.c` emulates virtualized CSRs (PWCL/PWCH/STLBPS/EUEN/etc.) and TLB-fill behavior, and `core/kernel/loongarch64/mmu.c` implements per-partition memory isolation. PRTOS does not depend on U-Boot on this platform; the resident-software (RSW) stub at `user/bootloaders/rsw/loongarch64/` boots the hypervisor directly under QEMU's `-kernel` option.
+- **LoongArch64**: Based on the LVZ (Loongson Virtualization) hardware extension, using GCFG to configure guest CSR/TLB/timer trapping and GID-based TLB isolation for stage-2 address translation. `core/kernel/loongarch64/entry.S` provides the unified trap entry, `core/kernel/loongarch64/traps.c` handles guest CSR emulation (GCFG/GTLBC/GSTAT/etc.) and VM-exit processing, and `core/kernel/loongarch64/mmu.c` implements per-partition memory isolation via GID-based TLB tagging. PRTOS also retains a para-virtualization path where the guest runs at PLV3 with trap-and-emulate semantics. PRTOS does not depend on U-Boot on this platform; the resident-software (RSW) stub at `user/bootloaders/rsw/loongarch64/` boots the hypervisor directly under QEMU's `-kernel` option.
 
 ### 3.2 Para-virtualization
 
@@ -120,7 +120,7 @@ For the design principles of static configuration and cyclic scheduling, refer t
 
 ### 4.2 Spatial and Temporal Isolation
 
-PRTOS leverages hardware-assisted second-level address translation (EPT/Stage-2/G-stage) for spatial isolation (LoongArch64 achieves equivalent isolation through PLV3 trap mechanism), combined with cyclic scheduling for temporal isolation. Each partition has an independent, non-crossable physical address space, and shared memory areas must be explicitly declared in the XML configuration.
+PRTOS leverages hardware-assisted second-level address translation (EPT/Stage-2/G-stage/GID-based TLB isolation) for spatial isolation on all four 64-bit platforms, combined with cyclic scheduling for temporal isolation. Each partition has an independent, non-crossable physical address space, and shared memory areas must be explicitly declared in the XML configuration.
 
 ### 4.3 SMP Multi-Core Support
 
@@ -332,4 +332,4 @@ For the technical architecture, deployment strategies, and engineering practices
 
 ## 10. Conclusion
 
-PRTOS Hypervisor has established a complete virtualization technology roadmap covering five major platforms: x86/AArch64/AMD64/RISC-V/LoongArch64, supporting hardware-assisted full virtualization, para-virtualization, and hybrid mode simultaneously on all four 64-bit platforms (LoongArch64 currently uses trap-and-emulate para-virtualization). Its static partition design based on separation kernel principles gives it significant advantages in real-time performance and determinism. Combined with multi-Guest OS verification on Linux 6.19 and FreeRTOS, Virtio device virtualization, and comprehensive health management and tracing capabilities, PRTOS is no longer a conceptual prototype but an embedded virtualization platform with real engineering deployment value.
+PRTOS Hypervisor has established a complete virtualization technology roadmap covering five major platforms: x86/AArch64/AMD64/RISC-V/LoongArch64, supporting hardware-assisted full virtualization, para-virtualization, and hybrid mode simultaneously on all four 64-bit platforms. Its static partition design based on separation kernel principles gives it significant advantages in real-time performance and determinism. Combined with multi-Guest OS verification on Linux 6.19 and FreeRTOS, Virtio device virtualization, and comprehensive health management and tracing capabilities, PRTOS is no longer a conceptual prototype but an embedded virtualization platform with real engineering deployment value.

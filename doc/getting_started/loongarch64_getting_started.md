@@ -21,14 +21,14 @@ sudo apt-get install -y gcc-loongarch64-linux-gnu qemu-system-loongarch64
 
 ## Virtualization Mode
 
-LoongArch64 currently uses **trap-and-emulate para-virtualization** only.
+LoongArch64 uses **LVZ (Loongson Virtualization) hardware-assisted virtualization**.
 
-- The guest Linux kernel runs at **PLV3** (the lowest privilege level on LoongArch).
-- All privileged operations — CSR access, TLB writes, timer programming, IPI/EOI on the LIO interrupt controller — trap into PRTOS for emulation.
-- PRTOS owns the exception entry (CSR `EENTRY`) and dispatches between host traps, guest traps from PLV3, and (when present) LVZ guest exits.
+- The guest OS runs in **Guest Mode** (PVM=1 in the GSTAT register), providing near-native execution speed.
+- Privileged CSR/TLB/timer operations cause **VM exits** (GSPR exceptions) that are handled by the hypervisor.
+- PRTOS owns the exception entry (CSR `EENTRY`) and dispatches between host traps and guest VM exits.
 - No U-Boot is used. PRTOS is loaded directly through QEMU's `-kernel resident_sw` option.
-
-The XML configuration does not need an `hw_virt` attribute on LoongArch64 — partitions are para-virtualized by default.
+- XML configuration uses `hw_virt="true"` for hardware-virtualized partitions.
+- Para-virtualization is also supported for lightweight partitions (e.g., FreeRTOS), where the guest runs at PLV0 with timer/interrupt trapping.
 
 ## Build and Run
 
@@ -72,7 +72,7 @@ cd prtos-hypervisor
 bash scripts/run_test.sh --arch loongarch64 check-all
 ```
 
-Expected: 16 Pass, 0 Fail (16 cases for other architectures are reported as SKIP).
+Expected: 16 Pass, 0 Fail, 16 Skip.
 
 ### Run FreeRTOS Para-Virtualization Demo
 
@@ -126,8 +126,8 @@ make run.loongarch64
 | `example.009` | Memory protection and shared memory access |
 | `freertos_para_virt_loongarch64` | FreeRTOS with para-virtualization |
 | `freertos_hw_virt_loongarch64` | FreeRTOS variant exercising the LVZ shim |
-| `linux_4vcpu_1partion_loongarch64` | Linux guest with 4 vCPUs (para-virtualization) |
-| `mix_os_demo_loongarch64` | Mixed-OS: Linux + FreeRTOS running simultaneously |
+| `linux_4vcpu_1partion_loongarch64` | Linux guest with 4 vCPUs (LVZ hardware-virtualization) |
+| `mix_os_demo_loongarch64` | Mixed-OS: Linux (hw-virt) + FreeRTOS (para-virt) running simultaneously |
 | `virtio_linux_demo_2p_loongarch64` | VirtIO networking between two Linux partitions |
 
 ## Building the Linux Guest
@@ -178,7 +178,9 @@ make run.loongarch64
 Expected:
 ```
 Welcome to Buildroot
-(none) login:
+buildroot login: root
+Password: 1234
+# uname -a
 ```
 
 ## Building U-Boot (Reference)
@@ -202,26 +204,30 @@ For QEMU-based PRTOS development, U-Boot is not needed — the RSW stub is loade
 
 ```bash
 qemu-system-loongarch64 \
+    -accel tcg,thread=single \
+    -nodefaults -nic none \
     -machine virt \
-    -cpu la464 \
+    -cpu max \
     -smp 4 \
-    -m 4G \
-    -accel tcg,thread=multi \
+    -m 2G \
     -nographic -no-reboot \
     -kernel resident_sw \
     -monitor none \
-    -serial stdio
+    -chardev stdio,id=s0,signal=off \
+    -serial chardev:s0
 ```
 
 | Option | Description |
 |---|---|
+| `-accel tcg,thread=single` | Single-threaded TCG acceleration |
+| `-nodefaults -nic none` | Disable default devices and networking |
 | `-machine virt` | LoongArch generic `virt` machine |
-| `-cpu la464` | Loongson 3A5000-class CPU model |
+| `-cpu max` | CPU model with all supported extensions (including LVZ) |
 | `-smp 4` | 4 logical CPUs |
-| `-m 4G` | 4 GB physical memory |
-| `-accel tcg,thread=multi` | Multi-threaded TCG acceleration |
+| `-m 2G` | 2 GB physical memory |
 | `-kernel resident_sw` | Load PRTOS RSW directly (no U-Boot) |
 | `-nographic` | Serial console multiplexed onto stdio |
+| `-chardev stdio,id=s0,signal=off` | Character device for serial (Ctrl-C passthrough) |
 
 ## Boot Process
 
@@ -231,7 +237,7 @@ qemu-system-loongarch64 \
    - all configured partition images (kernel, BAIL programs, etc.).
 3. RSW transfers control to the hypervisor entry, which sets up CSRs, TLB refill handler, and per-CPU state.
 4. PRTOS schedules partitions according to the cyclic plan in the XML configuration.
-5. Each partition starts running in PLV3; privileged operations trap into the hypervisor for emulation.
+5. Each hw-virt partition runs in LVZ guest mode; privileged operations cause VM exits to the hypervisor. Para-virt partitions run at PLV0 with timer/interrupt trapping.
 
 ## XML Configuration Example
 

@@ -256,7 +256,7 @@ make run.riscv64
 sudo apt-get install -y gcc-loongarch64-linux-gnu qemu-system-loongarch64
 ```
 
-> **说明**：LoongArch64 采用陷入模拟的半虚拟化方式。客户机 Linux 内核运行于 PLV3，所有特权 CSR / TLB / 定时器操作由 PRTOS Hypervisor 陷入并模拟。
+> **说明**：LoongArch64 采用 LVZ（龙芯硬件虚拟化扩展）硬件辅助虚拟化。客户机分区运行于 LVZ 客户模式，特权操作通过 VM Exit 处理。同时支持半虚拟化方式用于轻量级实时分区。
 
 #### 6.6.2 构建 Buildroot（rootfs）
 
@@ -328,7 +328,10 @@ make run.loongarch64
 
 ```
 Welcome to Buildroot
-(none) login:
+buildroot login: root
+Password:
+# uname -a
+Linux buildroot 6.19.9 ... loongarch64 GNU/Linux
 ```
 
 #### 6.6.6 PRTOS 编译和运行 `virtio_linux_demo_2p_loongarch64`（双 SMP Linux + Virtio 设备虚拟化）

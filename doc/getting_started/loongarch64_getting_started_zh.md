@@ -21,14 +21,14 @@ sudo apt-get install -y gcc-loongarch64-linux-gnu qemu-system-loongarch64
 
 ## 虚拟化模式
 
-LoongArch64 当前**仅采用陷入模拟（trap-and-emulate）的半虚拟化方案**。
+LoongArch64 采用 **LVZ（Loongson Virtualization）硬件辅助虚拟化**。
 
-- 客户机 Linux 内核运行在 **PLV3**（LoongArch 的最低特权级）。
-- 所有特权操作（CSR 访问、TLB 写入、定时器编程、LIO 中断控制器的 IPI/EOI 等）都会陷入 PRTOS 进行模拟。
-- PRTOS 持有异常入口（CSR `EENTRY`），并在主机陷阱、来自 PLV3 的 Guest 陷阱以及（启用时）LVZ Guest 退出之间进行分发。
+- 客户机操作系统运行在**客户模式**（GSTAT 寄存器中 PVM=1），提供接近原生的执行速度。
+- 特权 CSR/TLB/定时器操作会触发 **VM 退出**（GSPR 异常），由 Hypervisor 处理。
+- PRTOS 持有异常入口（CSR `EENTRY`），并在主机陷阱和客户机 VM 退出之间进行分发。
 - 不使用 U-Boot。PRTOS 通过 QEMU 的 `-kernel resident_sw` 选项直接加载。
-
-XML 配置无需在 LoongArch64 上设置 `hw_virt` 属性 —— 分区默认采用半虚拟化。
+- XML 配置中对硬件虚拟化分区使用 `hw_virt="true"` 属性。
+- 同时支持半虚拟化模式，用于轻量级分区（如 FreeRTOS），此时客户机运行在 PLV0 并由 Hypervisor 截获定时器/中断。
 
 ## 构建与运行
 
@@ -72,7 +72,7 @@ cd prtos-hypervisor
 bash scripts/run_test.sh --arch loongarch64 check-all
 ```
 
-预期：16 通过，0 失败（其他架构对应的 16 个用例标记为 SKIP）。
+预期：16 通过，0 失败，16 跳过。
 
 ### 运行 FreeRTOS 半虚拟化示例
 
@@ -126,8 +126,8 @@ make run.loongarch64
 | `example.009` | 内存保护和共享内存访问 |
 | `freertos_para_virt_loongarch64` | FreeRTOS 半虚拟化 |
 | `freertos_hw_virt_loongarch64` | 走 LVZ shim 路径的 FreeRTOS 变体 |
-| `linux_4vcpu_1partion_loongarch64` | 4 vCPU Linux 客户机（半虚拟化） |
-| `mix_os_demo_loongarch64` | 混合 OS：Linux + FreeRTOS 同时运行 |
+| `linux_4vcpu_1partion_loongarch64` | 4 vCPU Linux 客户机（LVZ 硬件虚拟化） |
+| `mix_os_demo_loongarch64` | 混合 OS：Linux（硬件虚拟化）+ FreeRTOS（半虚拟化）同时运行 |
 | `virtio_linux_demo_2p_loongarch64` | 两个 Linux 分区之间的 VirtIO 网络通信 |
 
 ## 构建 Linux 客户机
@@ -178,7 +178,9 @@ make run.loongarch64
 预期：
 ```
 Welcome to Buildroot
-(none) login:
+buildroot login: root
+Password: 1234
+# uname -a
 ```
 
 ## 构建 U-Boot（参考）
@@ -202,26 +204,30 @@ make CROSS_COMPILE=loongarch64-linux-gnu- -j$(nproc)
 
 ```bash
 qemu-system-loongarch64 \
+    -accel tcg,thread=single \
+    -nodefaults -nic none \
     -machine virt \
-    -cpu la464 \
+    -cpu max \
     -smp 4 \
-    -m 4G \
-    -accel tcg,thread=multi \
+    -m 2G \
     -nographic -no-reboot \
     -kernel resident_sw \
     -monitor none \
-    -serial stdio
+    -chardev stdio,id=s0,signal=off \
+    -serial chardev:s0
 ```
 
 | 选项 | 描述 |
 |---|---|
+| `-accel tcg,thread=single` | 单线程 TCG 加速 |
+| `-nodefaults -nic none` | 禁用默认设备和网络 |
 | `-machine virt` | LoongArch 通用 `virt` 机器型号 |
-| `-cpu la464` | Loongson 3A5000 等同的 CPU 模型 |
+| `-cpu max` | 启用所有支持扩展（含 LVZ）的 CPU 模型 |
 | `-smp 4` | 4 个逻辑 CPU |
-| `-m 4G` | 4 GB 物理内存 |
-| `-accel tcg,thread=multi` | 多线程 TCG 加速 |
+| `-m 2G` | 2 GB 物理内存 |
 | `-kernel resident_sw` | 直接加载 PRTOS RSW（无需 U-Boot） |
 | `-nographic` | 串口控制台复用到 stdio |
+| `-chardev stdio,id=s0,signal=off` | 串口字符设备（Ctrl-C 透传） |
 
 ## 启动流程
 
@@ -231,7 +237,7 @@ qemu-system-loongarch64 \
    - 所有配置的分区镜像（内核、BAIL 程序等）
 3. RSW 把控制权交给 Hypervisor 入口，由其建立 CSR、TLB refill 处理程序与 per-CPU 状态。
 4. PRTOS 按 XML 中的循环调度计划运行各分区。
-5. 各分区从 PLV3 开始执行；特权操作陷入 Hypervisor 进行模拟。
+5. 硬件虚拟化分区在 LVZ 客户模式下运行；特权操作触发 VM 退出由 Hypervisor 处理。半虚拟化分区运行在 PLV0，由 Hypervisor 截获定时器/中断。
 
 ## XML 配置示例
 

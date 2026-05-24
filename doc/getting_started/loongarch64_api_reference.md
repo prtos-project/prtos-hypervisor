@@ -95,16 +95,17 @@ All hypercalls are declared in `user/libprtos/include/prtoshypercalls.h` and acc
 
 ## LoongArch64-Specific Features
 
-### Privilege Model
+### Privilege and Virtualization Model
 
-LoongArch defines four privilege levels (PLV0..PLV3). PRTOS uses them as follows:
+LoongArch defines four privilege levels (PLV0..PLV3) and the LVZ hardware virtualization extension. PRTOS uses them as follows:
 
-| PLV | Role under PRTOS |
+| Mode | Role under PRTOS |
 |---|---|
-| PLV0 | PRTOS hypervisor (owns CSRs, TLB-refill handler, exception entry) |
-| PLV3 | Guest partitions (Linux, FreeRTOS, BAIL programs) |
+| Host PLV0 | PRTOS hypervisor (owns CSRs, TLB-refill handler, exception entry) |
+| LVZ Guest mode (`GSTAT.PVM=1`) | Hardware-virtualized partitions (Linux, FreeRTOS) — guest runs at Guest PLV0 with its own CSR/TLB namespace |
+| Host PLV0 (para-virt) | Lightweight para-virtualized partitions (BAIL programs) — run at PLV0 under cooperative hypercall interface |
 
-PLV1 and PLV2 are unused. There is no separate "VM" mode — virtualization is implemented purely via trap-and-emulate of PLV3 → PLV0 transitions, optionally augmented by the LVZ extensions when the underlying hardware exposes them.
+PLV1, PLV2, and PLV3 are unused. The primary virtualization mode is **LVZ hardware-assisted virtualization**: the guest executes in Guest mode with `GSTAT.PVM=1`, and privileged operations that require hypervisor intervention trigger a GSPR (Guest Sensitive Privileged Resource) exception back to host PLV0. Para-virtualization remains supported for lightweight partitions that do not require a full guest CSR/TLB namespace.
 
 ### Hypervisor-Owned CSRs
 
@@ -117,14 +118,14 @@ PRTOS reserves the following Loongson `SAVE` CSRs for its own use; partitions mu
 | `CSR.SAVE2` | `0x32` | `t0` scratch register |
 | `CSR.SAVE5` | `0x35` | LVZ availability / mode flag |
 
-Other architectural CSRs (`EENTRY`, `TLBRENTRY`, `STLBPS`, `PWCL`, `PWCH`, `ASID`, `PGDL`, `PGDH`, `EUEN`, `CRMD`, …) are virtualized — guest reads return the per-vCPU shadow value, and writes are emulated by the trap handler in `core/kernel/loongarch64/traps.c`.
+Other architectural CSRs (`EENTRY`, `TLBRENTRY`, `STLBPS`, `PWCL`, `PWCH`, `ASID`, `PGDL`, `PGDH`, `EUEN`, `CRMD`, ...) are virtualized. In LVZ mode, the guest accesses its own Guest CSR namespace directly (hardware-provided GCSR registers); sensitive CSR accesses configured in `GCSRFLAG` trigger a GSPR exception to the hypervisor. In para-virtualized mode, guest reads return the per-vCPU shadow value and writes are emulated by the trap handler in `core/kernel/loongarch64/traps.c`.
 
 ### Trap Entry Dispatch
 
 The unified trap entry in `core/kernel/loongarch64/entry.S` discriminates between three sources before saving registers:
 
-1. **LVZ Guest exit** (when `GSTAT.PVM == 1`): routed to `_trap_from_lvz_guest`.
-2. **PLV3 Guest trap** (`PRMD.PPLV != 0`): routed to `_trap_from_guest`.
+1. **LVZ Guest exit** (when `GSTAT.PVM == 1`): routed to `_trap_from_lvz_guest`. This is the primary path for hardware-virtualized partitions; the exit reason (GSPR, guest TLB refill, guest HW interrupt, etc.) is decoded from `ESTAT`.
+2. **Para-virt Guest trap** (`PRMD.PPLV != 0`): routed to `_trap_from_guest`. Used by lightweight para-virtualized partitions.
 3. **Host trap** (`PRMD.PPLV == 0`): routed to `_trap_save_regs`.
 
 ### Hypercall Invocation
@@ -196,7 +197,7 @@ void partition_main(void) {
 | `fp` | Floating-point enabled (LoongArch FPU / LSX context preserved across context switch) |
 | `none` | Standard partition (default) |
 
-> **Note**: On LoongArch64 the `hw_virt` partition attribute is currently ignored — every partition runs under para-virtualization at PLV3.
+> **Note**: On LoongArch64, setting `hw_virt="true"` enables LVZ hardware-assisted virtualization for a partition. The guest runs in LVZ Guest mode (`GSTAT.PVM=1`) with its own Guest CSR/TLB namespace, timer injection via `GCFG.TIT`, and GSPR-based trap handling. Partitions with `hw_virt="false"` (or omitted) run in para-virtualized mode at PLV0 using cooperative hypercalls.
 
 ### Health Monitoring Events
 
@@ -220,4 +221,4 @@ void partition_main(void) {
 
 ## Further Reading
 
-- [*Embedded Hypervisor: Architecture, Principles, and Implementation*](http://www.prtos.org/embedded_hypervisor_book/) — for the theoretical foundations of trap-and-emulate virtualization on LoongArch
+- [*Embedded Hypervisor: Architecture, Principles, and Implementation*](http://www.prtos.org/embedded_hypervisor_book/) — for the theoretical foundations of virtualization on LoongArch (covers both LVZ hardware-assisted and para-virtualization approaches)
