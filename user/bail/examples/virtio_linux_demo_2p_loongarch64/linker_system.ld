@@ -27,12 +27,6 @@ SECTIONS {
         *(.linux_image_sys)
     }
 
-    /* Place initrd at 64MB offset from partition base (0x8C000000) */
-    . = 0x8C000000;
-    .initrd_sys : {
-        *(.initrd_sys)
-    }
-
     . = ALIGN(0x1000);
     _end = .;
 

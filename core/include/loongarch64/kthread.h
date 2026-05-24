@@ -107,9 +107,11 @@ struct kthread_arch {
     prtos_u64_t guest_timer_active;
     prtos_u64_t guest_tcfg_deadline; /* Stable counter value when timer expires */
     prtos_u32_t guest_in_tlb_refill; /* Guest is handling a TLB refill exception */
+    prtos_u64_t last_tlb_refill_badv; /* BADV of last TLB refill delivered to guest */
 
     /* IPI emulation */
     prtos_u64_t ipi_pending;
+    prtos_u64_t guest_ipi_status;
 
     /* HWI interrupt injection tracking (bits 7:0 = HWI7..HWI0 injected via GINTC) */
     prtos_u64_t hwi_injected;
@@ -117,6 +119,9 @@ struct kthread_arch {
     /* Secondary vCPU boot (hw-virt multi-vCPU partitions) */
     prtos_u64_t hsm_entry;      /* Entry point for secondary vCPU */
     prtos_u64_t hsm_opaque;     /* Opaque value passed to secondary vCPU */
+
+    /* Per-vCPU IOCSR mailbox (MBUF0) for SMP boot */
+    prtos_u64_t mbuf0;
 };
 
 #endif
