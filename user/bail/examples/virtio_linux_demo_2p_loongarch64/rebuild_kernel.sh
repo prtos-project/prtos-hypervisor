@@ -22,7 +22,7 @@ set -e
 ROLE="$1"
 LINUX_SRC="$2"
 ROOTFS_SOURCE="${ROOTFS_SOURCE:-/tmp/rootfs_repack}"
-BASE_INITRAMFS="${BASE_INITRAMFS:-/home/chenweis/hdd/Repo/loongarch64_linux_workspace/buildroot/output/images/rootfs.cpio}"
+BASE_INITRAMFS="${BASE_INITRAMFS:-/home/chenweis/loongarch64_workspace/buildroot/output/images/rootfs.cpio}"
 DEMO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [[ "$ROLE" != "system" && "$ROLE" != "guest" ]]; then
@@ -126,7 +126,7 @@ echo "[rebuild_kernel.sh] Wrote vmlinux_$ROLE.unstripped and vmlinux_$ROLE.bin (
 #    tests regress.
 cd "$LINUX_SRC"
 ./scripts/config --set-str BUILTIN_DTB_NAME "prtos-virt"
-./scripts/config --set-str INITRAMFS_SOURCE "/home/chenweis/hdd/Repo/loongarch64_linux_workspace/buildroot/output/images/rootfs.cpio"
+./scripts/config --set-str INITRAMFS_SOURCE "/home/chenweis/loongarch64_workspace/buildroot/output/images/rootfs.cpio"
 ./scripts/config --set-str CMDLINE "earlycon=uart8250,mmio,0x1fe001e0 keep_bootcon mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp nokaslr nohz=off highres=off acpi=off pci=off rcupdate.rcu_cpu_stall_suppress=1 rcupdate.rcu_exp_cpu_stall_timeout=0 nmi_watchdog=0 initcall_blacklist=loongarch_sysrq_init initcall_blacklist=pm_sysrq_init initcall_blacklist=oom_init initcall_blacklist=register_cpu_capacity_sysctl initcall_blacklist=kswapd_init initcall_blacklist=crypto_kdf108_init initcall_blacklist=percpu_counter_startup initcall_blacklist=cacheinfo_sysfs_init initcall_blacklist=memory_tier_late_init initcall_blacklist=crypto_algapi_init initcall_blacklist=deferred_probe_initcall"
 for f in "${MANAGED_FILES[@]}"; do rm -f "$f"; done
 rm -f usr/initramfs_data.cpio* usr/initramfs_data.o usr/initramfs_inc_data .builtin-dtbs.o .tmp_vmlinux* vmlinux

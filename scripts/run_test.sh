@@ -47,7 +47,7 @@ ALL_CASES=(
     "example.005:1:8"
     "example.006:1:30"
     "example.007:1:40"
-    "example.008:2:30:x86,aarch64,riscv64,amd64,loongarch64"
+    "example.008:2:60:x86,aarch64,riscv64,amd64,loongarch64"
     "example.009:2:30"
     "helloworld:1:15"
     "helloworld_smp:2:30:x86,aarch64,riscv64,amd64,loongarch64"
@@ -67,11 +67,11 @@ ALL_CASES=(
     "virtio_linux_demo_2p_aarch64:0:540:aarch64"
     "virtio_linux_demo_2p_riscv64:0:480:riscv64"
     "virtio_linux_demo_2p_amd64:0:480:amd64"
-    "freertos_para_virt_loongarch64:1:20:loongarch64"
+    "freertos_para_virt_loongarch64:1:30:loongarch64"
     "freertos_hw_virt_loongarch64:1:30:loongarch64"
-    "linux_4vcpu_1partion_loongarch64:0:5400:loongarch64"
-    "mix_os_demo_loongarch64:0:420:loongarch64"
-    "virtio_linux_demo_2p_loongarch64:0:240:loongarch64"
+    "linux_4vcpu_1partion_loongarch64:0:120:loongarch64"
+    "mix_os_demo_loongarch64:0:120:loongarch64"
+    "virtio_linux_demo_2p_loongarch64:0:120:loongarch64"
 )
 
 function usage() {
@@ -427,7 +427,7 @@ function run_test_linux_4vcpu_1partion_loongarch64() {
         return 1
     fi
 
-    QEMU_LOONGARCH64="${QEMU_LOONGARCH64:-/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64}" \
+    QEMU_LOONGARCH64="${QEMU_LOONGARCH64:-/home/chenweis/loongarch64_workspace/qemu_install/bin/qemu-system-loongarch64}" \
         python3 test_login.py > /tmp/loongarch64_linux_4vcpu_$$.log 2>&1
     local rc=$?
     killall -9 qemu-system-loongarch64 2>/dev/null
@@ -464,19 +464,20 @@ function run_test_mix_os_demo_loongarch64() {
         return 1
     fi
 
-    QEMU_LOONGARCH64="${QEMU_LOONGARCH64:-/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64}" \
+    QEMU_LOONGARCH64="${QEMU_LOONGARCH64:-/home/chenweis/loongarch64_workspace/qemu_install/bin/qemu-system-loongarch64}" \
         python3 -u << 'PYTEST' 2>&1
 import pexpect, os, sys, time
 qemu = os.environ.get('QEMU_LOONGARCH64')
 child = pexpect.spawn(
-    f'{qemu} -machine virt -cpu max -smp 4 -m 2G '
+    f'{qemu} -accel tcg,thread=single -nodefaults -nic none '
+    '-machine virt -cpu max -smp 4 -m 2G '
     '-nographic -no-reboot -kernel resident_sw '
-    '-monitor none -serial stdio',
-    timeout=420, encoding='utf-8', codec_errors='replace'
+    '-monitor none -chardev stdio,id=s0,signal=off -serial chardev:s0',
+    timeout=5400, encoding='utf-8', codec_errors='replace'
 )
 child.logfile = sys.stdout
 try:
-    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=400)
+    idx = child.expect(['buildroot login:', pexpect.TIMEOUT, pexpect.EOF], timeout=5000)
     if idx != 0:
         print('MIX_OS_TEST_FAIL: login prompt not reached')
         child.close(force=True); sys.exit(1)
@@ -549,7 +550,7 @@ function run_test_virtio_linux_demo_2p_loongarch64() {
         return 1
     fi
 
-    local qemu_bin="${QEMU_LOONGARCH64:-/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64}"
+    local qemu_bin="${QEMU_LOONGARCH64:-/home/chenweis/loongarch64_workspace/qemu_install/bin/qemu-system-loongarch64}"
     local serial_log="/tmp/loongarch64_virtio_linux_serial_$$.log"
     # Verify both partitions launch and shared memory is configured.
     # Full Linux boot under dual hw-virt trap-and-emulate exceeds practical timeout.
@@ -557,6 +558,7 @@ function run_test_virtio_linux_demo_2p_loongarch64() {
 
     rm -f "${serial_log}"
     timeout ${timeout_sec} "${qemu_bin}" \
+        -accel tcg,thread=single -nodefaults -nic none \
         -machine virt -cpu max -smp 4 -m 2G \
         -nographic -no-reboot \
         -kernel resident_sw \

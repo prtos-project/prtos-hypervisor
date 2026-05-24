@@ -20,7 +20,7 @@
 #
 # This partition embeds a prebuilt Linux 6.19.9 vmlinux that is itself
 # produced from sources outside this repo, under:
-#   $(LINUX_WORKSPACE) = //home/chenweis/hdd/Repo/loongarch64_linux_workspace
+#   $(LINUX_WORKSPACE) = //home/chenweis/loongarch64_workspace
 #
 # The guest is built in two stages: (A) a Buildroot rootfs_uncompressed.cpio, then
 # (B) a Linux kernel that embeds that cpio as its initramfs.
@@ -74,7 +74,7 @@ PARTITIONS=partition.pef
 # ============================================================================
 # Linux Workspace Paths
 # ============================================================================
-LINUX_WORKSPACE=//home/chenweis/hdd/Repo/loongarch64_linux_workspace
+LINUX_WORKSPACE=//home/chenweis/loongarch64_workspace
 LINUX_VMLINUX=$(LINUX_WORKSPACE)/linux-6.19.9/vmlinux
 
 # Prevent Make implicit rule from rebuilding external vmlinux via host cc

@@ -343,7 +343,11 @@ static int handle_iocsr_passthrough(struct cpu_user_regs *regs, prtos_u32_t insn
     return 1;
 }
 
-/* Manage HWI state: re-enable HWI bits in host ECFG after guest processes them */
+/* Manage HWI state: re-enable HWI bits in host ECFG after guest processes them.
+ * For level-triggered interrupts (like UART), the pin may stay asserted or
+ * re-assert between traps. Always re-enable masked HWI bits so new interrupts
+ * can be detected. If the pin is still active, the hardware will immediately
+ * re-trigger and we'll inject again on the next trap entry. */
 static void manage_hwi_state(void) {
     local_processor_t *info = GET_LOCAL_PROCESSOR();
     kthread_t *k = info->sched.current_kthread;
@@ -351,32 +355,25 @@ static void manage_hwi_state(void) {
 
     struct kthread_arch *ka = &k->ctrl.g->karch;
     if (ka->hwi_injected) {
-        /* Check if the HWI pins are still asserted in hardware ESTAT.
-         * Read ESTAT directly (not the saved frame value). */
         prtos_u64_t cur_estat;
         __asm__ __volatile__("csrrd %0, 0x5" : "=r"(cur_estat));
-        prtos_u64_t still_active = cur_estat & ka->hwi_injected & (0xFFULL << 2);
-        prtos_u64_t cleared = ka->hwi_injected & ~still_active & (0xFFULL << 2);
-        if (cleared) {
-            /* These HWI pins are no longer asserted: re-enable in ECFG */
+
+        /* Unconditionally re-enable all previously masked HWI bits.
+         * If the pin is still asserted, we'll get an immediate re-trap
+         * and re-inject to the guest. This prevents deadlock on
+         * level-triggered interrupts (e.g., UART RX). */
+        prtos_u64_t to_reenable = ka->hwi_injected & (0xFFULL << 2);
+        if (to_reenable) {
             prtos_u64_t ecfg;
             __asm__ __volatile__("csrrd %0, 0x4" : "=r"(ecfg));
-            ecfg |= cleared;
+            ecfg |= to_reenable;
             __asm__ __volatile__("csrwr %0, 0x4" : "+r"(ecfg));
-            ka->hwi_injected &= ~cleared;
-            /* Also clear from guest_estat so guest sees pin de-asserted */
-            ka->guest_estat &= ~cleared;
         }
-        /* Always sync: if HW pin is de-asserted, clear from guest_estat
-         * even if hwi_injected was already cleared */
-        {
-            prtos_u64_t hw_hwi = cur_estat & (0xFFULL << 2);
-            prtos_u64_t guest_hwi = ka->guest_estat & (0xFFULL << 2);
-            prtos_u64_t stale = guest_hwi & ~hw_hwi;
-            if (stale) {
-                ka->guest_estat &= ~stale;
-            }
-        }
+        ka->hwi_injected = 0;
+
+        /* Sync guest_estat HWI bits with actual hardware state */
+        prtos_u64_t hw_hwi = cur_estat & (0xFFULL << 2);
+        ka->guest_estat = (ka->guest_estat & ~(0xFFULL << 2)) | hw_hwi;
     }
 }
 
@@ -601,6 +598,11 @@ static int guest_csr_write(struct kthread_arch *ka, prtos_u32_t csr_num,
             ka->guest_estat &= ~(1UL << 11); /* Clear TI bit */
             clear_guest_vip_bit(1);
             GCSRWR(0x44, val);
+            /* Also clear host ESTAT.TI to prevent exec_interrupt re-fire */
+            {
+                prtos_u64_t ticlr = 1;
+                __asm__ __volatile__("csrwr %0, 0x44" : "+r"(ticlr));
+            }
         }
         break;
     case VCSR_LLBCTL:   ka->guest_llbctl = val; break;

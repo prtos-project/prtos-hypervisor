@@ -209,10 +209,11 @@ void start_up_guest(prtos_address_t entry) {
             /* EN=1, PERIODIC=1, interval=250000 InitVal = 10ms (250000*40ns) */
             prtos_u64_t htcfg = 3UL | (250000UL << 2);
             __asm__ __volatile__("csrwr %0, 0x41" : "+r"(htcfg));
-            /* Enable TI in ECFG */
+            /* Enable TI + IPI in ECFG for guest scheduling and IPI delivery.
+             * HWI bits are enabled on-demand when guest configures eiointc. */
             prtos_u64_t ecfg;
             __asm__ __volatile__("csrrd %0, 0x4" : "=r"(ecfg));
-            ecfg |= (1UL << 11); /* TI enable */
+            ecfg |= (1UL << 11) | (1UL << 12);
             __asm__ __volatile__("csrwr %0, 0x4" : "+r"(ecfg));
         }
         JMP_PARTITION_HSM(k);

@@ -38,7 +38,7 @@ PARTITIONS=partition_system.pef partition_guest.pef
 # ============================================================================
 # Linux Workspace Paths
 # ============================================================================
-LINUX_WORKSPACE=/home/chenweis/hdd/Repo/loongarch64_linux_workspace
+LINUX_WORKSPACE=/home/chenweis/loongarch64_workspace
 LINUX_SRC=$(LINUX_WORKSPACE)/linux-6.19.9
 LINUX_VMLINUX=$(LINUX_SRC)/vmlinux
 
