@@ -27,12 +27,6 @@ SECTIONS {
         *(.linux_image_guest)
     }
 
-    /* Place guest initrd at 128MB offset from partition base (0xA8000000) */
-    . = 0xA8000000;
-    .initrd_guest : {
-        *(.initrd_guest)
-    }
-
     . = ALIGN(0x1000);
     _end = .;
 

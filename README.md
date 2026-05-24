@@ -259,7 +259,7 @@ See `user/bail/examples/virtio_linux_demo_2p_riscv64/README.md` for full documen
 sudo apt-get install -y gcc-loongarch64-linux-gnu qemu-system-loongarch64
 ```
 
-> **Note**: LoongArch64 uses trap-and-emulate para-virtualization. The guest Linux kernel runs at PLV3, with all privileged CSR/TLB/timer operations trapped and emulated by the PRTOS hypervisor.
+> **Note**: LoongArch64 uses LVZ (Loongson Virtualization) hardware-assisted virtualization. Guest partitions run in LVZ guest mode with VM exits for privileged operations. Para-virtualization is also supported for lightweight real-time partitions.
 
 ##### 4.1.6.2 Building Buildroot (rootfs)
 
@@ -337,7 +337,10 @@ The output is as follows:
 
 ```
 Welcome to Buildroot
-(none) login:
+buildroot login: root
+Password:
+# uname -a
+Linux buildroot 6.19.9 ... loongarch64 GNU/Linux
 ```
 
 ##### 4.1.6.6 Compiling and Running PRTOS `virtio_linux_demo_2p_loongarch64` (Dual SMP Linux + Virtio)
@@ -349,6 +352,7 @@ make
 cd user/bail/examples/virtio_linux_demo_2p_loongarch64
 make run.loongarch64
 ```
+System Partition UART console on stdio. Login `root`/`1234`.
 
 See `user/bail/examples/virtio_linux_demo_2p_loongarch64/README.md` for full documentation.
 
@@ -374,7 +378,12 @@ Commands:
                          linux_4vcpu_1partion_amd64 (amd64 only),
                          mix_os_demo_aarch64 (aarch64 only),
                          mix_os_demo_riscv64 (riscv64 only),
-                         mix_os_demo_amd64 (amd64 only)
+                         mix_os_demo_amd64 (amd64 only),
+                         freertos_para_virt_loongarch64 (loongarch64 only),
+                         freertos_hw_virt_loongarch64 (loongarch64 only),
+                         linux_4vcpu_1partion_loongarch64 (loongarch64 only),
+                         mix_os_demo_loongarch64 (loongarch64 only),
+                         virtio_linux_demo_2p_loongarch64 (loongarch64 only)
   check-all              Check all test cases.
 
 Examples:
@@ -382,6 +391,7 @@ Examples:
   run_test.sh --arch aarch64 check-all      # Run all AArch64 tests
   run_test.sh --arch aarch64 check-001      # Run single AArch64 test
   run_test.sh check-helloworld              # Run x86 helloworld test
+  run_test.sh --arch loongarch64 check-all  # Run all LoongArch64 tests
 
 ```
 ### 4.3 Expected Test Reports

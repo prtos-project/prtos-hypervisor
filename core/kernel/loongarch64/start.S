@@ -172,6 +172,9 @@ _virtual_start:
     la.abs  $t0, _trap_entry
     csrwr   $t0, CSR_EENTRY
 
+    /* Clear SAVE5 (LVZ guest flag) to avoid false guest detection on boot */
+    csrwr   $zero, 0x35
+
     /* Set up TLB refill entry (must be physical address — DA mode during refill) */
     la.abs  $t0, _tlb_refill_entry
     li.d    $t1, CONFIG_PRTOS_OFFSET
@@ -260,6 +263,9 @@ _secondary_virtual:
     /* Set up exception entry (virtual) */
     la.abs  $t0, _trap_entry
     csrwr   $t0, CSR_EENTRY
+
+    /* Clear SAVE5 (LVZ guest flag) */
+    csrwr   $zero, 0x35
 
     /* Set up TLB refill entry (must be physical address — DA mode during refill) */
     la.abs  $t0, _tlb_refill_entry

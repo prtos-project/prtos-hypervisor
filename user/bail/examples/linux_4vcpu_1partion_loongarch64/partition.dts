@@ -16,11 +16,32 @@
 			reg = <0x00>;
 			phandle = <0x01>;
 		};
+
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "loongarch,loongson-64bit";
+			reg = <0x01>;
+			phandle = <0x02>;
+		};
+
+		cpu@2 {
+			device_type = "cpu";
+			compatible = "loongarch,loongson-64bit";
+			reg = <0x02>;
+			phandle = <0x03>;
+		};
+
+		cpu@3 {
+			device_type = "cpu";
+			compatible = "loongarch,loongson-64bit";
+			reg = <0x03>;
+			phandle = <0x04>;
+		};
 	};
 
 	memory@80000000 {
 		device_type = "memory";
-                reg = <0x00 0x80000000 0x00 0x20000000>;
+		reg = <0x00 0x80000000 0x00 0x20000000>;
 	};
 
 	cpuic: interrupt-controller {
@@ -50,15 +71,16 @@
 	};
 
 	chosen {
-		bootargs = "console=ttyS0,115200 earlycon mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp";
-		stdout-path = "/serial@1fe001e0";
+		bootargs = "console=ttyS0,115200 earlycon=uart8250,mmio32,0x1fe001e0 mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp nokaslr nohz=off highres=off";
+		rng-seed = [de ad be ef ca fe ba be 01 23 45 67 89 ab cd ef
+		            fe dc ba 98 76 54 32 10 a0 b1 c2 d3 e4 f5 06 17
+		            28 39 4a 5b 6c 7d 8e 9f 10 21 32 43 54 65 76 87
+		            98 a9 ba cb dc ed fe 0f 11 22 33 44 55 66 77 88];
 	};
 
 	serial@1fe001e0 {
 		compatible = "ns16550a";
 		reg = <0x00 0x1fe001e0 0x00 0x100>;
 		clock-frequency = <100000000>;
-		interrupt-parent = <&pch_pic>;
-		interrupts = <0x02 0x04>;
 	};
 };

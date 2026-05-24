@@ -7,7 +7,7 @@
 ENTRY(_boot)
 
 SECTIONS {
-    . = 0x80000000;
+. = 0x80000000;
 
     /* PRTOS image header (must be first for prtoseformat) */
     .prtos_image_hdr : {
@@ -18,6 +18,12 @@ SECTIONS {
     . = ALIGN(0x1000);
     .text : {
         *(.text)
+    }
+
+    /* Device tree blob (4KB aligned) */
+    . = ALIGN(0x1000);
+    .dtb : {
+        *(.dtb)
     }
 
     /* Linux kernel binary (2MB aligned, at PA 0x200000) */

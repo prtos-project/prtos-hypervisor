@@ -257,6 +257,16 @@ void schedule(void) {
         }
 
         switch_kthread_arch_post(info->sched.current_kthread);
+    } else {
+        /* No context switch, but still reprogram the timer for the next
+         * scheduler deadline so the scheduler fires again. */
+        if (new_kthread->ctrl.g) {
+            prtos_time_t _now = get_sys_clock_usec();
+            prtos_time_t _next = traverse_ktimer_queue(&info->time.global_active_ktimers, _now);
+            prtos_time_t _nl = traverse_ktimer_queue(&new_kthread->ctrl.local_active_ktimers, _now);
+            if (_nl && _nl < _next) _next = _nl;
+            set_hw_timer(_next);
+        }
     }
 #ifdef CONFIG_loongarch64
     /* LoongArch: clear IE before restoring flags to prevent reentrant

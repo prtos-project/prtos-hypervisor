@@ -1,57 +1,44 @@
-/*
- * Device tree for Guest Partition Linux (RISC-V 64 hw-virt).
- * 128MB RAM at IPA 0x90000000, 2 vCPUs with SBI HSM SMP boot.
- * No UART - uses virtio-console via shared memory.
- */
-
 /dts-v1/;
 
 / {
-	compatible = "riscv-virtio";
-	model = "riscv-virtio,qemu";
-	#address-cells = <2>;
-	#size-cells = <2>;
-
-	chosen {
-		bootargs = "nokaslr";
-	};
-
-	memory@90000000 {
-		device_type = "memory";
-		reg = <0x0 0x90000000 0x0 0x08000000>;  /* 128MB */
-	};
+	#address-cells = <0x02>;
+	#size-cells = <0x02>;
+	compatible = "linux,dummy-loongson3";
+	model = "prtos-loongarch64-virtio-guest";
 
 	cpus {
-		#address-cells = <1>;
-		#size-cells = <0>;
-		timebase-frequency = <10000000>;
+		#address-cells = <0x01>;
+		#size-cells = <0x00>;
 
 		cpu@0 {
 			device_type = "cpu";
-			compatible = "riscv";
-			reg = <0>;
-			riscv,isa = "rv64imafdc";
-			mmu-type = "riscv,sv39";
-			status = "okay";
-			cpu0_intc: interrupt-controller {
-				#interrupt-cells = <1>;
-				compatible = "riscv,cpu-intc";
-				interrupt-controller;
-			};
+			compatible = "loongarch,loongson-64bit";
+			reg = <0x00>;
 		};
 
 		cpu@1 {
 			device_type = "cpu";
-			compatible = "riscv";
-			reg = <1>;
-			riscv,isa = "rv64imafdc";
-			mmu-type = "riscv,sv39";
-			status = "okay";
-			cpu1_intc: interrupt-controller {
-				#interrupt-cells = <1>;
-				compatible = "riscv,cpu-intc";
-				interrupt-controller;
-			};
+			compatible = "loongarch,loongson-64bit";
+			reg = <0x01>;
 		};
+	};
+
+	memory@90000000 {
+		device_type = "memory";
+		reg = <0x00 0x90000000 0x00 0x08000000>;
+	};
+
+	cpuic: interrupt-controller {
+		compatible = "loongson,cpu-interrupt-controller";
+		#interrupt-cells = <0x01>;
+		interrupt-controller;
+	};
+
+	chosen {
+		bootargs = "nokaslr nohz=off highres=off";
+		rng-seed = [de ad be ef ca fe ba be 01 23 45 67 89 ab cd ef
+		            fe dc ba 98 76 54 32 10 a0 b1 c2 d3 e4 f5 06 17
+		            28 39 4a 5b 6c 7d 8e 9f 10 21 32 43 54 65 76 87
+		            98 a9 ba cb dc ed fe 0f 11 22 33 44 55 66 77 88];
 	};
 };

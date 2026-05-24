@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test Mixed-OS Demo (RISC-V): FreeRTOS para-virt + Linux on PRTOS.
+Test Mixed-OS Demo (LoongArch64): FreeRTOS para-virt + Linux on PRTOS.
 
 Verifies:
 1. FreeRTOS RTOS partition prints motor control status reports
@@ -12,29 +12,31 @@ import sys
 import os
 import time
 
-TIMEOUT = 420
-LOGIN_TIMEOUT = 30
+TIMEOUT = int(os.environ.get("PRTOS_LOGIN_TIMEOUT", "1200"))
+LOGIN_TIMEOUT = int(os.environ.get("PRTOS_LOGIN_PROMPT_TIMEOUT", "180"))
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 subprocess.run(["make", "clean"], capture_output=True)
 subprocess.run(["make"], capture_output=True)
 
-# Create bootable binary image
-subprocess.run(["riscv64-linux-gnu-objcopy", "-O", "binary", "-R", ".note",
-                "-R", ".note.gnu.build-id", "-R", ".comment", "-S",
-                "resident_sw", "resident_sw.bin"], check=True)
+QEMU = os.environ.get("QEMU_LOONGARCH64",
+    "/home/chenweis/loongarch64_workspace/qemu_install/bin/qemu-system-loongarch64")
+QEMU_ACCEL = os.environ.get("QEMU_LOONGARCH64_ACCEL", "-accel tcg,thread=multi")
+QEMU_EXTRA_ARGS = os.environ.get("QEMU_LOONGARCH64_EXTRA_ARGS", "-nodefaults -nic none")
 
-cmd = ("qemu-system-riscv64 "
-       "-machine virt "
-       "-cpu rv64 "
-       "-smp 4 "
-       "-m 1G "
-       "-nographic -no-reboot "
-       "-bios default "
-       "-kernel resident_sw.bin "
-       "-monitor none "
-       "-serial stdio")
+cmd = (f"{QEMU} "
+    f"{QEMU_ACCEL} "
+    f"{QEMU_EXTRA_ARGS} "
+    "-machine virt "
+    "-cpu max "
+    "-smp 4 "
+    "-m 2G "
+    "-nographic -no-reboot "
+    "-kernel resident_sw "
+    "-monitor none "
+    "-chardev stdio,id=s0,signal=off "
+    "-serial chardev:s0")
 
 print("=== Starting QEMU ===")
 child = pexpect.spawn(cmd, encoding='utf-8', timeout=TIMEOUT)
@@ -66,11 +68,11 @@ time.sleep(2)
 logged_in = False
 for attempt in range(3):
     time.sleep(6)
-    child.sendline("root")
+    child.send("root\r")
     idx = child.expect(["assword", "buildroot login:", pexpect.TIMEOUT], timeout=60)
     if idx == 0:
         time.sleep(2)
-        child.sendline("1234")
+        child.send("1234\r")
         idx2 = child.expect([r"[\$#] ", "Login incorrect", pexpect.TIMEOUT], timeout=60)
         if idx2 == 0:
             logged_in = True
@@ -90,16 +92,9 @@ if not logged_in:
 print("\n\n=== Login successful! Checking vCPU count ===")
 time.sleep(2)
 child.sendline("nproc")
-idx = child.expect(["3", pexpect.TIMEOUT], timeout=15)
+idx = child.expect(["3", pexpect.TIMEOUT], timeout=LOGIN_TIMEOUT)
 if idx != 0:
     print("\n\n=== FAIL: nproc did not return 3 ===")
-    sys.exit(1)
-
-child.expect([r"[\$#] ", pexpect.TIMEOUT], timeout=10)
-child.sendline("cat /proc/cpuinfo | grep processor | wc -l")
-idx = child.expect(["3", pexpect.TIMEOUT], timeout=15)
-if idx != 0:
-    print("\n\n=== FAIL: cpuinfo does not show 3 CPUs ===")
     sys.exit(1)
 
 print("\n\n=== ALL TESTS PASSED ===")

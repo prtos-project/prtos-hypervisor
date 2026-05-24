@@ -126,6 +126,99 @@ void start_up_guest(prtos_address_t entry) {
         JMP_PARTITION_HSM(k);
         /* unreachable */
     }
+    /* LoongArch SMP (LVZ partitions only): secondary vCPUs poll IOCSR
+     * MBUF0 (CORE_BUF_20) from the host side until Linux's
+     * csr_mail_send() (issued from the primary vCPU) writes the
+     * smpboot_entry physical address there. The boot stub at the
+     * partition entry point is unsafe for secondary use because Linux
+     * overwrites that memory once the primary CPU brings the kernel up.
+     * Instead, the host hypervisor waits for the wake-up here and then
+     * enters the guest directly at the address Linux specified.
+     *
+     * Para-virt partitions (lvz_enabled==0) wake their secondary vCPUs
+     * cooperatively via the prtos_resume_vcpu hypercall from vCPU0, so
+     * those secondaries must remain halted until that hypercall fires.
+     * Skip the IOCSR mailbox wait for them. */
+    if (k->ctrl.g->karch.lvz_enabled && KID2VCPUID(k->ctrl.g->id) != 0) {
+        extern prtos_u64_t prtos_mbuf0[];
+        prtos_u64_t entry = 0;
+        /* Poll global per-CPU mbuf0 (updated by MBUF_SEND emulation in traps.c) */
+        {
+            while (entry == 0) {
+                entry = prtos_mbuf0[GET_CPU_ID()];
+            }
+        }
+        /* The poll ran with interrupts disabled; the scheduler timer
+         * (a one-shot ktimer armed before the poll started) has long
+         * since expired.  Clear the stale pending TI, call
+         * timer_handler() to consume expired timers and re-traverse
+         * queues, then trigger a schedule() so get_ready_kthread()
+         * re-arms the scheduler ktimer for the next slot boundary.
+         * Without this, ERTN enables IE but no timer is programmed,
+         * leaving this CPU without scheduler ticks forever. */
+        {
+            prtos_u64_t _clr = 1;
+            __asm__ __volatile__("csrwr %0, 0x44" : "+r"(_clr));
+            extern timer_handler_t loongarch_timer_handler;
+            if (loongarch_timer_handler)
+                loongarch_timer_handler();
+            /* Now schedule so the scheduler ktimer gets re-armed */
+            schedule();
+        }
+        /* Linux writes a physical address; the partition expects it as
+         * a DMW1-prefixed cached virtual address so the immediate jump
+         * lands in cached memory while the guest still has PRTOS's
+         * boot-time DMWs. */
+        entry = (entry & 0x0FFFFFFFFFFFFFFFULL) | (0x9ULL << 60);
+        k->ctrl.g->karch.hsm_entry = entry;
+        k->ctrl.g->karch.hsm_opaque = 0;
+
+        /* Initialize secondary vCPU guest CSRs from vCPU0's saved state.
+         * With TOP=0, vCPU0's DMW/PGDH/PGDL/EENTRY/TLBRENTRY etc. are
+         * written inline by the guest without trapping. PRTOS syncs them
+         * on each VM exit via sync_inline_csrs_from_shadow(). Copy those
+         * values to the secondary vCPU's guest shadow CSRs so the guest's
+         * secondary boot code has DMW and exception vectors ready. */
+        {
+            partition_t *p = get_partition(k);
+            struct kthread_arch *ka0 = &p->kthread[0]->ctrl.g->karch;
+#define _GCSRWR(num, val) do { \
+    prtos_u64_t _v = (val); \
+    __asm__ __volatile__( \
+        ".word (0x01060000 | (" #num " << 10) | 12)\n\t" \
+        : : "r"(_v) : "memory"); \
+} while(0)
+            /* Use the helper in traps.c via a function call instead */
+            extern void lvz_init_secondary_guest_csrs(struct kthread_arch *ka0);
+            lvz_init_secondary_guest_csrs(ka0);
+#undef _GCSRWR
+        }
+
+        /* Force-arm a PERIODIC timer to ensure we get TIs in guest.
+         * NOTE: No kprintf between timer arm and JMP_PARTITION_HSM!
+         * Use a long initial period (100ms = 10M ticks) to survive QEMU's
+         * TB translation overhead on first guest entry. The scheduler will
+         * re-arm with the correct period once it handles the first tick. */
+        {
+            /* Clear any pending TI first */
+            prtos_u64_t clr = 1;
+            __asm__ __volatile__("csrwr %0, 0x44" : "+r"(clr)); /* TICLR */
+            /* Disable then re-enable timer */
+            prtos_u64_t zero = 0;
+            __asm__ __volatile__("csrwr %0, 0x41" : "+r"(zero));
+            /* EN=1, PERIODIC=1, interval=250000 InitVal = 10ms (250000*40ns) */
+            prtos_u64_t htcfg = 3UL | (250000UL << 2);
+            __asm__ __volatile__("csrwr %0, 0x41" : "+r"(htcfg));
+            /* Enable TI + IPI in ECFG for guest scheduling and IPI delivery.
+             * HWI bits are enabled on-demand when guest configures eiointc. */
+            prtos_u64_t ecfg;
+            __asm__ __volatile__("csrrd %0, 0x4" : "=r"(ecfg));
+            ecfg |= (1UL << 11) | (1UL << 12);
+            __asm__ __volatile__("csrwr %0, 0x4" : "+r"(ecfg));
+        }
+        JMP_PARTITION_HSM(k);
+        /* unreachable */
+    }
 #endif
 #ifdef CONFIG_amd64
     /* Load partition CR3 right before entering user mode. On amd64,
@@ -141,15 +234,7 @@ void start_up_guest(prtos_address_t entry) {
 #endif
     load_part_page_table(k);
 #endif
-#ifdef CONFIG_loongarch64
-    {
-        prtos_u64_t dmw0, dmw1;
-        __asm__ __volatile__("csrrd %0, 0x180" : "=r"(dmw0));
-        __asm__ __volatile__("csrrd %0, 0x181" : "=r"(dmw1));
-        kprintf("[PRTOS] DMW0=0x%llx DMW1=0x%llx\n",
-                (unsigned long long)dmw0, (unsigned long long)dmw1);
-    }
-#endif
+
     JMP_PARTITION(entry, k);
 
     get_cpu_ctxt(&ctxt);
@@ -535,6 +620,25 @@ prtos_s32_t reset_partition(partition_t *p, prtos_u32_t cold, prtos_u32_t status
             reset_kthread(p->kthread[0], ptd_level_1, prtos_conf_boot_partition_table[p->cfg->id].entry_point, status);
             break;
     }
+
+#if defined(CONFIG_loongarch64)
+    /* LoongArch SMP for LVZ partitions only: Linux uses
+     * IOCSR_MBUF_SEND/IPI to wake secondary CPUs, which has no hypercall
+     * hook (unlike RISC-V SBI HSM or AArch64 PSCI). Start every vCPU at
+     * partition reset so each one runs into the host-side IOCSR mailbox
+     * wait in start_up_guest(). Para-virt partitions instead rely on
+     * prtos_resume_vcpu hypercalls from vCPU0, so we must not reset
+     * their secondaries here (doing so would race the guest setup_vcpus
+     * sequence and leave the secondaries spinning forever). */
+    if (p->kthread[0]->ctrl.g->karch.lvz_enabled) {
+        prtos_u32_t v;
+        for (v = 1; v < p->cfg->num_of_vcpus; v++) {
+            p->kthread[v]->ctrl.g->op_mode = p->kthread[0]->ctrl.g->op_mode;
+            reset_kthread(p->kthread[v], ptd_level_1,
+                          prtos_conf_boot_partition_table[p->cfg->id].entry_point, status);
+        }
+    }
+#endif
 
 #ifdef CONFIG_amd64
     load_cr3(_saved_cr3);

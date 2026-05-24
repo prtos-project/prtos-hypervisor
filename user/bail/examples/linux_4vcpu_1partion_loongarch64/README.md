@@ -1,104 +1,154 @@
-# Example : linux_4vcpu_1partion_loongarch64
+# Example: linux_4vcpu_1partion_loongarch64
 
 ## Description
-This example demonstrates the Linux kernel running on PRTOS LoongArch64 with trap-and-emulate hardware-assisted virtualization (hw-virt). The guest Linux runs with 4 vCPUs, CSR/TLB/timer operations trapped and emulated by the hypervisor. UART is mapped via guest TLB pass-through.
 
-## Partition definition
-There is one partition.
-- P0 (Linux): System partition running Linux with 4 vCPUs using CSR trap-and-emulate virtualization, with UART device pass-through.
+This example runs a single LoongArch64 Linux guest on PRTOS with 4 vCPUs.
+The guest boots from a Linux `vmlinux` image that already embeds its Buildroot
+initramfs, and QEMU runs it through the LoongArch64 LVZ path.
 
-## Configuration table
-Single-partition configuration with 4 physical CPUs and device pass-through.
+The maintained build flow is:
 
-A scheduling plan is defined under the following premises:
+1. build Buildroot rootfs
+2. build Linux with that rootfs embedded
+3. build/install LoongArch64 QEMU
+4. build PRTOS and run the example
 
-- Processors: 4 (pCPU 0-3)
-- MAF = 100 ms
-- P0: S 0 ms  D 50 ms (on each pCPU)
+Do not use the older `/tmp/rootfs_fixed.cpio`, `rootfs_repack`, or
+`initramfs_extras.txt` overlay workflow. The current tree builds a deterministic
+guest image directly from the tracked Buildroot and Linux outputs.
 
-Memory layout:
-- PRTOS: 32 MB
-- P0 (Linux): 512 MB @ 0x80000000
-- UART device pass-through: 4 KB @ 0x1FE00000
-- PCH-PIC device pass-through: 1 MB @ 0x10000000
+## Paths used by this example
+
+- Buildroot: `/home/chenweis/hdd/Repo/loongarch64_linux_workspace/buildroot`
+- Linux: `/home/chenweis/hdd/Repo/loongarch64_linux_workspace/linux-6.19.9`
+- QEMU source: `/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu`
+- QEMU install prefix: `/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install`
+- PRTOS repo: `/home/chenweis/hdd/Repo/fork_os/prtos-hypervisor`
 
 ## Prerequisites
 
-### 1. Build Buildroot (rootfs)
+Required host tools:
+
+- `loongarch64-linux-gnu-gcc`, `loongarch64-linux-gnu-ld`, `loongarch64-linux-gnu-objcopy`, `loongarch64-linux-gnu-nm`
+- `gcc`, `g++`
+- `make`, `ninja`, `dtc`, `sed`, `file`, `gzip`
+- Python3 with `pexpect`
+
+## Step 1: Build Buildroot and Linux
+
+The repository provides a helper script that configures both Buildroot and the
+guest Linux kernel with the expected options.
 
 ```bash
-cd /home/chenweis/hdd/Repo/loongarch64_linux_workspace/buildroot
-
-# Use QEMU LoongArch64 virt defconfig as a starting point
-make qemu_loongarch64_virt_efi_defconfig
-
-# Customize configuration
-make menuconfig
-# Set the following options:
-#   Target options -> Architecture: LoongArch (64-bit)
-#   Filesystem images -> cpio the root filesystem: [*]
-#   Target packages -> BusyBox -> Build BusyBox as a static binary: [*]
-#   Build options -> libraries -> static only: [*]
-
-make -j$(nproc)
+bash /home/chenweis/hdd/Repo/loongarch64_linux_workspace/buildroot_linux_configure_build.sh
 ```
 
-The rootfs CPIO image will be at `output/images/rootfs.cpio`.
+What this script does:
 
-### 2. Build Linux Kernel
+- configures Buildroot from `qemu_loongarch64_virt_efi_defconfig`
+- sets the root password to `1234`
+- enables `NBD`, `nbd-client`, and `htop`
+- installs a rootfs overlay that keeps only loopback networking and spawns a
+    serial getty on `ttyS0`
+- builds `rootfs.cpio`
+- copies `linux_guest.dtb` into the kernel tree, or generates it from
+    `partition.dts` if needed
+- configures Linux with:
+    - `CONFIG_INITRAMFS_SOURCE=/home/chenweis/hdd/Repo/loongarch64_linux_workspace/buildroot/output/images/rootfs.cpio`
+    - `CONFIG_INITRAMFS_COMPRESSION_NONE=y`
+    - `CONFIG_BLK_DEV_NBD=y`
+    - `CONFIG_TUN=y`
+    - `CONFIG_CMDLINE_FORCE=y`
+    - `CONFIG_BUILTIN_DTB=y`
+    - `CONFIG_BUILTIN_DTB_NAME="linux_guest"`
+    - `CONFIG_SERIO_I8042=n`
+    - `CONFIG_KEYBOARD_ATKBD=n`
+    - `CONFIG_MOUSE_PS2=n`
+
+Expected artifacts after this step:
+
+- `/home/chenweis/hdd/Repo/loongarch64_linux_workspace/buildroot/output/images/rootfs.cpio`
+- `/home/chenweis/hdd/Repo/loongarch64_linux_workspace/linux-6.19.9/vmlinux`
+
+## Step 2: Build and install QEMU
 
 ```bash
-cd /home/chenweis/hdd/Repo/loongarch64_linux_workspace/linux-6.19.9
-
-# Use loongson64 defconfig as base
-make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- loongson64_defconfig
-
-# Customize configuration
-make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- menuconfig
-# Set the following options:
-#   General setup -> Initial RAM filesystem and RAM disk support -> Initramfs source file(s):
-#     /home/chenweis/hdd/Repo/loongarch64_linux_workspace/buildroot/output/images/rootfs.cpio
-#   General setup -> Configure standard kernel features -> Enable support for printk: [*]
-#   Device Drivers -> Input device support -> Hardware I/O ports -> i8042 PC Keyboard controller: [ ]
-#   Device Drivers -> Input device support -> Keyboards -> AT keyboard: [ ]
-#   Device Drivers -> Input device support -> Mice -> PS/2 mouse: [ ]
-#   Kernel hacking -> printk and dmesg options -> Enable dynamic printk() support: [ ]
-#   Boot options -> Built-in kernel command string:
-#     console=ttyS0,115200 earlycon mem=512M@0x80000000 i8042.noaux i8042.nokbd i8042.nopnp rdinit=/bin/sh
-#   Boot options -> Built-in command line override (CONFIG_CMDLINE_FORCE): [*]
-
-make ARCH=loongarch CROSS_COMPILE=loongarch64-linux-gnu- vmlinux -j$(nproc)
+export CC=gcc
+export CXX=g++
+cd /home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu/build
+../configure --target-list=loongarch64-softmmu --enable-tcg --enable-slirp --enable-virtfs --disable-werror \
+    --prefix=/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install
+ninja -j10
+ninja install -j10
 ```
 
-The Makefile automatically picks up `vmlinux` from the Linux workspace.
+Expected installed binary:
 
-### 3. LoongArch64 Boot Loader
+```text
+/home/chenweis/hdd/Repo/loongarch64_linux_workspace/qemu_install/bin/qemu-system-loongarch64
+```
 
-LoongArch64 on PRTOS does **not** use U-Boot. The mainline U-Boot project does not yet support the LoongArch architecture. Instead, PRTOS uses its own RSW (Resident Software) boot loader located at `user/bootloaders/rsw/loongarch64/`. The RSW is a lightweight stub that:
+The current LoongArch64 example path should be run with single-thread TCG:
 
-1. Runs in Direct Address (DA) mode at reset
-2. Parses the PRTOS container image
-3. Loads the PRTOS hypervisor core
-4. Transfers control to the hypervisor
+```text
+-accel tcg,thread=single
+```
 
-QEMU's `-kernel resident_sw` option loads the RSW directly, which in turn boots the hypervisor and all partitions.
+The repository defaults already reflect that for this example.
 
-## Build & Run
+## Step 3: Build PRTOS and run the example
 
 ```bash
-# Build PRTOS
-cd prtos-hypervisor
+cd /home/chenweis/hdd/Repo/fork_os/prtos-hypervisor
+make distclean
 cp prtos_config.loongarch64 prtos_config
-make defconfig && make
+make defconfig
+make
 
-# Build and run the example
 cd user/bail/examples/linux_4vcpu_1partion_loongarch64
-make clean && make
 make run.loongarch64
 ```
 
-## Expected results
-PRTOS will load, initialise and run the Linux partition using CSR trap-and-emulate virtualization with 4 vCPUs.
-Linux boots with SMP support (3 secondary CPUs started), reaches "Run /bin/sh as init process", and presents a shell prompt (`~ # `).
+For the scripted regression check:
 
-**Note:** Due to trap-and-emulate overhead, boot time is significantly longer than native (~3 minutes wall time).
+```bash
+cd /home/chenweis/hdd/Repo/fork_os/prtos-hypervisor
+scripts/run_test.sh --arch loongarch64 check-linux_4vcpu_1partion_loongarch64
+```
+
+## Expected result
+
+A successful run reaches the Buildroot login prompt:
+
+```text
+Welcome to Buildroot
+buildroot login: root
+Password:
+```
+
+After logging in with username `root` and password `1234`, the guest should show
+four CPUs online and `htop` should run successfully.
+
+Example session:
+
+```text
+# uname -a
+Linux buildroot 6.19.9-gc017ea9ffcd3 #2 SMP PREEMPT Sun Mar 22 19:36:34 CST 2026 loongarch64 GNU/Linux
+#
+# cat /proc/cpuinfo | grep processor
+processor       : 0
+processor       : 1
+processor       : 2
+processor       : 3
+#
+```
+
+## Notes
+
+- The original `S02sysctl` segmentation fault was addressed by moving the guest
+    image generation away from the older ad hoc initramfs overlay path and back
+    to a Buildroot-generated rootfs with deterministic serial-login configuration.
+- The guest kernel embeds the Buildroot rootfs directly; do not point
+    `CONFIG_INITRAMFS_SOURCE` at temporary files under `/tmp`.
+- LoongArch64 Linux boot under TCG is still substantially slower than native
+    hardware, so regression runs need a generous timeout budget.
